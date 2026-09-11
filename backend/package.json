@@ -13,7 +13,8 @@
     "sync": "node --import tsx --env-file-if-exists=.env src/cli/sync.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test \"test/**/*.test.ts\"",
-    "sync:turso": "node --import tsx --env-file=.env.turso src/cli/sync.ts"
+    "sync:turso": "node --import tsx --env-file=.env.turso src/cli/sync.ts",
+    "check:xapikorea": "node --import tsx --env-file-if-exists=.env src/cli/check-xapikorea.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.1",
