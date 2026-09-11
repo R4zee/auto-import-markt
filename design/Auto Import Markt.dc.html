@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style data-omelette-injected>html,body{background:transparent}</style><script data-omelette-injected>(()=>{{const n=new URLSearchParams(location.search).get("theme");if(n==="light"||n==="dark"){document.documentElement.dataset.theme=n}}{if(new URLSearchParams(location.search).get("_omthumb")==="1"){const n=(f)=>{const g=f.focus;if(!g)return;f.focus=function(h){g.call(this,{...h,preventScroll:true})}};n(HTMLElement.prototype);n(SVGElement.prototype);if(typeof MathMLElement!=="undefined"){n(MathMLElement.prototype)}const d=(f)=>{f.removeAttribute("autofocus");f.inert=true;if(!(f instanceof HTMLElement))f.removeAttribute("tabindex")};const p=(f)=>{if(f.hasAttribute("autofocus"))d(f);for(const g of f.querySelectorAll("[autofocus]")){d(g)}};p(document.documentElement);new MutationObserver((f)=>{for(const g of f){for(const h of g.addedNodes){if(h.nodeType===1)p(h)}}}).observe(document,{childList:true,subtree:true})}}{const n=()=>{try{if(document.querySelector('meta[name="color-scheme"]'))return;const d=getComputedStyle(document.documentElement).getPropertyValue("color-scheme").trim();if(d&&d!=="normal")return;const p=(y)=>{if(!y)return null;const m=getComputedStyle(y).backgroundColor.match(/^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+%?))?\s*\)$/);if(!m)return null;const w=m[4]==null?1:parseFloat(m[4])/(m[4].endsWith("%")?100:1);if(w<0.99)return null;return[+m[1],+m[2],+m[3]]};const f=p(document.body)||p(document.documentElement);if(!f)return;const g=(y)=>{const m=y/255;return m<=0.04045?m/12.92:((m+0.055)/1.055)**2.4};const h=0.2126*g(f[0])+0.7152*g(f[1])+0.0722*g(f[2]);document.documentElement.style.setProperty("color-scheme",h<0.4?"dark":"light")}catch{}};if(document.readyState==="complete")n();else window.addEventListener("load",n)}var I=[];var B=false;var K=false;var C=()=>{};if(K===true){try{const n=setTimeout.bind(window);const d=1e4;const p=15;const f=1e4;const g=120000;const h=200;const y=(o)=>{try{let r;if(typeof o==="string")r=o;else if(o instanceof URL)r=o.href;else if(typeof Request!=="undefined"&&o instanceof Request)r=o.url;else return null;if(!r)return null;const l=document.baseURI;const i=new URL(r,l);if(i.protocol!=="http:"&&i.protocol!=="https:")return null;if(i.origin!==new URL(l).origin)return null;return i.origin+i.pathname}catch{return null}};const m=new Map;const w=(o)=>{let r=m.get(o);if(!r){if(m.size>=h){const l=m.keys().next().value;if(l!==undefined)m.delete(l)}r={fails:[],until:0,cooldown:f,hard:false};m.set(o,r)}return r};const R=(o)=>{const r=m.get(o);return r!==undefined&&r.until>Date.now()};const O=(o,r)=>{const l=Date.now();const i=w(o);if(r)i.hard=true;if(i.until>l)return;i.fails.push(l);while(i.fails.length>0&&i.fails[0]<=l-d)i.fails.shift();if(i.fails.length>=p){i.until=l+i.cooldown;if(i.hard)i.cooldown=Math.min(i.cooldown*2,g);i.fails.length=0;try{n(()=>{try{S(true)}catch{}},i.until-l+100)}catch{}console.warn("[omelette] asset circuit breaker: pausing requests to "+o+" for "+Math.round((i.until-l)/1000)+"s after "+p+" failures in "+d/1000+"s")}};const e=(o)=>{m.delete(o)};const t=100;const a=new WeakMap;const u=new Set;let s=null;const S=(o)=>{for(const r of Array.from(u)){try{const l=a.get(r);if(l===undefined){u.delete(r);continue}if(o){const i=y(l);if(i!==null&&R(i))continue}a.delete(r);u.delete(r);if(s!==null)s.call(r,l)}catch{}}};C=()=>{try{m.clear();S(false)}catch{}};document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")C()});const _=window.fetch;if(typeof _==="function"){const o=function(...r){let l=null;try{l=y(r[0])}catch{}if(l!==null&&R(l)){let c;try{if(r[1]&&r[1].signal!==undefined){c=r[1].signal||undefined}else if(typeof Request!=="undefined"&&r[0]instanceof Request){c=r[0].signal||undefined}}catch{c=undefined}return new Promise((k,b)=>{const E=()=>{try{return c.reason!==undefined?c.reason:new DOMException("The operation was aborted.","AbortError")}catch{return new DOMException("The operation was aborted.","AbortError")}};try{if(c&&c.aborted){b(E());return}}catch{}let T=false;const j=()=>{if(T)return;T=true;b(E())};try{if(c)c.addEventListener("abort",j,{once:true})}catch{}n(()=>{if(T)return;T=true;try{if(c)c.removeEventListener("abort",j)}catch{}let L;try{L=new Response(null,{status:429,statusText:"Too Many Requests",headers:{"Retry-After":"10"}})}catch{L={ok:false,status:429}}k(L)},250)})}const i=_.apply(window,r);if(l!==null){const c=l;i.then((k)=>{try{if(k.ok)e(c);else if(k.status===401||k.status===403||k.status===404||k.status===429){O(c,k.status!==404)}}catch{}},()=>{})}return i};window.fetch=o}const v=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,"src");if(v!==undefined&&v.set!==undefined&&v.get!==undefined){const o=v.set;s=o;Object.defineProperty(HTMLImageElement.prototype,"src",{configurable:true,enumerable:v.enumerable,get:v.get,set(r){const l=`${r}`;try{const i=y(l);if(i!==null&&R(i)){a.set(this,l);if(u.size<t)u.add(this);return}}catch{}try{a.delete(this);u.delete(this)}catch{}o.call(this,l)}})}try{const o=HTMLImageElement.prototype.setAttribute;HTMLImageElement.prototype.setAttribute=function(r,l){if(arguments.length<2){o.apply(this,arguments);return}if(typeof r==="string"&&r.toLowerCase()==="src"){const i=`${l}`;try{const c=y(i);if(c!==null&&R(c)){a.set(this,i);if(u.size<t)u.add(this);return}a.delete(this);u.delete(this)}catch{}o.call(this,r,i);return}o.call(this,r,l)}}catch{}window.addEventListener("error",(o)=>{try{const r=o.target;if(r instanceof HTMLImageElement){const l=y(r.currentSrc||r.src||"");if(l!==null)O(l,true)}}catch{}},true);window.addEventListener("load",(o)=>{try{const r=o.target;if(r instanceof HTMLImageElement){const l=y(r.currentSrc||r.src||"");if(l!==null)e(l);const i=a.get(r);if(i!==undefined){let c=false;try{c=new URL(i,document.baseURI).href===new URL(r.currentSrc||r.src||"",document.baseURI).href}catch{c=false}if(c){a.delete(r);u.delete(r)}}}}catch{}},true)}catch{}}var J=30000;var G=3000;document.addEventListener("DOMContentLoaded",()=>{const n=window.Babel;const d="om-src-id";if(n&&n.registerPlugin&&!(n.availablePlugins&&n.availablePlugins[d])){n.registerPlugin(d,({types:h})=>({visitor:{JSXOpeningElement(y,m){const w=y.node;if(w.name&&w.name.type==="JSXMemberExpression")return;for(let t=0;t<w.attributes.length;t++){const a=w.attributes[t];if(a.type==="JSXAttribute"&&a.name&&a.name.name==="data-om-id")return}const R=m.file&&m.file.opts&&m.file.opts.filename||"?";const O=w.loc&&w.loc.start;const e=`jsx:${R}:${w.start??0}:${O?O.line:0}:${O?O.column+1:0}`;w.attributes.push(h.jsxAttribute(h.jsxIdentifier("data-om-id"),h.stringLiteral(e)))}}}))}const p="om-text-extract";let f=false;if(B&&n&&n.registerPlugin&&!(n.availablePlugins&&n.availablePlugins[p])){const h=window.React;if(h&&h.useSyncExternalStore&&h.createElement){f=true;const y={};const m=new Set;let w=0;window.__omTextO=y;window.__omTextSet=(e)=>{for(const t in e){const a=e[t];if(a==null)delete y[t];else y[t]=a}w++;m.forEach((t)=>t())};const R=(e)=>{m.add(e);return()=>m.delete(e)};const O=()=>w;window.__OmT=function e(t){h.useSyncExternalStore(R,O,O);return h.createElement("span",{"data-om-text":t.i,className:"__om-t"},t.i in y?y[t.i]:t.children)};n.registerPlugin(p,({types:e})=>{const t={style:1,script:1,noscript:1,textarea:1,title:1,option:1,text:1,tspan:1,textPath:1};const a={placeholder:1,alt:1,title:1,label:1,"aria-label":1,"aria-description":1,"aria-placeholder":1};const u=(o,r)=>e.logicalExpression("??",e.memberExpression(e.logicalExpression("||",e.memberExpression(e.identifier("window"),e.identifier("__omTextO")),e.objectExpression([])),e.stringLiteral(o),true),r);const s=(o)=>o.file&&o.file.opts&&o.file.opts.filename||"?";const S=(o)=>o.file&&o.file.code||"";const _=(o,r)=>{const l=(c)=>c&&c.start!=null&&c.end!=null&&(c.type==="StringLiteral"||c.type==="TemplateLiteral"&&c.expressions.length===0)?[c.start,c.end]:null;const i=l(r);if(i)return i;if(r&&r.type==="Identifier"){const c=o.scope.getBinding(r.name);if(c&&c.constant&&c.path.node.type==="VariableDeclarator"){return l(c.path.node.init)}}return null};const v=(o,r,l)=>{const i=o.node;let c=false;const k=(E,T)=>{c=true;return e.jsxElement(e.jsxOpeningElement(e.jsxIdentifier("__OmT"),[e.jsxAttribute(e.jsxIdentifier("i"),e.stringLiteral(E))],false),e.jsxClosingElement(e.jsxIdentifier("__OmT")),[T],false)};const b=i.children.map((E)=>{if(E.type==="JSXText"){if(E.start==null||E.end==null)return E;const T=l.slice(E.start,E.end);const j=T.length-T.trimStart().length;const L=T.length-T.trimEnd().length;if(j+L>=T.length)return E;return k(`txt:${r}:${E.start+j}:${E.end-L}`,E)}if(E.type==="JSXExpressionContainer"){const T=_(o,E.expression);if(T)return k(`str:${r}:${T[0]}:${T[1]}`,E)}return E});if(c)i.children=b};return{visitor:{JSXOpeningElement(o,r){const l=o.node;const i=s(r);const c={};for(let k=0;k<l.attributes.length;k++){const b=l.attributes[k];if(b.type!=="JSXAttribute"||!b.name)continue;const E=b.name.name;if(!a[E])continue;if(!b.value||b.value.type!=="StringLiteral")continue;if(b.value.start==null||b.value.end==null)continue;const T=`txt:${i}:${b.value.start}:${b.value.end}`;c[E]=T;b.value=e.jsxExpressionContainer(u(T,e.stringLiteral(b.value.value)))}if(Object.keys(c).length){l.attributes.push(e.jsxAttribute(e.jsxIdentifier("data-om-text-attrs"),e.stringLiteral(JSON.stringify(c))))}},JSXElement(o,r){const l=o.node.openingElement;const i=l&&l.name&&l.name.name;if(i==="__OmT")return;if(typeof i==="string"&&t[i])return;v(o,s(r),S(r))},JSXFragment(o,r){v(o,s(r),S(r))}}}})}}const g=f?["transform-react-jsx-source",d,p]:["transform-react-jsx-source",d];document.querySelectorAll('script[type="text/babel"],script[type="text/jsx"]').forEach((h,y)=>{const m=h.getAttribute("data-plugins")||"";const w=g.filter((R)=>m.indexOf(R)<0);if(w.length){h.setAttribute("data-plugins",m?`${m},${w.join(",")}`:w.join(","))}if(!h.hasAttribute("data-filename")){h.setAttribute("data-filename",h.getAttribute("src")||`inline-${y}`)}})});var A=window.parent;var U="not editable here — open the project in the Claude Design editor to save";var W=()=>Promise.resolve({persisted:false,noHost:true,reason:U});var H=W;var M="data/storage.json";var z=()=>{try{const n=new URL(document.baseURI);const d=n.pathname.match(/\/projects\/([^/]+)\/serve\//);if(d)return d[1];return n.hostname.split(".")[0]||""}catch{return location.hostname.split(".")[0]||""}};var Z=()=>{try{const n=new URL(document.baseURI);const d=n.pathname.indexOf("/serve/");if(d>=0)return n.origin+n.pathname.slice(0,d+"/serve/".length)+M}catch{}return"./"+M};var x=null;var N=()=>{if(!x){x=fetch(Z(),{cache:"no-store"}).then((n)=>{if(n.ok)return n.text();return n.status===404?"":null}).catch(()=>null).then((n)=>{if(n===null){x=null;return null}const d=new Map;if(!n)return d;let p;try{p=JSON.parse(n)}catch{console.warn("[omelette.storage] "+M+" is not valid JSON; treating the store as unreadable so a save cannot overwrite the "+"hand-edited bytes. Fix the JSON (or delete the file) to re-enable persistence.");x=null;return null}if(p===null||typeof p!=="object"||Array.isArray(p)){console.warn("[omelette.storage] "+M+" doesn't hold a JSON object; treating the store as unreadable so a save cannot "+"overwrite the hand-edited bytes. Make the top level a JSON object to re-enable persistence.");x=null;return null}const f=p;if("data"in f){const g=f.data;if(g===null||typeof g!=="object"||Array.isArray(g)){console.warn("[omelette.storage] "+M+' has a "data" field that is not a JSON object; treating the store as unreadable so a '+'save cannot overwrite the hand-edited bytes. Make "data" a JSON object to re-enable persistence.');x=null;return null}const h=f._meta;const y=h!==null&&typeof h==="object"?h.project:undefined;if(typeof y==="string"&&y!==""&&y!==z())return d;for(const m of Object.keys(g))d.set(m,g[m]);return d}for(const g of Object.keys(f)){if(g!=="_meta")d.set(g,f[g])}return d})}return x};var F=(n)=>H(M,JSON.stringify({_meta:{project:z(),version:1},data:Object.fromEntries(n)},null,2));var D=Promise.resolve();var $=(n)=>{const d=D.then(n);D=d.then(()=>{return},()=>{return});return d};var V=/sk-(?:ant-)?[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|xox[a-z]-[A-Za-z0-9][A-Za-z0-9-]{9,}|AIza[0-9A-Za-z_-]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----/;var Y=/password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|credential/i;var Q=(n,d,p)=>{if(V.test(d)||Y.test(n)&&typeof p==="string"&&p.length>=8){console.warn('[omelette.storage] the value for "'+n+'" looks like a credential. The storage file is a plaintext project file — visible to '+"everyone with project access and copied when the project is duplicated. Do not store secrets here.")}};var q={persisted:false,reason:"could not load the existing store — not overwriting it"};var X={persisted:false,reason:"stored value changed since a failed read — re-read this key before saving"};var P=new Set;var ee={get:(n)=>{if(typeof n!=="string"){return Promise.reject(new TypeError("storage.get: key must be a string"))}return $(N).then((d)=>{if(d===null){P.add(n);return null}P.delete(n);if(!d.has(n))return null;const p=d.get(n);return p==null?null:JSON.parse(JSON.stringify(p))})},set:(n,d)=>{if(typeof n!=="string"){return Promise.reject(new TypeError("storage.set: key must be a string"))}let p;try{p=JSON.stringify(d)}catch(g){return Promise.reject(new TypeError("storage.set: value must be JSON-serializable ("+String(g)+")"))}if(p===undefined){return Promise.reject(new TypeError("storage.set: value must be JSON-serializable"))}Q(n,p,d);const f=JSON.parse(p);return $(()=>N().then((g)=>{if(g===null)return q;if(P.has(n)){if(g.has(n))return X;P.delete(n)}g.set(n,f);return F(g)}))},delete:(n)=>{if(typeof n!=="string"){return Promise.reject(new TypeError("storage.delete: key must be a string"))}return $(()=>N().then((d)=>{if(d===null)return q;if(P.has(n)){if(d.has(n))return X;P.delete(n)}d.delete(n);return F(d)}))},keys:()=>$(N).then((n)=>n===null?[]:Array.from(n.keys()))};window.omelette={writeFile:(n,d)=>H(n,d).then((p)=>{if(!p.persisted&&!p.noHost){throw new Error(p.reason||"write failed")}}),storage:ee};if(A&&A!==window){const n=(e,t)=>{try{A.postMessage({__omelette_log:true,type:e,data:t},"*")}catch{}};["log","warn","error"].forEach((e)=>{const t=console[e];console[e]=(...a)=>{const u=a.map((s)=>{try{return typeof s==="object"?JSON.stringify(s):String(s)}catch{try{return String(s)}catch{return"[unstringifiable]"}}}).join(" ");n(e,u);t.apply(console,a)}});window.addEventListener("error",(e)=>{const t=e.target;if(t&&t!==window&&t.tagName){const a=t.src||t.href||"";n("resource_error",`${t.tagName} failed to load: ${a}`)}else{n("error",`${e.message||"Unknown error"} at ${e.filename||"?"}:${e.lineno||0}:${e.colno||0}`)}},true);window.addEventListener("unhandledrejection",(e)=>{const t=e.reason;const a=t instanceof Error?`${t.message} ${t.stack}`:String(t);n("error",`Unhandled rejection: ${a}`)});window.addEventListener("click",(e)=>{if(e.defaultPrevented||e.button!==0)return;if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;const t=e.composedPath?e.composedPath():[];const a=["button","input","select","textarea","summary","label"];let u=null;for(const v of t){if(!(v instanceof Element))continue;if(v.localName==="a"){if(!(v instanceof HTMLAnchorElement))return;u=v;break}if(a.indexOf(v.localName)!==-1)return}if(!u)return;if(u.isContentEditable)return;const s=u.closest("[contenteditable]");if(s&&s.getAttribute("contenteditable")!=="false")return;const S=(u.getAttribute("target")||"_self").toLowerCase();if(S!=="_self"&&S!=="_top"&&S!=="_parent")return;let _;try{_=new URL(u.href)}catch{return}if(_.protocol!=="http:"&&_.protocol!=="https:")return;if(location.origin==="null")return;if(_.origin===location.origin)return;e.preventDefault();window.open(_.href,"_blank","noopener,noreferrer")});const d=()=>{try{A.postMessage({type:"omelette:height",height:document.documentElement.scrollHeight},"*")}catch{}};if(window.ResizeObserver)new ResizeObserver(d).observe(document.documentElement);const p=()=>{d();if(!document.querySelector('script[type="text/babel"],script[type="text/jsx"]'))return;const e=()=>document.getElementById("root")||document.querySelector("body > div[id]");const t=e()?.firstElementChild??null;let a=0;const u=()=>{const s=e();if(s&&s.firstElementChild!==t||++a>30){d();return}setTimeout(u,100)};setTimeout(u,100)};if(document.readyState==="complete")p();else window.addEventListener("load",p);const f={};let g=0;const h=(e)=>new Promise((t,a)=>{if(!I.length){a(new Error("claude.complete: no parent origin"));return}const u=`c${++g}`;const s=()=>setTimeout(()=>{delete f[u];a(new Error(`claude.complete: no data for ${J/1000}s`))},J);const S=s();f[u]={resolve:t,reject:a,text:"",t:S,arm:s};try{for(const _ of I){A.postMessage({__om_api:true,id:u,body:e},_)}}catch(_){clearTimeout(S);delete f[u];a(_)}});const y=8;const m=async(e,t)=>{if(!Array.isArray(e.messages)){throw new Error("claude.complete: tools require a messages array")}const a=e.messages.slice();const u={...e,tools:e.tools.map((_)=>{if(_===null||typeof _!=="object")return _;const v={};for(const o of Object.keys(_)){if(typeof _[o]!=="function")v[o]=_[o]}return v})};const s=u.tool_choice;const S=s!=null&&(s.type==="any"||s.type==="tool")?{...u,tool_choice:s.disable_parallel_tool_use!==undefined?{type:"auto",disable_parallel_tool_use:s.disable_parallel_tool_use}:{type:"auto"}}:u;for(let _=0;_<y;_++){const v=await h({..._===0?u:S,messages:a});const o=v.message;const r=o&&Array.isArray(o.content)?o.content:null;const l=r?r.filter((c)=>c?.type==="tool_use"):[];if(o?.stop_reason!=="tool_use"||l.length===0){return v.text}const i=[];for(const c of l){const k=t.get(c.name);if(!k){i.push({type:"tool_result",tool_use_id:c.id,content:`no handler for tool "${c.name}"`,is_error:true});continue}try{const b=await k(c.input);const E=typeof b==="string"?b:O(b)??"";i.push({type:"tool_result",tool_use_id:c.id,content:E})}catch(b){i.push({type:"tool_result",tool_use_id:c.id,content:String(b?.message??b??"tool handler failed"),is_error:true})}}a.push({role:"assistant",content:r},{role:"user",content:i})}throw new Error(`claude.complete: exceeded ${y} tool turns`)};window.claude={complete(e){const t=e;if(t!==null&&typeof t==="object"&&Array.isArray(t.tools)&&t.tools.some((a)=>a!==null&&typeof a==="object"&&typeof a.run==="function")){const a=new Map;for(const u of t.tools){if(u!==null&&typeof u==="object"&&typeof u.run==="function"){a.set(String(u.name),u.run)}}return m(t,a)}return h(e).then((a)=>a.text)}};const w={};let R=0;H=(e,t)=>new Promise((a)=>{if(!I.length){a({persisted:false,noHost:true,reason:U});return}const u=`f${++R}`;const s=setTimeout(()=>{delete w[u];a({persisted:false,noHost:true,reason:U})},G);w[u]={settle:a,t:s};try{for(const S of I){A.postMessage({__om_file:true,id:u,op:"write",path:e,content:t},S)}}catch{clearTimeout(s);delete w[u];a({persisted:false,noHost:true,reason:U})}});const O=(e)=>{try{return JSON.stringify(e)}catch{return JSON.stringify(String(e))}};window.addEventListener("message",(e)=>{if(I.indexOf(e.origin)<0)return;if(e.source!==A)return;const t=e.data;if(!t)return;if(t.type==="omelette-preview-refresh"){if(typeof t.token!=="string"||!/^[0-9a-f.-]+(\.(rc|pr-[0-9]+))?(\.[0-9]+\.[0-9a-f]{16})?$/.test(t.token))return;const s=Math.max(1,Math.floor((t.expiresAt||0)-Date.now()/1000));document.cookie="__Host-omelette-preview="+t.token+"; Path=/; Secure; SameSite=None; Partitioned; Max-Age="+s;C();return}if(t.__om_file_r){const s=w[t.id];if(!s)return;clearTimeout(s.t);delete w[t.id];s.settle(t.ok?{persisted:true}:{persisted:false,reason:t.error||"write failed"});return}if(t.__om_api_r){const s=f[t.id];if(!s)return;if(t.error!=null){clearTimeout(s.t);delete f[t.id];s.reject(new Error(t.error));return}if(t.chunk!=null){clearTimeout(s.t);s.t=s.arm();s.text+=t.chunk;return}if(t.done){clearTimeout(s.t);delete f[t.id];s.resolve({text:t.text!=null?t.text:s.text,message:t.message});return}return}if(!t.__om_eval)return;const a=t;const u=(s)=>{e.source.postMessage({...s,__om_eval_r:1,id:a.id},e.origin)};try{const s=(0,eval)(a.code);if(s&&typeof s.then==="function"){s.then((S)=>u({ok:1,v:O(S)}),(S)=>u({ok:0,e:String(S)}))}else{u({ok:1,v:O(s)})}}catch(s){u({ok:0,e:String(s)})}})}})();
+</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/nocturne-9b7396b0-aafa-4fc3-98c6-c26005afbff5/styles.css">
+<script src="_ds/nocturne-9b7396b0-aafa-4fc3-98c6-c26005afbff5/_ds_bundle.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<script src="./image-slot.js"></script>
+<style>
+  body { margin: 0; }
+  input[type=range] { accent-color: var(--color-accent); }
+  select.input { appearance: none; }
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);padding-bottom:96px">
+
+  <div style="position:sticky;top:0;z-index:60;background:rgba(22,24,38,0.94);backdrop-filter:blur(14px);box-shadow:0 1px 0 var(--color-divider)">
+    <div style="max-width:1560px;margin:0 auto;display:flex;align-items:center;flex-wrap:wrap;column-gap:28px;row-gap:10px;padding:12px 28px">
+      <div style="display:flex;align-items:center;gap:10px;margin-right:8px;cursor:pointer" onClick="{{ goSearch }}">
+        <div style="width:9px;height:22px;background:var(--color-accent);border-radius:2px"></div>
+        <div style="display:flex;flex-direction:column;line-height:1">
+          <span style="font-family:var(--font-heading);font-weight:500;font-size:17px;letter-spacing:-0.02em;white-space:nowrap">auto import markt</span>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:22px;font-size:13.5px">
+        <span style="cursor:pointer" onClick="{{ goSearch }}">{{ t.navSearch }}</span>
+        <span style="cursor:pointer;display:flex;align-items:center;gap:6px" onClick="{{ goWatchlist }}">{{ t.navWatchlist }}
+          <span class="tag tag-neutral" style="padding:1px 7px;font-size:10px">{{ savedCount }}</span>
+        </span>
+        <span style="cursor:pointer;display:flex;align-items:center;gap:6px" onClick="{{ goCompare }}">{{ t.navCompare }}
+          <span class="tag tag-neutral" style="padding:1px 7px;font-size:10px">{{ compareCount }}</span>
+        </span>
+      </div>
+
+      <div style="margin-left:auto;display:flex;align-items:center;flex-wrap:wrap;gap:10px">
+        <div style="display:flex;align-items:center;gap:7px;border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:4px 6px 4px 9px">
+          <span style="width:18px;height:13px;border-radius:2px;display:block;flex:none;background-image:url({{ langFlag }});background-size:cover;background-position:center"></span>
+          <select class="input" value="{{ lang }}" onChange="{{ onLang }}" style="border:0;background:transparent;min-height:26px;padding:0 2px;font-size:13px;width:auto">
+            <sc-for list="{{ langOptions }}" as="o" hint-placeholder-count="2">
+              <option value="{{ o.v }}">{{ o.label }}</option>
+            </sc-for>
+          </select>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:4px 6px 4px 9px">
+          <span style="width:18px;height:13px;border-radius:2px;display:block;flex:none;background-image:url({{ destFlag }});background-size:cover;background-position:center"></span>
+          <select class="input" value="{{ dest }}" onChange="{{ onDest }}" style="border:0;background:transparent;min-height:26px;padding:0 2px;font-size:13px;width:auto">
+            <sc-for list="{{ destOptions }}" as="o" hint-placeholder-count="4">
+              <option value="{{ o.v }}">{{ o.label }}</option>
+            </sc-for>
+          </select>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:4px 6px 4px 10px">
+          <i class="ph ph-currency-eur" style="font-size:14px;color:var(--color-accent)"></i>
+          <select class="input" value="{{ ccy }}" onChange="{{ onCcy }}" style="border:0;background:transparent;min-height:26px;padding:0 2px;font-size:13px;width:auto">
+            <option value="EUR">EUR</option>
+            <option value="USD">USD</option>
+            <option value="GBP">GBP</option>
+            <option value="CHF">CHF</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" style="height:34px;white-space:nowrap"><i class="ph ph-user-circle" style="font-size:15px"></i>{{ t.signIn }}</button>
+      </div>
+    </div>
+  </div>
+
+  <sc-if value="{{ isSearch }}" hint-placeholder-val="{{ true }}">
+  <div>
+    <div style="max-width:1560px;margin:0 auto;padding:26px 28px 0">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <div style="position:relative;flex:1;min-width:280px">
+          <i class="ph ph-magnifying-glass" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:17px;color:var(--color-neutral-500)"></i>
+          <input class="input" value="{{ query }}" onChange="{{ onQuery }}" placeholder="{{ t.searchPlaceholder }}" style="min-height:46px;padding-left:42px;font-size:15px;border-radius:var(--radius-lg)">
+        </div>
+        <div class="seg" style="border-radius:var(--radius-lg);height:46px">
+          <label class="seg-opt" style="padding:0 18px">
+            <input type="radio" name="offer" checked="{{ isAll }}" onChange="{{ setAll }}">
+            <i class="ph ph-squares-four" style="font-size:15px"></i>{{ t.allOffers }}
+          </label>
+          <label class="seg-opt" style="padding:0 18px">
+            <input type="radio" name="offer" checked="{{ isFixed }}" onChange="{{ setFixed }}">
+            <i class="ph ph-tag" style="font-size:15px"></i>{{ t.fixedPrice }}
+          </label>
+          <label class="seg-opt" style="padding:0 18px">
+            <input type="radio" name="offer" checked="{{ isAuction }}" onChange="{{ setAuction }}">
+            <i class="ph ph-gavel" style="font-size:15px"></i>{{ t.auction }}
+          </label>
+        </div>
+      </div>
+
+      <div class="hr" style="margin:22px 0 0"></div>
+    </div>
+
+    <div style="max-width:1560px;margin:0 auto;padding:20px 28px;display:flex;flex-wrap:wrap;gap:26px;align-items:flex-start">
+
+      <aside style="position:sticky;top:88px;display:flex;flex-direction:column;gap:20px;flex:1 1 210px;min-width:200px;max-width:222px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-neutral-500)">{{ t.filters }}</span>
+          <button class="btn btn-ghost" style="font-size:12px" onClick="{{ resetFilters }}">{{ t.reset }}</button>
+        </div>
+
+        <div>
+          <button onClick="{{ toggleMarkets }}" class="btn" style="width:100%;justify-content:flex-start;gap:7px;padding:0;height:20px;border:0;font-family:var(--font-body);font-weight:400;font-size:12px;color:var(--color-neutral-400)">
+            <i class="{{ marketsChevron }}" style="font-size:13px"></i>
+            {{ t.markets }}
+            <span style="margin-left:auto;font-size:11px;color:var(--color-neutral-500)">{{ marketsSummary }}</span>
+          </button>
+          <sc-if value="{{ marketsOpen }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+            <sc-for list="{{ marketChips }}" as="m" hint-placeholder-count="6">
+              <button onClick="{{ m.onToggle }}" class="btn" style="border-color:{{ m.border }};color:{{ m.color }};background:{{ m.bg }};height:30px;width:100%;justify-content:flex-start;font-size:12.5px;padding:0 10px;gap:8px">
+                <span style="width:18px;height:13px;border-radius:2px;display:block;flex:none;background-image:url({{ m.flag }});background-size:cover;background-position:center"></span>
+                {{ m.label }}
+                <span style="opacity:0.6;font-size:11px;margin-left:auto">{{ m.count }}</span>
+              </button>
+            </sc-for>
+          </div>
+          </sc-if>
+        </div>
+
+        <div>
+          <div style="font-size:12px;color:var(--color-neutral-400);margin-bottom:7px">{{ t.make }}</div>
+          <select class="input" value="{{ make }}" onChange="{{ onMake }}" style="min-height:32px;font-size:12.5px">
+            <sc-for list="{{ makeOptions }}" as="o" hint-placeholder-count="6">
+              <option value="{{ o.v }}">{{ o.label }}</option>
+            </sc-for>
+          </select>
+        </div>
+
+        <div>
+          <div style="font-size:12px;color:var(--color-neutral-400);margin-bottom:7px">{{ t.model }}</div>
+          <select class="input" value="{{ model }}" onChange="{{ onModel }}" style="min-height:32px;font-size:12.5px">
+            <sc-for list="{{ modelOptions }}" as="o" hint-placeholder-count="6">
+              <option value="{{ o.v }}">{{ o.label }}</option>
+            </sc-for>
+          </select>
+        </div>
+
+        <div>
+          <div style="font-size:12px;color:var(--color-neutral-400);margin-bottom:7px">{{ t.location }}</div>
+          <select class="input" value="{{ loc }}" onChange="{{ onLoc }}" style="min-height:32px;font-size:12.5px">
+            <sc-for list="{{ locOptions }}" as="o" hint-placeholder-count="6">
+              <option value="{{ o.v }}">{{ o.label }}</option>
+            </sc-for>
+          </select>
+        </div>
+
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:7px">
+            <span style="color:var(--color-neutral-400)">{{ t.landedMax }}</span>
+            <span style="font-variant-numeric:tabular-nums">{{ maxPriceLabel }}</span>
+          </div>
+          <input type="range" min="20000" max="300000" step="5000" value="{{ maxPrice }}" onChange="{{ onMaxPrice }}" style="width:100%">
+        </div>
+
+        <div>
+          <div style="font-size:12px;color:var(--color-neutral-400);margin-bottom:7px">{{ t.year }}</div>
+          <div style="display:flex;align-items:center;gap:7px">
+            <input class="input" type="number" min="1985" max="2026" step="1" value="{{ yearFrom }}" onChange="{{ onYearFrom }}" style="min-height:32px;font-size:12.5px;padding:4px 8px;min-width:0;font-variant-numeric:tabular-nums">
+            <span style="color:var(--color-neutral-600);font-size:12px">–</span>
+            <input class="input" type="number" min="1985" max="2026" step="1" value="{{ yearTo }}" onChange="{{ onYearTo }}" style="min-height:32px;font-size:12.5px;padding:4px 8px;min-width:0;font-variant-numeric:tabular-nums">
+          </div>
+        </div>
+
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:7px">
+            <span style="color:var(--color-neutral-400)">{{ t.mileageMax }}</span>
+            <span style="font-variant-numeric:tabular-nums">{{ maxKmLabel }}</span>
+          </div>
+          <input type="range" min="10000" max="300000" step="10000" value="{{ maxKm }}" onChange="{{ onMaxKm }}" style="width:100%">
+        </div>
+
+        <div>
+          <div style="font-size:12px;color:var(--color-neutral-400);margin-bottom:8px">{{ t.fuel }}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <sc-for list="{{ fuelChips }}" as="f" hint-placeholder-count="4">
+              <button onClick="{{ f.onToggle }}" class="btn" style="border-color:{{ f.border }};color:{{ f.color }};height:28px;font-size:12px;padding:0 10px">{{ f.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size:12px;color:var(--color-neutral-400);margin-bottom:8px">{{ t.transmission }}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <sc-for list="{{ transChips }}" as="tr" hint-placeholder-count="2">
+              <button onClick="{{ tr.onToggle }}" class="btn" style="border-color:{{ tr.border }};color:{{ tr.color }};height:28px;font-size:12px;padding:0 10px">{{ tr.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <label style="display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer">
+          <input type="checkbox" checked="{{ cocOnly }}" onChange="{{ onCoc }}" style="accent-color:var(--color-accent);width:15px;height:15px">
+          {{ t.cocOnly }}
+        </label>
+
+        <div style="padding:11px 12px;border-radius:var(--radius-md);background:var(--color-accent-900);display:flex;gap:9px;align-items:flex-start">
+          <i class="ph ph-steering-wheel" style="font-size:16px;color:var(--color-accent-300);margin-top:1px"></i>
+          <div style="font-size:11.5px;line-height:1.45;color:var(--color-accent-200)">
+            <strong style="font-weight:600">{{ t.lhdTitle }}</strong> {{ t.lhdBody }}
+          </div>
+        </div>
+
+        <div style="font-size:11px;line-height:1.5;color:var(--color-neutral-600)">{{ fxLine }}</div>
+      </aside>
+
+      <main style="flex:999 1 520px;min-width:0">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+          <div style="display:flex;align-items:baseline;gap:10px">
+            <span style="font-family:var(--font-heading);font-size:22px">{{ resultLine }}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <sc-if value="{{ pro }}">
+              <button class="btn btn-secondary" style="height:32px;font-size:12.5px" onClick="{{ exportCsv }}"><i class="ph ph-download-simple" style="font-size:14px"></i>{{ t.exportCsv }}</button>
+            </sc-if>
+            <select class="input" value="{{ sort }}" onChange="{{ onSort }}" style="width:auto;min-height:32px;font-size:12.5px">
+              <sc-for list="{{ sortOptions }}" as="o" hint-placeholder-count="5">
+                <option value="{{ o.v }}">{{ o.label }}</option>
+              </sc-for>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(258px,1fr));gap:16px">
+          <sc-for list="{{ cars }}" as="car" hint-placeholder-count="6">
+            <article class="card elev-sm" style="padding:0;overflow:visible;gap:0;position:relative;height:100%">
+              <div style="position:relative;aspect-ratio:16/9;background:var(--color-neutral-900);border-radius:var(--radius-md) var(--radius-md) 0 0;overflow:hidden">
+                <image-slot id="{{ car.slotId }}" shape="rect" placeholder="{{ car.photoHint }}"></image-slot>
+                <div style="position:absolute;top:10px;left:10px;display:flex;gap:6px;pointer-events:none">
+                  <span class="tag" style="background:rgba(22,24,38,0.82);color:var(--color-neutral-200);font-size:10.5px;padding:3px 8px;display:flex;align-items:center;gap:6px">
+                    <span style="width:17px;height:12px;border-radius:2px;display:block;flex:none;background-image:url({{ car.flag }});background-size:cover;background-position:center"></span>
+                    {{ car.marketLabel }}
+                  </span>
+                </div>
+                <button onClick="{{ car.onSave }}" style="position:absolute;top:8px;right:8px;width:32px;height:32px;border:0;border-radius:50%;background:rgba(22,24,38,0.82);cursor:pointer;display:grid;place-items:center">
+                  <i class="{{ car.heartIcon }}" style="font-size:16px;color:{{ car.heartColor }}"></i>
+                </button>
+                <div style="position:absolute;bottom:10px;left:10px;pointer-events:none">
+                  <sc-if value="{{ car.isAuction }}">
+                    <span class="tag" style="background:var(--color-accent-800);color:var(--color-accent-100);font-size:11px;padding:4px 9px;display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums">
+                      <i class="ph-fill ph-gavel" style="font-size:12px"></i>{{ car.countdown }}
+                    </span>
+                  </sc-if>
+                  <sc-if value="{{ car.isFixed }}">
+                    <span class="tag" style="background:rgba(22,24,38,0.82);color:var(--color-neutral-200);font-size:11px;padding:4px 9px;display:flex;align-items:center;gap:6px">
+                      <i class="ph ph-tag" style="font-size:12px"></i>{{ t.fixedPrice }}
+                    </span>
+                  </sc-if>
+                </div>
+              </div>
+
+              <div style="padding:13px 14px 14px;display:flex;flex-direction:column;gap:9px;flex:1">
+                <div>
+                  <div style="display:flex;align-items:baseline;gap:7px">
+                    <span style="font-family:var(--font-heading);font-size:16px;line-height:1.2">{{ car.title }}</span>
+                  </div>
+                  <div style="font-size:12.5px;color:var(--color-neutral-400);margin-top:3px">{{ car.trim }}</div>
+                </div>
+
+                <div style="display:flex;flex-wrap:wrap;column-gap:9px;row-gap:4px;font-size:12px;color:var(--color-neutral-300);font-variant-numeric:tabular-nums">
+                  <span>{{ car.kmLabel }}</span>
+                  <span style="color:var(--color-neutral-700)">/</span>
+                  <span>{{ car.engine }}</span>
+                  <span style="color:var(--color-neutral-700)">/</span>
+                  <span>{{ car.trans }}</span>
+                  <span style="color:var(--color-neutral-700)">/</span>
+                  <span>{{ car.drive }}</span>
+                </div>
+
+                <div style="display:flex;gap:5px;flex-wrap:wrap">
+                  <sc-for list="{{ car.chips }}" as="c" hint-placeholder-count="2">
+                    <span class="tag" style="background:var(--color-neutral-900);color:var(--color-neutral-300);font-size:10.5px;padding:2px 8px">{{ c.label }}</span>
+                  </sc-for>
+                </div>
+
+                <div style="height:1px;background:var(--color-divider);margin:2px 0 0;margin-top:auto"></div>
+
+                <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:10px;position:relative;padding-top:9px">
+                  <div>
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <span style="font-family:var(--font-heading);font-size:21px;letter-spacing:-0.02em;font-variant-numeric:tabular-nums">{{ car.sourceMain }}</span>
+                      <span onMouseEnter="{{ car.onCostEnter }}" onMouseLeave="{{ car.onCostLeave }}" style="cursor:help;display:grid;place-items:center">
+                        <i class="ph ph-info" style="font-size:15px;color:var(--color-accent)"></i>
+                      </span>
+                    </div>
+                    <div style="font-size:11.5px;color:var(--color-neutral-400);font-variant-numeric:tabular-nums;margin-top:2px">{{ car.sourceSub }}</div>
+                  </div>
+                  <button class="btn btn-primary" style="height:32px;font-size:12.5px" onClick="{{ car.onOpen }}">{{ t.details }}<i class="ph ph-arrow-right" style="font-size:13px"></i></button>
+
+                  <sc-if value="{{ car.showCost }}">
+                    <div style="position:absolute;bottom:calc(100% + 10px);left:-6px;width:262px;z-index:40;background:var(--color-surface);box-shadow:var(--shadow-lg);border-radius:var(--radius-md);padding:11px 12px;display:flex;flex-direction:column;gap:5px">
+                      <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-neutral-500);margin-bottom:2px">{{ t.landedEstimate }}</div>
+                      <sc-for list="{{ car.costLines }}" as="l" hint-placeholder-count="5">
+                        <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;font-variant-numeric:tabular-nums">
+                          <span style="color:var(--color-neutral-400)">{{ l.label }}</span>
+                          <span>{{ l.value }}</span>
+                        </div>
+                      </sc-for>
+                      <div style="height:1px;background:var(--color-divider);margin:3px 0"></div>
+                      <div style="display:flex;justify-content:space-between;font-size:13px;font-variant-numeric:tabular-nums">
+                        <span>{{ t.totalLanded }}</span><span style="color:var(--color-accent-300)">{{ car.landedLabel }}</span>
+                      </div>
+                    </div>
+                  </sc-if>
+                </div>
+
+                <sc-if value="{{ car.showPro }}">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:var(--radius-sm);background:var(--color-neutral-900)">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--color-neutral-300);cursor:pointer">
+                      <input type="checkbox" checked="{{ car.compared }}" onChange="{{ car.onCompare }}" style="accent-color:var(--color-accent);width:14px;height:14px">
+                      {{ t.navCompare }}
+                    </label>
+                    <div style="font-size:11.5px;color:var(--color-neutral-400);font-variant-numeric:tabular-nums">
+                      {{ car.resaleLine }} · <span style="color:{{ car.marginColor }}">{{ car.marginLabel }}</span>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </article>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ noResults }}">
+          <div style="padding:70px 20px;text-align:center;color:var(--color-neutral-500)">
+            <i class="ph ph-car-profile" style="font-size:34px;display:block;margin-bottom:12px"></i>
+            <div style="font-size:15px">{{ t.noResults }}</div>
+            <button class="btn btn-primary" style="margin-top:14px" onClick="{{ resetFilters }}">{{ t.resetFilters }}</button>
+          </div>
+        </sc-if>
+      </main>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isDetail }}">
+  <div style="max-width:1560px;margin:0 auto;padding:22px 28px">
+    <button class="btn btn-ghost" style="font-size:13px;margin-bottom:14px" onClick="{{ goSearch }}"><i class="ph ph-arrow-left" style="font-size:14px"></i>{{ t.back }}</button>
+
+    <div style="display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start">
+      <div style="display:flex;flex-direction:column;gap:26px;flex:999 1 56%;min-width:330px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+            <span class="tag tag-outline" style="font-size:10.5px;letter-spacing:0.04em;display:flex;align-items:center;gap:6px">
+              <span style="width:17px;height:12px;border-radius:2px;display:block;flex:none;background-image:url({{ sel.flag }});background-size:cover;background-position:center"></span>
+              {{ sel.marketLabel }}
+            </span>
+            <span class="tag" style="background:var(--color-neutral-900);color:var(--color-neutral-300);font-size:10.5px">{{ sel.offerLabel }}</span>
+            <span class="tag" style="background:var(--color-neutral-900);color:var(--color-neutral-300);font-size:10.5px">LHD</span>
+          </div>
+          <h2 style="font-size:34px;margin:0">{{ sel.title }}</h2>
+          <div style="font-size:15px;color:var(--color-neutral-400);margin-top:4px">{{ sel.subLine }}</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(104px,132px);gap:10px">
+          <div style="position:relative;aspect-ratio:16/10;background:var(--color-neutral-900);border-radius:var(--radius-md);overflow:hidden">
+            <image-slot id="{{ sel.heroSlot }}" shape="rect" placeholder="{{ sel.photoHint }}"></image-slot>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ sel.thumbs }}" as="th" hint-placeholder-count="4">
+              <div style="position:relative;aspect-ratio:4/3;background:var(--color-neutral-900);border-radius:var(--radius-sm);overflow:hidden">
+                <image-slot id="{{ th.id }}" shape="rect" placeholder="{{ th.hint }}"></image-slot>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div>
+          <h6 style="color:var(--color-neutral-500);margin-bottom:10px">{{ t.vehicleData }}</h6>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1px;background:var(--color-divider);border-radius:var(--radius-md);overflow:hidden">
+            <sc-for list="{{ sel.specs }}" as="s" hint-placeholder-count="12">
+              <div style="background:var(--color-bg);padding:10px 12px">
+                <div style="font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--color-neutral-600)">{{ s.k }}</div>
+                <div style="font-size:14px;margin-top:2px;font-variant-numeric:tabular-nums">{{ s.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <sc-if value="{{ sel.isAuction }}">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:20px">
+            <div class="card elev-sm" style="padding:16px;gap:12px">
+              <div class="card-kicker">{{ t.auctionSheet }}</div>
+              <div style="display:flex;align-items:flex-end;gap:14px">
+                <div>
+                  <div style="font-family:var(--font-heading);font-size:38px;line-height:1;color:var(--color-accent-300);white-space:nowrap">{{ sel.grade }}</div>
+                  <div style="font-size:11px;color:var(--color-neutral-500);margin-top:4px">{{ t.extInt }}</div>
+                </div>
+                <div style="font-size:12.5px;color:var(--color-neutral-300);line-height:1.5">{{ sel.gradeNote }}</div>
+              </div>
+              <div style="height:1px;background:var(--color-divider)"></div>
+              <div style="display:flex;justify-content:space-between;font-size:12.5px">
+                <span style="color:var(--color-neutral-500)">{{ t.house }}</span><span>{{ sel.house }}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:12.5px">
+                <span style="color:var(--color-neutral-500)">{{ t.lot }}</span><span style="font-variant-numeric:tabular-nums">{{ sel.lot }}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:12.5px">
+                <span style="color:var(--color-neutral-500)">{{ t.closesIn }}</span><span style="color:var(--color-accent-300);font-variant-numeric:tabular-nums">{{ sel.countdown }}</span>
+              </div>
+              <div style="height:1px;background:var(--color-divider)"></div>
+              <div>
+                <div style="font-size:11px;color:var(--color-neutral-500);margin-bottom:6px">{{ t.hammerRange }}</div>
+                <div style="position:relative;height:6px;border-radius:3px;background:var(--color-neutral-900)">
+                  <div style="position:absolute;left:22%;right:26%;top:0;bottom:0;border-radius:3px;background:var(--color-accent-600)"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:6px;font-variant-numeric:tabular-nums">
+                  <span>{{ sel.hammerLow }}</span><span style="color:var(--color-neutral-500)">{{ t.mostLikely }}</span><span>{{ sel.hammerHigh }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card elev-sm" style="padding:16px;gap:12px">
+              <div class="card-kicker">{{ t.conditionMap }}</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:1px;background:var(--color-divider);border-radius:var(--radius-sm);overflow:hidden">
+                <sc-for list="{{ sel.damage }}" as="d" hint-placeholder-count="8">
+                  <div style="background:var(--color-surface);padding:8px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0">
+                    <span style="font-size:12px;color:var(--color-neutral-300);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ d.panel }}</span>
+                    <span class="tag" style="background:{{ d.bg }};color:{{ d.fg }};font-size:10px;padding:1px 7px;flex:none;white-space:nowrap">{{ d.code }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="font-size:11px;color:var(--color-neutral-600);line-height:1.5">{{ sel.damageLegend }}</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <div>
+          <h6 style="color:var(--color-neutral-500);margin-bottom:10px">{{ t.importCompliance }}</h6>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <sc-for list="{{ sel.compliance }}" as="c" hint-placeholder-count="4">
+              <div style="display:flex;align-items:flex-start;gap:10px;padding:11px 13px;border-radius:var(--radius-md);background:var(--color-surface)">
+                <i class="{{ c.icon }}" style="font-size:16px;color:{{ c.color }};margin-top:1px"></i>
+                <div>
+                  <div style="font-size:13.5px">{{ c.title }}</div>
+                  <div style="font-size:12px;color:var(--color-neutral-500);margin-top:2px">{{ c.note }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="position:sticky;top:88px;display:flex;flex-direction:column;gap:16px;flex:1 1 34%;min-width:286px;max-width:400px">
+        <div class="card elev-md" style="padding:18px;gap:12px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span class="card-kicker">{{ landedTitle }}</span>
+          </div>
+          <div style="font-family:var(--font-heading);font-size:38px;line-height:1;letter-spacing:-0.02em;font-variant-numeric:tabular-nums">{{ sel.landedLabel }}</div>
+          <div style="font-size:12px;color:var(--color-neutral-500);margin-top:-4px">{{ sel.roadLegal }}</div>
+          <div style="height:1px;background:var(--color-divider);margin:4px 0"></div>
+          <sc-for list="{{ sel.costLines }}" as="l" hint-placeholder-count="8">
+            <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;font-variant-numeric:tabular-nums">
+              <span style="color:var(--color-neutral-400)">{{ l.label }}</span>
+              <span>{{ l.value }}</span>
+            </div>
+          </sc-for>
+          <div style="height:1px;background:var(--color-divider);margin:4px 0"></div>
+          <div style="display:flex;justify-content:space-between;font-size:15px;font-variant-numeric:tabular-nums">
+            <span>{{ t.totalLanded }}</span><span style="color:var(--color-accent-300)">{{ sel.landedLabel }}</span>
+          </div>
+          <div style="font-size:11px;color:var(--color-neutral-600);line-height:1.5;margin-top:2px">{{ sel.dutyNoteFull }}</div>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <button class="btn btn-secondary" style="flex:1" onClick="{{ sel.onSave }}"><i class="{{ sel.heartIcon }}" style="font-size:14px"></i>{{ sel.saveLabel }}</button>
+            <button class="btn btn-secondary" style="flex:1" onClick="{{ sel.onCompare }}"><i class="ph ph-columns" style="font-size:14px"></i>{{ t.navCompare }}</button>
+          </div>
+        </div>
+
+        <div class="card elev-sm" style="padding:18px;gap:12px">
+          <div style="display:flex;align-items:center;gap:11px">
+            <div style="width:38px;height:38px;border-radius:var(--radius-sm);background:var(--color-accent-900);display:grid;place-items:center">
+              <i class="ph ph-handshake" style="font-size:19px;color:var(--color-accent-300)"></i>
+            </div>
+            <div>
+              <div style="font-size:14.5px">{{ sel.partner }}</div>
+              <div style="font-size:11.5px;color:var(--color-neutral-500)">{{ sel.partnerLine }}</div>
+            </div>
+          </div>
+
+          <sc-if value="{{ sent }}">
+            <div style="padding:14px;border-radius:var(--radius-md);background:var(--color-accent-900);display:flex;gap:10px;align-items:flex-start">
+              <i class="ph-fill ph-check-circle" style="font-size:18px;color:var(--color-accent-300)"></i>
+              <div style="font-size:12.5px;color:var(--color-accent-100);line-height:1.5">{{ sentMessage }}</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ notSent }}">
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <div class="field"><label>{{ t.name }}</label><input class="input" value="{{ formName }}" onChange="{{ onFormName }}" placeholder="{{ t.yourName }}"></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+                <div class="field"><label>{{ t.email }}</label><input class="input" value="{{ formEmail }}" onChange="{{ onFormEmail }}" placeholder="name@firma.de"></div>
+                <div class="field"><label>{{ t.phone }}</label><input class="input" value="{{ formPhone }}" onChange="{{ onFormPhone }}" placeholder="+49"></div>
+              </div>
+              <div class="field"><label>{{ t.message }}</label><textarea class="input" value="{{ formMsg }}" onChange="{{ onFormMsg }}" style="min-height:74px;font-size:13px"></textarea></div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer">
+                <input type="checkbox" checked="{{ optInspect }}" onChange="{{ onOptInspect }}" style="accent-color:var(--color-accent);width:14px;height:14px">
+                {{ t.reqInspection }}
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer">
+                <input type="checkbox" checked="{{ optBid }}" onChange="{{ onOptBid }}" style="accent-color:var(--color-accent);width:14px;height:14px">
+                {{ bidOptLabel }}
+              </label>
+              <button class="btn btn-primary btn-block" style="height:40px" onClick="{{ sendEnquiry }}"><i class="ph ph-paper-plane-tilt" style="font-size:15px"></i>{{ t.sendEnquiry }}</button>
+              <div style="font-size:10.5px;color:var(--color-neutral-600);line-height:1.5">{{ t.formNote }}</div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isWatchlist }}">
+  <div style="max-width:1560px;margin:0 auto;padding:26px 28px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:6px">
+      <h2 style="margin:0">{{ t.navWatchlist }}</h2>
+      <div style="display:flex;gap:9px">
+        <sc-if value="{{ pro }}">
+          <button class="btn btn-secondary" style="height:34px;font-size:13px" onClick="{{ exportSavedCsv }}"><i class="ph ph-download-simple" style="font-size:14px"></i>{{ t.exportCsv }}</button>
+        </sc-if>
+        <sc-if value="{{ pro }}">
+          <button class="btn btn-primary" style="height:34px;font-size:13px" onClick="{{ bulkEnquiry }}"><i class="ph ph-paper-plane-tilt" style="font-size:14px"></i>{{ t.volumeEnquiry }}</button>
+        </sc-if>
+      </div>
+    </div>
+    <p style="font-size:13px;color:var(--color-neutral-500);max-width:640px">{{ wlIntro }}</p>
+
+    <sc-if value="{{ bulkSent }}">
+      <div style="padding:13px 15px;border-radius:var(--radius-md);background:var(--color-accent-900);color:var(--color-accent-100);font-size:13px;margin-bottom:14px;display:flex;gap:10px;align-items:center">
+        <i class="ph-fill ph-check-circle" style="font-size:18px;color:var(--color-accent-300)"></i>
+        {{ bulkMessage }}
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ hasSaved }}">
+      <table class="table" style="margin-top:14px">
+        <thead>
+          <tr>
+            <th style="width:38px"></th>
+            <th>{{ t.thVehicle }}</th><th>{{ t.thMarket }}</th><th>{{ t.thOffer }}</th><th>{{ t.thMileage }}</th>
+            <th style="text-align:right">{{ t.thSource }}</th><th style="text-align:right">{{ t.thLanded }}</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <sc-for list="{{ savedCars }}" as="car" hint-placeholder-count="3">
+            <tr>
+              <td><input type="checkbox" checked="{{ car.compared }}" onChange="{{ car.onCompare }}" style="accent-color:var(--color-accent);width:15px;height:15px"></td>
+              <td>
+                <div style="font-size:14px;cursor:pointer" onClick="{{ car.onOpen }}">{{ car.title }}</div>
+                <div style="font-size:11.5px;color:var(--color-neutral-500)">{{ car.trim }}</div>
+              </td>
+              <td>
+                <span style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--color-neutral-300)">
+                  <span style="width:18px;height:13px;border-radius:2px;display:block;flex:none;background-image:url({{ car.flag }});background-size:cover;background-position:center"></span>
+                  {{ car.marketLabel }}
+                </span>
+              </td>
+              <td style="font-size:12.5px">
+                <sc-if value="{{ car.isAuction }}"><span style="color:var(--color-accent-300);font-variant-numeric:tabular-nums">{{ car.countdown }}</span></sc-if>
+                <sc-if value="{{ car.isFixed }}"><span style="color:var(--color-neutral-400)">{{ t.fixedPrice }}</span></sc-if>
+              </td>
+              <td style="font-size:12.5px;font-variant-numeric:tabular-nums">{{ car.kmLabel }}</td>
+              <td style="text-align:right;font-size:12.5px;color:var(--color-neutral-400);font-variant-numeric:tabular-nums">{{ car.sourceLabel }}</td>
+              <td style="text-align:right;font-size:14px;font-variant-numeric:tabular-nums">{{ car.landedLabel }}</td>
+              <td style="text-align:right"><button class="btn btn-ghost" style="font-size:12px" onClick="{{ car.onSave }}">{{ t.remove }}</button></td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </sc-if>
+
+    <sc-if value="{{ noSaved }}">
+      <div style="padding:70px 20px;text-align:center;color:var(--color-neutral-500)">
+        <i class="ph ph-heart" style="font-size:34px;display:block;margin-bottom:12px"></i>
+        <div style="font-size:15px">{{ t.nothingSaved }}</div>
+        <button class="btn btn-primary" style="margin-top:14px" onClick="{{ goSearch }}">{{ t.browse }}</button>
+      </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isCompareView }}">
+  <div style="max-width:1560px;margin:0 auto;padding:26px 28px">
+    <h2 style="margin:0 0 6px">{{ t.navCompare }}</h2>
+    <p style="font-size:13px;color:var(--color-neutral-500)">{{ cmpIntro }}</p>
+    <sc-if value="{{ hasCompare }}">
+      <div style="overflow-x:auto;margin-top:18px">
+        <div style="display:grid;grid-template-columns:{{ compareGrid }};gap:1px;background:var(--color-divider);border-radius:var(--radius-md);overflow:hidden;min-width:640px">
+          <sc-for list="{{ compareCells }}" as="c" hint-placeholder-count="24">
+            <div style="background:{{ c.bg }};padding:11px 13px">
+              <div style="font-size:{{ c.size }};color:{{ c.color }};line-height:1.35;font-variant-numeric:tabular-nums">{{ c.text }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ noCompare }}">
+      <div style="padding:70px 20px;text-align:center;color:var(--color-neutral-500)">
+        <i class="ph ph-columns" style="font-size:34px;display:block;margin-bottom:12px"></i>
+        <div style="font-size:15px">{{ t.cmpEmpty }}</div>
+        <button class="btn btn-primary" style="margin-top:14px" onClick="{{ goSearch }}">{{ t.browse }}</button>
+      </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ showCompareBar }}">
+    <div style="position:fixed;left:0;right:0;bottom:0;z-index:70;background:rgba(35,37,50,0.96);backdrop-filter:blur(14px);box-shadow:0 -1px 0 var(--color-divider)">
+      <div style="max-width:1560px;margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <span style="font-size:13px;color:var(--color-neutral-300)">{{ selectedLine }}</span>
+        <div style="display:flex;gap:7px;flex-wrap:wrap">
+          <sc-for list="{{ compareTags }}" as="ct" hint-placeholder-count="2">
+            <span class="tag tag-neutral" style="font-size:11px;gap:6px">{{ ct.title }}</span>
+          </sc-for>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-secondary" style="height:32px;font-size:12.5px" onClick="{{ clearCompare }}">{{ t.clear }}</button>
+          <button class="btn btn-primary" style="height:32px;font-size:12.5px" onClick="{{ goCompare }}">{{ t.compareSide }}<i class="ph ph-arrow-right" style="font-size:13px"></i></button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;dealerMode&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behaviour&quot;},&quot;defaultLanguage&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;en&quot;,&quot;de&quot;],&quot;default&quot;:&quot;en&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Behaviour&quot;},&quot;defaultDestination&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;DE&quot;,&quot;AT&quot;,&quot;NL&quot;,&quot;PL&quot;],&quot;default&quot;:&quot;DE&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Behaviour&quot;}}">
+class Component extends DCLogic {
+  t0 = Date.now();
+  fx = { JPY: 0.0061, KRW: 0.00069, USD: 0.92, AED: 0.25, EUR: 1 };
+  sym = { JPY: '¥', KRW: '₩', USD: '$', AED: 'AED ', EUR: '€' };
+  disp = { EUR: { r: 1, s: '€' }, USD: { r: 1.087, s: '$' }, GBP: { r: 0.845, s: '£' }, CHF: { r: 0.94, s: 'CHF ' } };
+  vat = { DE: 0.19, AT: 0.20, NL: 0.21, PL: 0.23 };
+  destMeta = { DE: ['de', 'Bremerhaven', 'EUSt'], AT: ['at', 'Koper', 'USt'], NL: ['nl', 'Rotterdam', 'BTW'], PL: ['pl', 'Gdynia', 'VAT'] };
+  freight = { JP: 1850, KR: 1750, US: 1420, GCC: 1640, SE: 660, EE: 580 };
+  marketMeta = { JP: ['jp', false], KR: ['kr', false], US: ['us', false], GCC: ['ae', false], SE: ['it', true], EE: ['pl', true] };
+
+  dict = {
+    en: {
+      navSearch: 'Search', navWatchlist: 'Watchlist', navCompare: 'Compare', signIn: 'Sign in',
+      langName: 'English',
+      searchPlaceholder: 'Make, model, chassis code, lot number…',
+      allOffers: 'All offers', fixedPrice: 'Fixed price', auction: 'Auction', auctionLot: 'Auction lot',
+      markets: 'Markets', filters: 'Filters', reset: 'Reset',
+      landedMax: 'Landed price, max', year: 'Year', mileageMax: 'Mileage, max',
+      make: 'Make', model: 'Model', location: 'Location',
+      allMakes: 'All makes', allModels: 'All models', allLocations: 'All locations',
+      allMarkets: 'All', nSelected: '{n} selected',
+      fuel: 'Fuel', transmission: 'Transmission', cocOnly: 'EU COC available only',
+      lhdTitle: 'Left-hand drive only.', lhdBody: 'RHD stock is excluded marketplace-wide — every lot shown is LHD or LHD export spec.',
+      fxLine: 'Landed prices are estimates for a private import to {dest}, cleared at {port}. FX {fx}.',
+      vehicles: '{n} vehicles', exportCsv: 'Export CSV',
+      sortLowHigh: 'Landed price · low to high', sortHighLow: 'Landed price · high to low',
+      sortNewest: 'Year · newest', sortKm: 'Mileage · lowest', sortEnding: 'Auctions ending soonest',
+      atSource: '{price} at source', atSourceShort: 'at source', details: 'Details', landedEstimate: 'Landed cost estimate',
+      totalLanded: 'Total landed', landedSub: 'landed {dest} · duty, tax, TÜV incl.',
+      retail: '{dest} retail {price}',
+      noResults: 'No LHD vehicles match these filters.', resetFilters: 'Reset filters',
+      back: 'Back to results', vehicleData: 'Vehicle data', auctionSheet: 'Auction sheet',
+      extInt: 'Exterior / interior', house: 'House', lot: 'Lot', closesIn: 'Closes in',
+      hammerRange: 'Estimated hammer range', mostLikely: 'most likely', conditionMap: 'Condition map',
+      damageLegend: 'A = scratch · U = dent · W = repaired · XX = replaced. Numeral is severity 1–4. Transcribed from the original inspection sheet; {n} inspection photos available on request.',
+      importCompliance: 'Import compliance',
+      landedTitle: 'Estimated landed price · {dest}',
+      roadLegal: 'Registered and road-legal. {price} at source.',
+      estimateNote: 'Estimate, not a quote — the partner confirms binding figures.',
+      save: 'Save', saved: 'Saved', partnerImporter: 'Partnered importer · {note}',
+      sentMsg: 'Enquiry sent to {partner} with the landed-cost estimate attached. They typically reply within one working day.',
+      name: 'Name', email: 'Email', phone: 'Phone', message: 'Message', yourName: 'Your name',
+      reqInspection: 'Request a pre-purchase inspection',
+      bidForMe: 'Bid on my behalf up to a limit I set', negotiate: 'Negotiate the listed price on my behalf',
+      sendEnquiry: 'Send enquiry', formNote: "Goes only to this vehicle's handling partner. No obligation, no listing fee.",
+      volumeEnquiry: 'Volume enquiry',
+      wlIntro: 'Saved lots across all six markets, priced to your door in {dest}. Auction lots keep counting down.',
+      bulkMsg: 'Volume enquiry sent for {n} lots. Partners in each market will respond separately.',
+      thVehicle: 'Vehicle', thMarket: 'Market', thOffer: 'Offer', thMileage: 'Mileage', thSource: 'Source', thLanded: 'Landed',
+      remove: 'Remove', nothingSaved: 'Nothing saved yet.', browse: 'Browse the markets',
+      cmpIntro: 'Side by side, landed in {dest}. Up to four lots.',
+      cmpEmpty: 'Select vehicles to compare from the results or your watchlist.',
+      selected: '{n} selected for comparison', clear: 'Clear', compareSide: 'Compare side by side',
+      mJP: 'Japan', mKR: 'South Korea', mUS: 'USA', mGCC: 'GCC', mSE: 'S. Europe', mEE: 'E. Europe',
+      cDE: 'Germany', cAT: 'Austria', cNL: 'Netherlands', cPL: 'Poland',
+      Petrol: 'Petrol', Diesel: 'Diesel', Hybrid: 'Hybrid', Electric: 'Electric',
+      Automatic: 'Automatic', Manual: 'Manual',
+      lFob: 'Vehicle (FOB)', lFreight: 'Sea freight + insurance', lCif: 'CIF value',
+      lDutyEU: 'Customs duty · EU origin', lVatEU: 'Import VAT · EU origin',
+      lDuty: 'Customs duty {r}%', lTax: 'Import tax {r}%', lClearing: 'Customs clearance',
+      lTuv: 'TÜV §21 + headlights', lHu: 'HU / AU inspection', lReg: 'Registration', lFee: 'Partner handling fee',
+      nEU: 'EU-origin vehicle in free circulation — no customs duty and no import VAT.',
+      nClassic: 'Over 30 years old: classified as a collector vehicle (HS 9705) — 0% duty and 7% import tax.',
+      nLcv: 'Light commercial body: 22% customs duty applies instead of the 10% passenger-car rate.',
+      nStd: 'Standard passenger-car rate: 10% duty on CIF, then {r}% import tax.',
+      chSheet: 'Sheet {g}', chCocYes: 'EU COC available', chCocNo: 'COC on request', chClassic: 'H-Kennzeichen eligible',
+      sYear: 'Year', sMileage: 'Mileage', sEngine: 'Engine', sTrans: 'Transmission', sDrive: 'Drivetrain',
+      sFuel: 'Fuel', sSteering: 'Steering', sMarket: 'Market', sEmissions: 'Emissions', sOwners: 'Owners',
+      sTitle: 'Title', sAvail: 'Availability',
+      vLhd: 'Left-hand drive', vZero: 'Zero emission', vPreEuro: 'Pre-Euro · H-plate', vEuro6: 'Euro 6d equivalent',
+      vCleanA: 'Clean · auction sheet', vCleanD: 'Clean · dealer stock', vBidding: 'Bidding open', vInStock: 'In stock now',
+      cocYes: 'EU Certificate of Conformity available', cocNo: 'No EU COC — individual approval required',
+      cocYesNote: 'Registration goes through the standard route; no §21 single-vehicle approval needed.',
+      cocNoNote: 'TÜV §21 individual approval is priced into the estimate (headlights, rear fog, speedometer).',
+      lhdOk: 'Left-hand drive confirmed', lhdOkNote: 'Verified against the chassis record before the lot is listed.',
+      intraEU: 'Intra-EU transfer', intraEUNote: 'CMR and the seller invoice are sufficient; no customs entry, no import VAT.',
+      customs: 'Customs entry required', customsNote: 'Partner files the T1 and the customs declaration at {port}.',
+      kmOk: 'Mileage verified', kmOkA: 'Odometer cross-checked against the export certificate and auction sheet.',
+      kmOkE: 'Odometer cross-checked against the national service record.',
+      pFront: 'Front bumper', pBonnet: 'Bonnet', pFlWing: 'Front left wing', pFrWing: 'Front right wing',
+      pLDoor: 'Left door', pRDoor: 'Right door', pQuarter: 'Rear quarter', pTail: 'Tailgate', pClean: 'Clean',
+      thFront: 'Front 3/4', thInterior: 'Interior', thEngine: 'Engine bay', thUnder: 'Underside',
+      rTrim: 'Trim', rDutyTax: 'Duty + import tax', rCoc: 'EU COC', rPartner: 'Partner',
+      rAvail: 'Available', rOnReq: 'On request', rSourcePrice: 'Source price', rLandedPrice: 'Landed price',
+      msgTpl: 'Please confirm availability, total landed cost and the earliest shipping date for {car}{lot}.'
+    },
+    de: {
+      navSearch: 'Suche', navWatchlist: 'Merkliste', navCompare: 'Vergleich', signIn: 'Anmelden',
+      langName: 'Deutsch',
+      searchPlaceholder: 'Marke, Modell, Chassis-Code, Losnummer…',
+      allOffers: 'Alle Angebote', fixedPrice: 'Festpreis', auction: 'Auktion', auctionLot: 'Auktionslos',
+      markets: 'Märkte', filters: 'Filter', reset: 'Zurücksetzen',
+      landedMax: 'Endpreis, max.', year: 'Baujahr', mileageMax: 'Laufleistung, max.',
+      make: 'Marke', model: 'Modell', location: 'Standort',
+      allMakes: 'Alle Marken', allModels: 'Alle Modelle', allLocations: 'Alle Standorte',
+      allMarkets: 'Alle', nSelected: '{n} ausgewählt',
+      fuel: 'Kraftstoff', transmission: 'Getriebe', cocOnly: 'Nur mit EU-COC',
+      lhdTitle: 'Nur Linkslenker.', lhdBody: 'Rechtslenker sind marktplatzweit ausgeschlossen — jedes Fahrzeug ist LHD oder LHD-Exportausführung.',
+      fxLine: 'Endpreise sind Schätzungen für einen Privatimport nach {dest}, verzollt in {port}. Kurse {fx}.',
+      vehicles: '{n} Fahrzeuge', exportCsv: 'CSV-Export',
+      sortLowHigh: 'Endpreis · aufsteigend', sortHighLow: 'Endpreis · absteigend',
+      sortNewest: 'Baujahr · neueste', sortKm: 'Laufleistung · niedrigste', sortEnding: 'Auktionen · Ende zuerst',
+      atSource: '{price} im Herkunftsland', atSourceShort: 'im Herkunftsland', details: 'Details', landedEstimate: 'Endpreis-Kalkulation',
+      totalLanded: 'Endpreis gesamt', landedSub: 'frei {dest} · Zoll, EUSt, TÜV inkl.',
+      retail: '{dest} Handel {price}',
+      noResults: 'Keine Linkslenker entsprechen diesen Filtern.', resetFilters: 'Filter zurücksetzen',
+      back: 'Zurück zur Trefferliste', vehicleData: 'Fahrzeugdaten', auctionSheet: 'Auktionsblatt',
+      extInt: 'Außen / Innen', house: 'Auktionshaus', lot: 'Los', closesIn: 'Endet in',
+      hammerRange: 'Geschätzter Zuschlagsbereich', mostLikely: 'wahrscheinlich', conditionMap: 'Zustandskarte',
+      damageLegend: 'A = Kratzer · U = Delle · W = instandgesetzt · XX = ersetzt. Ziffer = Schwere 1–4. Übertragen vom Original-Prüfblatt; {n} Prüffotos auf Anfrage.',
+      importCompliance: 'Import & Zulassung',
+      landedTitle: 'Geschätzter Endpreis · {dest}',
+      roadLegal: 'Zugelassen und fahrbereit. {price} im Herkunftsland.',
+      estimateNote: 'Schätzung, kein Angebot — verbindliche Zahlen bestätigt der Partner.',
+      save: 'Merken', saved: 'Gemerkt', partnerImporter: 'Partner-Importeur · {note}',
+      sentMsg: 'Anfrage an {partner} gesendet, inklusive Endpreis-Kalkulation. Antwort in der Regel innerhalb eines Werktags.',
+      name: 'Name', email: 'E-Mail', phone: 'Telefon', message: 'Nachricht', yourName: 'Ihr Name',
+      reqInspection: 'Vorab-Begutachtung anfordern',
+      bidForMe: 'In meinem Auftrag bis zu einem Limit bieten', negotiate: 'Den Preis in meinem Auftrag verhandeln',
+      sendEnquiry: 'Anfrage senden', formNote: 'Geht ausschließlich an den abwickelnden Partner. Unverbindlich, keine Inseratsgebühr.',
+      volumeEnquiry: 'Sammelanfrage',
+      wlIntro: 'Gemerkte Fahrzeuge aus allen sechs Märkten, kalkuliert bis vor Ihre Tür in {dest}. Auktionen laufen weiter.',
+      bulkMsg: 'Sammelanfrage für {n} Fahrzeuge gesendet. Die Partner der jeweiligen Märkte antworten separat.',
+      thVehicle: 'Fahrzeug', thMarket: 'Markt', thOffer: 'Angebot', thMileage: 'Laufleistung', thSource: 'Herkunft', thLanded: 'Endpreis',
+      remove: 'Entfernen', nothingSaved: 'Noch nichts gemerkt.', browse: 'Märkte durchsuchen',
+      cmpIntro: 'Direkter Vergleich, frei {dest}. Bis zu vier Fahrzeuge.',
+      cmpEmpty: 'Fahrzeuge aus der Trefferliste oder der Merkliste zum Vergleich auswählen.',
+      selected: '{n} zum Vergleich ausgewählt', clear: 'Leeren', compareSide: 'Direkt vergleichen',
+      mJP: 'Japan', mKR: 'Südkorea', mUS: 'USA', mGCC: 'Golfstaaten', mSE: 'Südeuropa', mEE: 'Osteuropa',
+      cDE: 'Deutschland', cAT: 'Österreich', cNL: 'Niederlande', cPL: 'Polen',
+      Petrol: 'Benzin', Diesel: 'Diesel', Hybrid: 'Hybrid', Electric: 'Elektro',
+      Automatic: 'Automatik', Manual: 'Schaltgetriebe',
+      lFob: 'Fahrzeug (FOB)', lFreight: 'Seefracht + Versicherung', lCif: 'CIF-Wert',
+      lDutyEU: 'Zoll · EU-Ware', lVatEU: 'Einfuhrumsatzsteuer · EU-Ware',
+      lDuty: 'Zoll {r}%', lTax: 'Einfuhrumsatzsteuer {r}%', lClearing: 'Zollabwicklung',
+      lTuv: 'TÜV §21 + Scheinwerfer', lHu: 'HU / AU', lReg: 'Zulassung', lFee: 'Abwicklungsgebühr Partner',
+      nEU: 'EU-Ware im freien Verkehr — kein Zoll, keine Einfuhrumsatzsteuer.',
+      nClassic: 'Älter als 30 Jahre: Einstufung als Sammlungsstück (HS 9705) — 0% Zoll und 7% Einfuhrumsatzsteuer.',
+      nLcv: 'Nutzfahrzeug-Aufbau: 22% Zoll statt des Pkw-Satzes von 10%.',
+      nStd: 'Regelsatz Pkw: 10% Zoll auf den CIF-Wert, danach {r}% Einfuhrumsatzsteuer.',
+      chSheet: 'Blatt {g}', chCocYes: 'EU-COC vorhanden', chCocNo: 'COC auf Anfrage', chClassic: 'H-Kennzeichen möglich',
+      sYear: 'Baujahr', sMileage: 'Laufleistung', sEngine: 'Motor', sTrans: 'Getriebe', sDrive: 'Antrieb',
+      sFuel: 'Kraftstoff', sSteering: 'Lenkung', sMarket: 'Markt', sEmissions: 'Abgasnorm', sOwners: 'Halter',
+      sTitle: 'Papiere', sAvail: 'Verfügbarkeit',
+      vLhd: 'Linkslenker', vZero: 'Emissionsfrei', vPreEuro: 'Vor-Euro · H-Kennzeichen', vEuro6: 'Euro 6d äquivalent',
+      vCleanA: 'Unfallfrei · Auktionsblatt', vCleanD: 'Unfallfrei · Händlerbestand', vBidding: 'Gebote offen', vInStock: 'Sofort verfügbar',
+      cocYes: 'EU-Übereinstimmungsbescheinigung (COC) vorhanden', cocNo: 'Kein EU-COC — Einzelabnahme erforderlich',
+      cocYesNote: 'Zulassung auf dem Standardweg; keine Einzelabnahme nach §21 nötig.',
+      cocNoNote: 'Die Einzelabnahme nach §21 ist im Endpreis enthalten (Scheinwerfer, Nebelschlussleuchte, Tacho).',
+      lhdOk: 'Linkslenker bestätigt', lhdOkNote: 'Vor der Listung anhand der Fahrgestellnummer geprüft.',
+      intraEU: 'Innergemeinschaftliche Verbringung', intraEUNote: 'CMR und Verkäuferrechnung genügen; keine Zollanmeldung, keine EUSt.',
+      customs: 'Zollanmeldung erforderlich', customsNote: 'Der Partner erstellt das T1 und die Zollanmeldung in {port}.',
+      kmOk: 'Laufleistung geprüft', kmOkA: 'Tachostand gegen Exportzertifikat und Auktionsblatt abgeglichen.',
+      kmOkE: 'Tachostand gegen das nationale Scheckheft abgeglichen.',
+      pFront: 'Frontstoßstange', pBonnet: 'Motorhaube', pFlWing: 'Kotflügel vorn links', pFrWing: 'Kotflügel vorn rechts',
+      pLDoor: 'Tür links', pRDoor: 'Tür rechts', pQuarter: 'Seitenwand hinten', pTail: 'Heckklappe', pClean: 'i.O.',
+      thFront: 'Front 3/4', thInterior: 'Innenraum', thEngine: 'Motorraum', thUnder: 'Unterboden',
+      rTrim: 'Ausstattung', rDutyTax: 'Zoll + EUSt', rCoc: 'EU-COC', rPartner: 'Partner',
+      rAvail: 'Vorhanden', rOnReq: 'Auf Anfrage', rSourcePrice: 'Preis im Herkunftsland', rLandedPrice: 'Endpreis',
+      msgTpl: 'Bitte bestätigen Sie Verfügbarkeit, Gesamtendpreis und den frühesten Verschiffungstermin für {car}{lot}.'
+    }
+  };
+
+  locMap = { jp1: 'Nagoya', jp2: 'Yokohama', jp3: 'Yokohama', kr1: 'Seoul', kr2: 'Seoul', kr3: 'Incheon', us1: 'Miami', us2: 'Newark', us3: 'Los Angeles', gc1: 'Dubai', gc2: 'Dubai', se1: 'Milan', ee1: 'Bucharest', ee2: 'Warsaw' };
+
+  raw = [
+    { id: 'jp1', m: 'JP', cty: 'jp', type: 'auction', year: 2023, make: 'Toyota', model: 'Land Cruiser 70', trim: 'ZX 4.0 V6 · LHD export spec', km: 12400, engine: '4.0 V6', trans: 'Automatic', drive: '4WD', fuel: 'Petrol', price: 5480000, ccy: 'JPY', house: 'USS Nagoya', lot: '41208', grade: '4.5 / B', gradeNote: 'Light stone chipping on the front bar, interior unmarked, no accident history recorded.', hammer: [5200000, 5900000], ends: 190, coc: false, resale: 78500, partner: 'Kaido Trading GmbH', partnerNote: 'Nagoya → Bremerhaven, 12 yrs', photos: 42 },
+    { id: 'jp2', m: 'JP', cty: 'jp', type: 'fixed', year: 2021, make: 'Lexus', model: 'LX570', trim: 'Sport Package · LHD export spec', km: 38900, engine: '5.7 V8', trans: 'Automatic', drive: '4WD', fuel: 'Petrol', price: 9850000, ccy: 'JPY', coc: false, resale: 92000, partner: 'Kaido Trading GmbH', partnerNote: 'Nagoya → Bremerhaven, 12 yrs', photos: 31 },
+    { id: 'jp3', m: 'JP', cty: 'jp', type: 'auction', year: 2019, make: 'Toyota', model: 'Hilux Revo', trim: '2.8 D-4D Double Cab · LHD', km: 64200, engine: '2.8 TD', trans: 'Automatic', drive: '4WD', fuel: 'Diesel', price: 3240000, ccy: 'JPY', house: 'TAA Yokohama', lot: '20773', grade: '4 / B', gradeNote: 'Bed liner fitted, two repaired panels declared, service book complete.', hammer: [3050000, 3480000], ends: 2760, coc: false, duty: 0.22, resale: 44000, partner: 'Kaido Trading GmbH', partnerNote: 'Nagoya → Bremerhaven, 12 yrs', photos: 28 },
+    { id: 'kr1', m: 'KR', cty: 'kr', type: 'fixed', year: 2022, make: 'Genesis', model: 'G80', trim: '3.5T AWD Luxury', km: 24300, engine: '3.5 V6 T', trans: 'Automatic', drive: 'AWD', fuel: 'Petrol', price: 58900000, ccy: 'KRW', coc: true, resale: 56500, partner: 'Hanbit Motors Export', partnerNote: 'Incheon → Bremerhaven, 8 yrs', photos: 36 },
+    { id: 'kr2', m: 'KR', cty: 'kr', type: 'auction', year: 2020, make: 'Kia', model: 'Stinger GT', trim: '3.3 T-GDI RWD', km: 61200, engine: '3.3 V6 T', trans: 'Automatic', drive: 'RWD', fuel: 'Petrol', price: 28400000, ccy: 'KRW', house: 'Lotte Auto Auction', lot: '7712', grade: 'A / 2', gradeNote: 'Single owner, one repainted rear quarter, 4 mm tread all round.', hammer: [27100000, 30500000], ends: 1560, coc: true, resale: 31800, partner: 'Hanbit Motors Export', partnerNote: 'Incheon → Bremerhaven, 8 yrs', photos: 24 },
+    { id: 'kr3', m: 'KR', cty: 'kr', type: 'fixed', year: 2023, make: 'Hyundai', model: 'Ioniq 5', trim: 'Long Range AWD Prestige', km: 18700, engine: '77.4 kWh', trans: 'Single speed', drive: 'AWD', fuel: 'Electric', price: 46200000, ccy: 'KRW', coc: true, resale: 42500, partner: 'Hanbit Motors Export', partnerNote: 'Incheon → Bremerhaven, 8 yrs', photos: 29 },
+    { id: 'us1', m: 'US', cty: 'us', type: 'fixed', year: 2022, make: 'Chevrolet', model: 'Corvette C8', trim: 'Stingray 3LT Z51', km: 14800, engine: '6.2 V8', trans: 'Automatic', drive: 'RWD', fuel: 'Petrol', price: 71500, ccy: 'USD', coc: false, resale: 108000, partner: 'Atlantic Vehicle Logistics', partnerNote: 'Newark → Bremerhaven, 15 yrs', photos: 48 },
+    { id: 'us2', m: 'US', cty: 'us', type: 'auction', year: 2022, make: 'RAM', model: '1500 TRX', trim: '6.2 Supercharged Crew Cab', km: 31500, engine: '6.2 V8 s/c', trans: 'Automatic', drive: '4WD', fuel: 'Petrol', price: 62400, ccy: 'USD', house: 'Copart Newark', lot: '58-11907', grade: 'Run & Drive', gradeNote: 'Clean title, minor front-left cosmetic damage, keys present.', hammer: [58000, 66500], ends: 4260, coc: false, duty: 0.22, resale: 96000, partner: 'Atlantic Vehicle Logistics', partnerNote: 'Newark → Bremerhaven, 15 yrs', photos: 52 },
+    { id: 'us3', m: 'US', cty: 'us', type: 'fixed', year: 1990, make: 'Mercedes-Benz', model: '300 CE-24', trim: 'C124 · California car', km: 98400, engine: '3.0 I6', trans: 'Automatic', drive: 'RWD', fuel: 'Petrol', price: 27900, ccy: 'USD', coc: false, classic: true, resale: 39500, partner: 'Atlantic Vehicle Logistics', partnerNote: 'Newark → Bremerhaven, 15 yrs', photos: 61 },
+    { id: 'gc1', m: 'GCC', cty: 'ae', type: 'fixed', year: 2021, make: 'Nissan', model: 'Patrol Nismo', trim: '5.6 V8 · GCC spec', km: 42600, engine: '5.6 V8', trans: 'Automatic', drive: '4WD', fuel: 'Petrol', price: 245000, ccy: 'AED', coc: false, resale: 82000, partner: 'Gulf Bridge Motors', partnerNote: 'Jebel Ali → Bremerhaven, 6 yrs', photos: 33 },
+    { id: 'gc2', m: 'GCC', cty: 'ae', type: 'auction', year: 2020, make: 'Mercedes-AMG', model: 'G 63', trim: '4.0 V8 Biturbo · GCC spec', km: 55100, engine: '4.0 V8 BT', trans: 'Automatic', drive: '4WD', fuel: 'Petrol', price: 598000, ccy: 'AED', house: 'Emirates Auction', lot: '3391', grade: 'Grade 2', gradeNote: 'Full Mercedes service history, desert-spec cooling, kerbed front wheels.', hammer: [575000, 640000], ends: 540, coc: false, resale: 168000, partner: 'Gulf Bridge Motors', partnerNote: 'Jebel Ali → Bremerhaven, 6 yrs', photos: 45 },
+    { id: 'se1', m: 'SE', cty: 'it', type: 'fixed', year: 2019, make: 'Alfa Romeo', model: 'Giulia', trim: 'Quadrifoglio 2.9 V6 · Milan', km: 57800, engine: '2.9 V6 BT', trans: 'Automatic', drive: 'RWD', fuel: 'Petrol', price: 48900, ccy: 'EUR', coc: true, resale: 62500, partner: 'Adriatica Auto Export', partnerNote: 'Milan → door delivery, 9 yrs', photos: 27 },
+    { id: 'ee1', m: 'EE', cty: 'ro', type: 'auction', year: 2020, make: 'Porsche', model: '911 Carrera S', trim: '992 · PDK · Bucharest', km: 39400, engine: '3.0 flat-6', trans: 'PDK', drive: 'RWD', fuel: 'Petrol', price: 94500, ccy: 'EUR', house: 'Auto Aukcja RO', lot: 'RO-2218', grade: 'Grade 1', gradeNote: 'Two owners, Porsche approved inspection passed, ceramic-coated.', hammer: [91000, 99500], ends: 1980, coc: true, resale: 118000, partner: 'Carpathia Fahrzeughandel', partnerNote: 'Bucharest → door delivery, 7 yrs', photos: 38 },
+    { id: 'ee2', m: 'EE', cty: 'pl', type: 'fixed', year: 2021, make: 'BMW', model: 'M4 Competition', trim: 'G82 · xDrive · Warsaw', km: 28900, engine: '3.0 I6 BT', trans: 'Automatic', drive: 'AWD', fuel: 'Petrol', price: 67200, ccy: 'EUR', coc: true, resale: 79500, partner: 'Carpathia Fahrzeughandel', partnerNote: 'Warsaw → door delivery, 7 yrs', photos: 34 }
+  ];
+
+  state = {
+    view: 'search', offer: 'all', markets: [], marketsOpen: false, query: '', sort: 'landed-asc',
+    make: '', model: '', loc: '',
+    maxPrice: 300000, yearFrom: 1985, yearTo: 2026, maxKm: 300000, fuels: [], trans: [], cocOnly: false,
+    saved: ['us1'], compare: [], selId: null, hoverCost: null, now: Date.now(),
+    dest: 'DE', ccy: 'EUR', lang: 'en', sent: false, bulkSent: false,
+    fName: '', fEmail: '', fPhone: '', fMsg: '', optInspect: true, optBid: false,
+    proOverride: null
+  };
+
+  componentDidMount() {
+    this.timer = setInterval(() => this.setState({ now: Date.now() }), 1000);
+    const d = this.props.defaultDestination;
+    const l = this.props.defaultLanguage;
+    const patch = {};
+    if (d && this.vat[d]) patch.dest = d;
+    if (l && this.dict[l]) patch.lang = l;
+    if (Object.keys(patch).length) this.setState(patch);
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  get pro() { return this.state.proOverride === null ? (this.props.dealerMode ?? false) : this.state.proOverride; }
+  get L() { return this.dict[this.state.lang] || this.dict.en; }
+  f(key, vars) {
+    let s = this.L[key] || key;
+    if (vars) Object.keys(vars).forEach((k) => { s = s.split('{' + k + '}').join(vars[k]); });
+    return s;
+  }
+  flag(code) { return 'https://flagcdn.com/w40/' + code + '.png'; }
+
+  money(eur) {
+    const d = this.disp[this.state.ccy];
+    return d.s + (eur * d.r).toLocaleString('de-DE', { maximumFractionDigits: 0 });
+  }
+  local(c) { return this.sym[c.ccy] + c.price.toLocaleString('de-DE'); }
+
+  costs(c) {
+    const isEU = this.marketMeta[c.m][1];
+    const fob = c.price * this.fx[c.ccy];
+    const fr = this.freight[c.m];
+    const ins = fob * 0.011;
+    const cif = fob + fr + ins;
+    const classic = c.classic === true;
+    const dutyRate = isEU ? 0 : (classic ? 0 : (c.duty ?? 0.10));
+    const duty = cif * dutyRate;
+    const vatRate = isEU ? 0 : (classic ? 0.07 : this.vat[this.state.dest]);
+    const tax = (cif + duty) * vatRate;
+    const clearing = isEU ? 0 : 240;
+    const tuv = isEU ? 145 : 780;
+    const reg = 98;
+    const fee = isEU ? 450 : 950;
+    const total = cif + duty + tax + clearing + tuv + reg + fee;
+    const M = (v) => this.money(v);
+    const lines = [
+      { label: this.f('lFob'), value: M(fob) },
+      { label: this.f('lFreight'), value: M(fr + ins) },
+      { label: this.f('lCif'), value: M(cif) }
+    ];
+    if (isEU) {
+      lines.push({ label: this.f('lDutyEU'), value: '—' });
+      lines.push({ label: this.f('lVatEU'), value: '—' });
+    } else {
+      lines.push({ label: this.f('lDuty', { r: Math.round(dutyRate * 100) }), value: duty > 0 ? M(duty) : '—' });
+      lines.push({ label: this.f('lTax', { r: (vatRate * 100).toFixed(0) }), value: M(tax) });
+      lines.push({ label: this.f('lClearing'), value: M(clearing) });
+    }
+    lines.push({ label: isEU ? this.f('lHu') : this.f('lTuv'), value: M(tuv) });
+    lines.push({ label: this.f('lReg'), value: M(reg) });
+    lines.push({ label: this.f('lFee'), value: M(fee) });
+    let note;
+    if (isEU) note = this.f('nEU');
+    else if (classic) note = this.f('nClassic');
+    else if ((c.duty ?? 0.10) === 0.22) note = this.f('nLcv');
+    else note = this.f('nStd', { r: (vatRate * 100).toFixed(0) });
+    return { total, lines, note };
+  }
+
+  countdown(c) {
+    const end = this.t0 + c.ends * 60000;
+    let s = Math.max(0, Math.floor((end - this.state.now) / 1000));
+    const d = Math.floor(s / 86400); s -= d * 86400;
+    const h = Math.floor(s / 3600); s -= h * 3600;
+    const m = Math.floor(s / 60); s -= m * 60;
+    const p = (n) => String(n).padStart(2, '0');
+    return (d > 0 ? d + 'd ' : '') + p(h) + ':' + p(m) + ':' + p(s);
+  }
+
+  decorate(c) {
+    const st = this.state;
+    const k = this.costs(c);
+    const saved = st.saved.includes(c.id);
+    const isAuction = c.type === 'auction';
+    const marketLabel = this.f('m' + c.m);
+    const chips = [];
+    if (isAuction && c.grade) chips.push({ label: this.f('chSheet', { g: c.grade }) });
+    if (c.house) chips.push({ label: c.house + ' · ' + c.lot });
+    chips.push({ label: c.coc ? this.f('chCocYes') : this.f('chCocNo') });
+    if (c.classic) chips.push({ label: this.f('chClassic') });
+    const margin = c.resale - k.total;
+    const title = c.year + ' ' + c.make + ' ' + c.model;
+    const kmLabel = c.km.toLocaleString('de-DE') + ' km';
+    const transLabel = this.L[c.trans] || c.trans;
+    return {
+      id: c.id, raw: c, slotId: 'photo-' + c.id, heroSlot: 'hero-' + c.id,
+      photoHint: title, title, trim: c.trim,
+      flag: this.flag(c.cty), marketCode: c.m, marketLabel,
+      kmLabel, engine: c.engine, trans: transLabel, drive: c.drive,
+      subLine: c.trim + ' · ' + kmLabel + ' · ' + c.engine,
+      isAuction, isFixed: !isAuction,
+      offerLabel: isAuction ? this.f('auctionLot') : this.f('fixedPrice'),
+      countdown: isAuction ? this.countdown(c) : '',
+      sourceLabel: this.local(c), sourceLine: this.f('atSource', { price: this.local(c) }),
+      sourceMain: this.money(c.price * this.fx[c.ccy]),
+      sourceSub: this.money(c.price * this.fx[c.ccy]) === this.local(c) ? '' : this.local(c),
+      landedLabel: this.money(k.total),
+      landedSub: this.f('landedSub', { dest: st.dest }),
+      roadLegal: this.f('roadLegal', { price: this.local(c) }),
+      costLines: k.lines, dutyNoteFull: k.note + ' ' + this.f('estimateNote'), total: k.total,
+      chips, grade: c.grade, gradeNote: c.gradeNote, house: c.house, lot: c.lot,
+      damageLegend: this.f('damageLegend', { n: c.photos }),
+      hammerLow: this.money(c.hammer ? c.hammer[0] * this.fx[c.ccy] : 0),
+      hammerHigh: this.money(c.hammer ? c.hammer[1] * this.fx[c.ccy] : 0),
+      partner: c.partner, partnerLine: this.f('partnerImporter', { note: c.partnerNote }),
+      saved, compared: st.compare.includes(c.id),
+      heartIcon: saved ? 'ph-fill ph-heart' : 'ph ph-heart',
+      heartColor: saved ? 'var(--color-accent)' : 'var(--color-neutral-300)',
+      saveLabel: saved ? this.f('saved') : this.f('save'),
+      showCost: st.hoverCost === c.id, showPro: this.pro,
+      resaleLine: this.f('retail', { dest: st.dest, price: this.money(c.resale) }),
+      marginLabel: (margin >= 0 ? '+' : '−') + this.money(Math.abs(margin)),
+      marginColor: margin >= 0 ? 'var(--color-accent-300)' : 'var(--color-neutral-400)',
+      onOpen: () => this.setState({ view: 'detail', selId: c.id, sent: false, fMsg: this.f('msgTpl', { car: title, lot: c.lot ? ' (' + this.f('lot') + ' ' + c.lot + ')' : '' }) }),
+      onSave: () => this.setState((s) => ({ saved: s.saved.includes(c.id) ? s.saved.filter((x) => x !== c.id) : s.saved.concat(c.id) })),
+      onCompare: () => this.setState((s) => ({ compare: s.compare.includes(c.id) ? s.compare.filter((x) => x !== c.id) : (s.compare.length >= 4 ? s.compare : s.compare.concat(c.id)) })),
+      onCostEnter: () => this.setState({ hoverCost: c.id }),
+      onCostLeave: () => this.setState({ hoverCost: null })
+    };
+  }
+
+  filtered() {
+    const st = this.state;
+    const q = st.query.trim().toLowerCase();
+    const autoish = (tr) => tr === 'Automatic' || tr === 'PDK' || tr === 'Single speed';
+    let list = this.raw.filter((c) => {
+      if (st.offer !== 'all' && c.type !== st.offer) return false;
+      if (st.markets.length && !st.markets.includes(c.m)) return false;
+      if (st.make && c.make !== st.make) return false;
+      if (st.model && c.model !== st.model) return false;
+      if (st.loc && this.locMap[c.id] !== st.loc) return false;
+      if (c.year < st.yearFrom || c.year > st.yearTo) return false;
+      if (c.km > st.maxKm) return false;
+      if (st.fuels.length && !st.fuels.includes(c.fuel)) return false;
+      if (st.trans.length && !st.trans.includes(autoish(c.trans) ? 'Automatic' : 'Manual')) return false;
+      if (st.cocOnly && !c.coc) return false;
+      if (this.costs(c).total > st.maxPrice) return false;
+      if (q) {
+        const hay = (c.make + ' ' + c.model + ' ' + c.trim + ' ' + (c.lot || '') + ' ' + (c.house || '')).toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    const cost = (c) => this.costs(c).total;
+    const s = st.sort;
+    return list.slice().sort((a, b) => {
+      if (s === 'landed-asc') return cost(a) - cost(b);
+      if (s === 'landed-desc') return cost(b) - cost(a);
+      if (s === 'year-desc') return b.year - a.year;
+      if (s === 'km-asc') return a.km - b.km;
+      if (s === 'ending') return (a.ends || 1e9) - (b.ends || 1e9);
+      return 0;
+    });
+  }
+
+  csv(list) {
+    const L = this.L;
+    const rows = [[L.sYear, 'Make', 'Model', L.rTrim, L.thMarket, L.thOffer, L.thMileage + ' km', L.thSource, L.thLanded + ' EUR']];
+    list.forEach((d) => rows.push([d.raw.year, d.raw.make, d.raw.model, d.trim, d.marketLabel, d.offerLabel, d.raw.km, d.sourceLabel, Math.round(d.total)]));
+    const text = rows.map((r) => r.map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+    a.download = 'auto-import-markt-shortlist.csv';
+    a.click();
+  }
+
+  renderVals() {
+    const st = this.state;
+    const L = this.L;
+    const cars = this.filtered().map((c) => this.decorate(c));
+    const savedCars = this.raw.filter((c) => st.saved.includes(c.id)).map((c) => this.decorate(c));
+    const comparedCars = this.raw.filter((c) => st.compare.includes(c.id)).map((c) => this.decorate(c));
+    const selRaw = this.raw.find((c) => c.id === st.selId);
+    const sel = selRaw ? this.decorate(selRaw) : null;
+    const destName = this.f('c' + st.dest);
+    const uniq = (a) => Array.from(new Set(a)).sort();
+    const makes = uniq(this.raw.map((c) => c.make));
+    const models = uniq(this.raw.filter((c) => !st.make || c.make === st.make).map((c) => c.model));
+    const locs = uniq(this.raw.map((c) => this.locMap[c.id]));
+
+    if (sel) {
+      sel.specs = [
+        { k: L.sYear, v: selRaw.year }, { k: L.sMileage, v: sel.kmLabel },
+        { k: L.sEngine, v: selRaw.engine }, { k: L.sTrans, v: sel.trans },
+        { k: L.sDrive, v: selRaw.drive }, { k: L.sFuel, v: this.f(selRaw.fuel) },
+        { k: L.sSteering, v: L.vLhd }, { k: L.sMarket, v: sel.marketLabel },
+        { k: L.sEmissions, v: selRaw.fuel === 'Electric' ? L.vZero : (selRaw.classic ? L.vPreEuro : L.vEuro6) },
+        { k: L.sOwners, v: selRaw.year > 2019 ? '1' : '2' },
+        { k: L.sTitle, v: selRaw.type === 'auction' ? L.vCleanA : L.vCleanD },
+        { k: L.sAvail, v: selRaw.type === 'auction' ? L.vBidding : L.vInStock }
+      ];
+      sel.thumbs = [L.thFront, L.thInterior, L.thEngine, L.thUnder].map((hint, i) => ({ id: 'thumb-' + selRaw.id + '-' + (i + 1), hint }));
+      const sev = [
+        [L.pFront, 'A1'], [L.pBonnet, ''], [L.pFlWing, 'U1'], [L.pFrWing, ''],
+        [L.pLDoor, 'A2'], [L.pRDoor, ''], [L.pQuarter, selRaw.grade && selRaw.grade.startsWith('A') ? 'W1' : ''], [L.pTail, 'A1']
+      ];
+      sel.damage = sev.map(([panel, code]) => ({
+        panel, code: code || L.pClean,
+        bg: code ? 'var(--color-accent-800)' : 'var(--color-neutral-900)',
+        fg: code ? 'var(--color-accent-100)' : 'var(--color-neutral-500)'
+      }));
+      const isEU = this.marketMeta[selRaw.m][1];
+      const port = this.destMeta[st.dest][1];
+      sel.compliance = [
+        { icon: selRaw.coc ? 'ph-fill ph-check-circle' : 'ph ph-warning-circle', color: selRaw.coc ? 'var(--color-accent-300)' : 'var(--color-neutral-400)', title: selRaw.coc ? L.cocYes : L.cocNo, note: selRaw.coc ? L.cocYesNote : L.cocNoNote },
+        { icon: 'ph-fill ph-steering-wheel', color: 'var(--color-accent-300)', title: L.lhdOk, note: L.lhdOkNote },
+        { icon: 'ph ph-file-text', color: 'var(--color-neutral-400)', title: isEU ? L.intraEU : L.customs, note: isEU ? L.intraEUNote : this.f('customsNote', { port }) },
+        { icon: 'ph ph-gauge', color: 'var(--color-neutral-400)', title: L.kmOk, note: isEU ? L.kmOkE : L.kmOkA }
+      ];
+    }
+
+    const counts = {};
+    Object.keys(this.marketMeta).forEach((m) => { counts[m] = this.raw.filter((c) => c.m === m && (st.offer === 'all' || c.type === st.offer)).length; });
+    const marketChips = Object.keys(this.marketMeta).map((m) => {
+      const on = st.markets.includes(m);
+      return {
+        code: m, label: this.f('m' + m), count: counts[m], flag: this.flag(this.marketMeta[m][0]),
+        border: on ? 'var(--color-accent)' : 'var(--color-divider)',
+        color: on ? 'var(--color-accent)' : 'var(--color-text)',
+        bg: on ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'transparent',
+        onToggle: () => this.setState((s) => ({ markets: s.markets.includes(m) ? s.markets.filter((x) => x !== m) : s.markets.concat(m) }))
+      };
+    });
+    const chipSet = (key, opts) => opts.map((o) => {
+      const on = st[key].includes(o);
+      return {
+        label: this.f(o), border: on ? 'var(--color-accent)' : 'var(--color-divider)',
+        color: on ? 'var(--color-accent)' : 'var(--color-neutral-300)',
+        onToggle: () => this.setState((s) => ({ [key]: s[key].includes(o) ? s[key].filter((x) => x !== o) : s[key].concat(o) }))
+      };
+    });
+
+    const compareCells = [];
+    const rowDefs = [
+      [L.thVehicle, (d) => d.title], [L.rTrim, (d) => d.trim], [L.thMarket, (d) => d.marketLabel],
+      [L.thOffer, (d) => d.isAuction ? L.auction + ' · ' + d.countdown : L.fixedPrice],
+      [L.thMileage, (d) => d.kmLabel], [L.sEngine, (d) => d.engine], [L.sDrive, (d) => d.drive],
+      [L.rSourcePrice, (d) => d.sourceLabel], [L.rLandedPrice, (d) => d.landedLabel],
+      [L.rDutyTax, (d) => d.costLines.slice(3, 5).map((l) => l.value).join(' + ')],
+      [L.rCoc, (d) => d.raw.coc ? L.rAvail : L.rOnReq],
+      [L.rPartner, (d) => d.partner]
+    ];
+    rowDefs.forEach((r) => {
+      compareCells.push({ text: r[0], bg: 'var(--color-surface)', color: 'var(--color-neutral-400)', size: '12px' });
+      comparedCars.forEach((d) => compareCells.push({
+        text: r[1](d), bg: 'var(--color-bg)',
+        color: r[0] === L.rLandedPrice ? 'var(--color-accent-300)' : 'var(--color-text)',
+        size: (r[0] === L.thVehicle || r[0] === L.rLandedPrice) ? '15px' : '13px'
+      }));
+    });
+
+    return {
+      t: L,
+      isSearch: st.view === 'search', isDetail: st.view === 'detail' && !!sel,
+      isWatchlist: st.view === 'watchlist', isCompareView: st.view === 'compare',
+      goSearch: () => this.setState({ view: 'search' }),
+      goWatchlist: () => this.setState({ view: 'watchlist' }),
+      goCompare: () => this.setState({ view: 'compare' }),
+      cars, sel, savedCars, marketChips,
+      fuelChips: chipSet('fuels', ['Petrol', 'Diesel', 'Hybrid', 'Electric']),
+      transChips: chipSet('trans', ['Automatic', 'Manual']),
+      resultLine: this.f('vehicles', { n: cars.length }), noResults: cars.length === 0,
+      savedCount: st.saved.length, hasSaved: st.saved.length > 0, noSaved: st.saved.length === 0,
+      compareCount: st.compare.length, hasCompare: st.compare.length > 0, noCompare: st.compare.length === 0,
+      compareGrid: '190px repeat(' + Math.max(1, st.compare.length) + ', minmax(230px,1fr))',
+      showCompareBar: st.compare.length > 0 && st.view !== 'compare',
+      compareTags: comparedCars.map((d) => ({ title: d.title })), compareCells,
+      selectedLine: this.f('selected', { n: st.compare.length }),
+      clearCompare: () => this.setState({ compare: [] }),
+      query: st.query, onQuery: (e) => this.setState({ query: e.target.value }),
+      sort: st.sort, onSort: (e) => this.setState({ sort: e.target.value }),
+      sortOptions: [['landed-asc', L.sortLowHigh], ['landed-desc', L.sortHighLow], ['year-desc', L.sortNewest], ['km-asc', L.sortKm], ['ending', L.sortEnding]].map(([v, label]) => ({ v, label })),
+      isAll: st.offer === 'all', isFixed: st.offer === 'fixed', isAuction: st.offer === 'auction',
+      setAll: () => this.setState({ offer: 'all' }), setFixed: () => this.setState({ offer: 'fixed' }), setAuction: () => this.setState({ offer: 'auction' }),
+      maxPrice: st.maxPrice, maxPriceLabel: this.money(st.maxPrice),
+      onMaxPrice: (e) => this.setState({ maxPrice: +e.target.value }),
+      yearFrom: st.yearFrom, onYearFrom: (e) => this.setState({ yearFrom: +e.target.value || 1985 }),
+      yearTo: st.yearTo, onYearTo: (e) => this.setState({ yearTo: +e.target.value || 2026 }),
+      make: st.make, onMake: (e) => this.setState({ make: e.target.value, model: '' }),
+      makeOptions: [{ v: '', label: L.allMakes }].concat(makes.map((v) => ({ v, label: v }))),
+      model: st.model, onModel: (e) => this.setState({ model: e.target.value }),
+      modelOptions: [{ v: '', label: L.allModels }].concat(models.map((v) => ({ v, label: v }))),
+      loc: st.loc, onLoc: (e) => this.setState({ loc: e.target.value }),
+      locOptions: [{ v: '', label: L.allLocations }].concat(locs.map((v) => ({ v, label: v }))),
+      marketsOpen: st.marketsOpen,
+      marketsChevron: st.marketsOpen ? 'ph ph-caret-down' : 'ph ph-caret-right',
+      marketsSummary: st.markets.length ? this.f('nSelected', { n: st.markets.length }) : L.allMarkets,
+      toggleMarkets: () => this.setState((s) => ({ marketsOpen: !s.marketsOpen })),
+      maxKm: st.maxKm, maxKmLabel: st.maxKm.toLocaleString('de-DE') + ' km',
+      onMaxKm: (e) => this.setState({ maxKm: +e.target.value }),
+      cocOnly: st.cocOnly, onCoc: (e) => this.setState({ cocOnly: e.target.checked }),
+      resetFilters: () => this.setState({ markets: [], query: '', make: '', model: '', loc: '', maxPrice: 300000, yearFrom: 1985, yearTo: 2026, maxKm: 300000, fuels: [], trans: [], cocOnly: false, offer: 'all' }),
+      pro: this.pro,
+      lang: st.lang, onLang: (e) => this.setState({ lang: e.target.value }),
+      langFlag: this.flag(st.lang === 'de' ? 'de' : 'gb'),
+      langOptions: Object.keys(this.dict).map((k) => ({ v: k, label: this.dict[k].langName })),
+      dest: st.dest, onDest: (e) => this.setState({ dest: e.target.value }),
+      destFlag: this.flag(this.destMeta[st.dest][0]),
+      destOptions: Object.keys(this.destMeta).map((k) => ({ v: k, label: this.f('c' + k) + ' · ' + (this.vat[k] * 100).toFixed(0) + '% ' + this.destMeta[k][2] })),
+      ccy: st.ccy, onCcy: (e) => this.setState({ ccy: e.target.value }),
+      destName,
+      fxLine: this.f('fxLine', { dest: destName, port: this.destMeta[st.dest][1], fx: '¥1 = €' + this.fx.JPY.toFixed(4) + ' · $1 = €' + this.fx.USD.toFixed(2) }),
+      landedTitle: this.f('landedTitle', { dest: destName }),
+      wlIntro: this.f('wlIntro', { dest: destName }),
+      cmpIntro: this.f('cmpIntro', { dest: destName }),
+      bulkMessage: this.f('bulkMsg', { n: st.saved.length }),
+      sentMessage: sel ? this.f('sentMsg', { partner: sel.partner }) : '',
+      exportCsv: () => this.csv(cars), exportSavedCsv: () => this.csv(savedCars),
+      bulkEnquiry: () => this.setState({ bulkSent: true }), bulkSent: st.bulkSent,
+      sent: st.sent, notSent: !st.sent,
+      formName: st.fName, onFormName: (e) => this.setState({ fName: e.target.value }),
+      formEmail: st.fEmail, onFormEmail: (e) => this.setState({ fEmail: e.target.value }),
+      formPhone: st.fPhone, onFormPhone: (e) => this.setState({ fPhone: e.target.value }),
+      formMsg: st.fMsg, onFormMsg: (e) => this.setState({ fMsg: e.target.value }),
+      optInspect: st.optInspect, onOptInspect: (e) => this.setState({ optInspect: e.target.checked }),
+      optBid: st.optBid, onOptBid: (e) => this.setState({ optBid: e.target.checked }),
+      bidOptLabel: sel && sel.isAuction ? L.bidForMe : L.negotiate,
+      sendEnquiry: () => this.setState({ sent: true })
+    };
+  }
+}
+</script>
+</body>
+</html>

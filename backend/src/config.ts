@@ -1,0 +1,101 @@
+import { isAbsolute, resolve } from 'node:path';
+
+const env = process.env;
+/** Paket-Wurzel (backend/), damit relative Pfade unabhängig vom Startverzeichnis sind. */
+const PKG_ROOT = resolve(import.meta.dirname, '..');
+
+function num(value: string | undefined, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) && value !== undefined && value !== '' ? n : fallback;
+}
+
+function bool(value: string | undefined, fallback: boolean): boolean {
+  if (value === undefined || value === '') return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
+}
+
+function list(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Datenbank-URL für @libsql/client:
+ *  - Turso/Vercel: TURSO_DATABASE_URL (+ TURSO_AUTH_TOKEN), alternativ DATABASE_URL
+ *  - lokal: DATABASE_PATH (Datei relativ zu backend/) oder ':memory:'
+ */
+function databaseUrl(): string {
+  const remote = env.TURSO_DATABASE_URL || env.DATABASE_URL;
+  if (remote) return remote;
+  const p = env.DATABASE_PATH ?? './data/aim.sqlite';
+  if (p === ':memory:') return ':memory:';
+  const abs = isAbsolute(p) ? p : resolve(PKG_ROOT, p);
+  return `file:${abs.replace(/\\/g, '/')}`;
+}
+
+export const isServerless = bool(env.VERCEL, false);
+
+export const config = {
+  port: num(env.PORT, 4000),
+  host: env.HOST ?? '0.0.0.0',
+  corsOrigins: list(env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:3000'),
+  adminKey: env.ADMIN_KEY ?? '',
+  cronSecret: env.CRON_SECRET ?? '',
+  database: {
+    url: databaseUrl(),
+    authToken: env.TURSO_AUTH_TOKEN || env.DATABASE_AUTH_TOKEN || undefined,
+  },
+  syncIntervalMin: num(env.SYNC_INTERVAL_MIN, 0),
+  enableMockProvider: bool(env.ENABLE_MOCK_PROVIDER, true),
+  marketcheck: {
+    apiKey: env.MARKETCHECK_API_KEY ?? '',
+    makes: list(env.MARKETCHECK_MAKES ?? 'Toyota,Ford,Chevrolet,Dodge'),
+  },
+  ebay: {
+    clientId: env.EBAY_CLIENT_ID ?? '',
+    clientSecret: env.EBAY_CLIENT_SECRET ?? '',
+    marketplaceId: env.EBAY_MARKETPLACE_ID ?? 'EBAY_US',
+  },
+  jpFeed: {
+    url: env.JP_FEED_URL ?? '',
+    authHeader: env.JP_FEED_AUTH_HEADER ?? '',
+    mapping: env.JP_FEED_MAPPING ?? '',
+  },
+  encar: {
+    enabled: bool(env.ENCAR_ENABLED, false),
+    manufacturers: list(env.ENCAR_MANUFACTURERS ?? '현대,기아,제네시스'),
+    /** Hersteller, die bei Encar als Import (CarType.N) geführt werden */
+    importedMakers: list(env.ENCAR_IMPORTED_MAKERS ?? 'BMW,벤츠,아우디,폭스바겐,볼보,렉서스,토요타,포르쉐,테슬라,미니,랜드로버'),
+    limitPerMaker: num(env.ENCAR_LIMIT_PER_MAKER, 40),
+    minPriceManwon: num(env.ENCAR_MIN_PRICE_MANWON, 1000),
+    fetchDetails: bool(env.ENCAR_FETCH_DETAILS, true),
+    delayMs: num(env.ENCAR_DELAY_MS, 250),
+  },
+  apibara: {
+    apiKey: env.APIBARA_API_KEY ?? '',
+    platforms: list(env.APIBARA_PLATFORMS ?? 'copart,iaai'),
+    make: env.APIBARA_MAKE ?? '',
+    pages: num(env.APIBARA_PAGES, 2),
+  },
+  autoapi: {
+    accessName: env.AUTOAPI_ACCESS_NAME ?? '',
+    apiKey: env.AUTOAPI_API_KEY ?? '',
+    sources: list(env.AUTOAPI_SOURCES ?? 'dubizzle').filter((s): s is 'dubizzle' | 'dubicars' => s === 'dubizzle' || s === 'dubicars'),
+    pages: num(env.AUTOAPI_PAGES, 5),
+  },
+  carapis: {
+    apiKey: env.CARAPIS_API_KEY ?? '',
+    baseUrl: env.CARAPIS_BASE_URL ?? 'https://api.carapis.com',
+    /** "quelle:MARKT,…" – Quellcodes wie von GET /apix/catalog_api/sources/ geliefert */
+    sources: env.CARAPIS_SOURCES ?? 'encar:KR',
+    pageSize: num(env.CARAPIS_PAGE_SIZE, 50),
+    pages: num(env.CARAPIS_PAGES, 2),
+    /** Optional: nur bestimmte Marken je Sync (Slugs, kommagetrennt) */
+    brands: list(env.CARAPIS_BRANDS),
+    /** Quelle für Referenzpreise im Zielmarkt (mobile.de) */
+    referenceSource: env.CARAPIS_REFERENCE_SOURCE ?? 'mobile_de',
+  },
+  fxBaseUrl: env.FX_BASE_URL ?? 'https://api.frankfurter.dev/v1',
+} as const;

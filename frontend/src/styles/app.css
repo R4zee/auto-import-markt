@@ -1,0 +1,33 @@
+/* Seitenspezifische Ergänzungen zum Nocturne-System (siehe nocturne.css). */
+body { margin: 0; }
+input[type=range] { accent-color: var(--color-accent); }
+select.input { appearance: none; }
+select.input option { background: var(--color-surface); color: var(--color-text); }
+
+.aim-page { min-height: 100vh; background: var(--color-bg); color: var(--color-text); font-family: var(--font-body); padding-bottom: 96px; }
+.aim-wrap { max-width: 1560px; margin: 0 auto; }
+.aim-flag { width: 18px; height: 13px; border-radius: 2px; display: block; flex: none; background-size: cover; background-position: center; }
+.aim-flag-sm { width: 17px; height: 12px; }
+.aim-select-bare { border: 0 !important; background: transparent !important; min-height: 26px !important; padding: 0 2px !important; font-size: 13px !important; width: auto !important; }
+.aim-select-bare option { color: var(--color-text); }
+.tabular { font-variant-numeric: tabular-nums; }
+.aim-btn-plain { background: transparent; border: 0; padding: 0; cursor: pointer; color: inherit; font: inherit; }
+
+.aim-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.aim-photo-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--color-neutral-600); font-size: 11.5px; text-align: center; padding: 10px; gap: 6px; }
+.aim-photo-empty i { font-size: 22px; display: block; color: var(--color-neutral-700); }
+
+.aim-card-photo-btn { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: rgba(22,24,38,0.82); cursor: pointer; display: grid; place-items: center; }
+.aim-card-photo-btn:hover { background: rgba(22,24,38,0.95); }
+
+.aim-header { position: sticky; top: 0; z-index: 60; background: rgba(22,24,38,0.94); backdrop-filter: blur(14px); box-shadow: 0 1px 0 var(--color-divider); }
+.aim-nav-link { cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.aim-nav-link:hover, .aim-nav-link[aria-current='page'] { color: var(--color-accent); }
+
+.aim-sidebar { position: sticky; top: 88px; display: flex; flex-direction: column; gap: 20px; flex: 1 1 210px; min-width: 200px; max-width: 222px; }
+@media (max-width: 760px) { .aim-sidebar { position: static; max-width: none; } }
+
+.aim-compare-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 70; background: rgba(35,37,50,0.96); backdrop-filter: blur(14px); box-shadow: 0 -1px 0 var(--color-divider); }
+
+.aim-fade-in { animation: aim-fade 180ms ease-out; }
+@keyframes aim-fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }

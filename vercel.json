@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "outputDirectory": "frontend/dist",
+  "regions": ["fra1"],
+  "functions": {
+    "api/index.ts": { "maxDuration": 300, "memory": 1024 }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" }
+  ],
+  "crons": [
+    { "path": "/api/cron/sync", "schedule": "0 4 * * *" }
+  ]
+}

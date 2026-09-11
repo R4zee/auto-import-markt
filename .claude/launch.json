@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": ["--watch", "--env-file-if-exists=backend/.env", "backend/src/server.ts"],
+      "port": 4000
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": ["frontend/node_modules/vite/bin/vite.js", "frontend", "--config", "frontend/vite.config.ts", "--port", "5173", "--strictPort"],
+      "port": 5173
+    }
+  ]
+}
