@@ -46,6 +46,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       ? [req.query.url]
       : [
           'https://api.encar.com/search/car/list/premium?count=true&q=(And.Hidden.N._.CarType.Y.)&sr=%7CModifiedDate%7C0%7C1',
+          'http://api.encar.com/search/car/list/premium?count=true&q=(And.Hidden.N._.CarType.Y.)&sr=%7CModifiedDate%7C0%7C1',
+          'https://api.encar.com/v1/readside/vehicle/39781874?include=CATEGORY',
           'https://fem.encar.com/',
           'https://api.frankfurter.dev/v1/latest?base=EUR&symbols=USD',
         ];

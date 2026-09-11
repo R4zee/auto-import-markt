@@ -4,7 +4,7 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": "frontend/dist",
-  "regions": ["fra1"],
+  "regions": ["icn1"],
   "functions": {
     "api/index.ts": { "maxDuration": 300, "memory": 1024 }
   },

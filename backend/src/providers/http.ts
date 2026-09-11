@@ -51,9 +51,15 @@ export async function getJson<T>(url: string, init: RequestInit & { retries?: nu
 /** "fetch failed" um die eigentliche Ursache (DNS, TLS, Reset, Timeout) ergänzen. */
 export function describeNetworkError(e: unknown, url: string): Error {
   if (!(e instanceof Error)) return new Error(`${String(e)} (${url})`);
-  const cause = (e as Error & { cause?: unknown }).cause as (Error & { code?: string; errno?: number; syscall?: string; hostname?: string }) | undefined;
   const parts = [e.message];
-  if (cause) parts.push([cause.code, cause.syscall, cause.hostname, cause.message].filter(Boolean).join(' '));
+  // Ursachenkette (undici verpackt Netzwerkfehler, teils als AggregateError)
+  let cur: unknown = (e as Error & { cause?: unknown }).cause;
+  for (let depth = 0; cur && depth < 4; depth++) {
+    const c = cur as Error & { code?: string; syscall?: string; hostname?: string; errors?: unknown[] };
+    const inner = Array.isArray(c.errors) ? c.errors.map((x) => (x as Error & { code?: string }).code ?? (x as Error).message).join(',') : '';
+    parts.push([c.name, c.code, c.syscall, c.hostname, c.message, inner].filter(Boolean).join(' '));
+    cur = (c as Error & { cause?: unknown }).cause;
+  }
   if (e.name === 'TimeoutError') parts.push('timeout');
   const err = new Error(`${parts.filter(Boolean).join(' – ')} (${new URL(url).host})`);
   err.name = e.name;
