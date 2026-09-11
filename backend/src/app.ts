@@ -1,7 +1,7 @@
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { config, isServerless } from './config.ts';
+import { config, databaseMissing, isServerless } from './config.ts';
 import { ready } from './db.ts';
 import { listingsRepo } from './repositories/listings.ts';
 import { adminRoutes } from './routes/admin.ts';
@@ -23,7 +23,13 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   });
   await app.register(rateLimit, { max: 300, timeWindow: '1 minute' });
 
-  app.get('/api/health', async () => ({ ok: true, listings: await listingsRepo.countBySource(), serverless: isServerless, time: new Date().toISOString() }));
+  app.get('/api/health', async () => ({
+    ok: !databaseMissing,
+    listings: await listingsRepo.countBySource(),
+    serverless: isServerless,
+    database: databaseMissing ? 'MISSING – TURSO_DATABASE_URL/TURSO_AUTH_TOKEN setzen und redeployen' : config.database.url.startsWith('file:') ? 'local-file' : config.database.url === ':memory:' ? 'memory' : 'remote',
+    time: new Date().toISOString(),
+  }));
 
   /** Vercel Cron (GET) – Header "Authorization: Bearer <CRON_SECRET>"; alternativ x-admin-key */
   app.get('/api/cron/sync', async (req, reply) => {

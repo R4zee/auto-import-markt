@@ -1,8 +1,13 @@
 import { isAbsolute, resolve } from 'node:path';
 
 const env = process.env;
-/** Paket-Wurzel (backend/), damit relative Pfade unabhängig vom Startverzeichnis sind. */
-const PKG_ROOT = resolve(import.meta.dirname, '..');
+/**
+ * Paket-Wurzel (backend/), damit relative Pfade unabhängig vom Startverzeichnis sind.
+ * Im Vercel-Bundle ist import.meta.dirname ggf. nicht gesetzt → Fallback auf cwd.
+ */
+const PKG_ROOT = typeof import.meta.dirname === 'string' ? resolve(import.meta.dirname, '..') : resolve(process.cwd(), 'backend');
+
+export const isServerless = ['1', 'true'].includes((env.VERCEL ?? '').toLowerCase());
 
 function num(value: string | undefined, fallback: number): number {
   const n = Number(value);
@@ -29,13 +34,16 @@ function list(value: string | undefined): string[] {
 function databaseUrl(): string {
   const remote = env.TURSO_DATABASE_URL || env.DATABASE_URL;
   if (remote) return remote;
+  // Ohne gehostete Datenbank auf Vercel: In-Memory, damit die API antwortet und /api/health den Mangel meldet
+  if (isServerless) return ':memory:';
   const p = env.DATABASE_PATH ?? './data/aim.sqlite';
   if (p === ':memory:') return ':memory:';
   const abs = isAbsolute(p) ? p : resolve(PKG_ROOT, p);
   return `file:${abs.replace(/\\/g, '/')}`;
 }
 
-export const isServerless = bool(env.VERCEL, false);
+/** true, wenn auf Vercel keine Turso-/DATABASE_URL gesetzt ist (Daten gehen bei jedem Kaltstart verloren) */
+export const databaseMissing = isServerless && !(env.TURSO_DATABASE_URL || env.DATABASE_URL);
 
 export const config = {
   port: num(env.PORT, 4000),
