@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { calcLandedCost } from '../domain/landedCost.ts';
-import { DEST_CODES, MARKET_CODES } from '../domain/markets.ts';
-import { calcGermanVehicleTax } from '../domain/vehicleTax.ts';
-import { publicConfig } from '../services/catalog.ts';
-import { eurRate, getFx } from '../services/fx.ts';
+import { calcLandedCost } from '../domain/landedCost.js';
+import { DEST_CODES, MARKET_CODES } from '../domain/markets.js';
+import { calcGermanVehicleTax } from '../domain/vehicleTax.js';
+import { publicConfig } from '../services/catalog.js';
+import { eurRate, getFx } from '../services/fx.js';
 
 const calcSchema = z.object({
   market: z.enum(MARKET_CODES as [string, ...string[]]),

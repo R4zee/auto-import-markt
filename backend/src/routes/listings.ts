@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { isDestCode, isMarketCode } from '../domain/markets.ts';
-import type { ListingQuery } from '../domain/types.ts';
-import { listingsRepo, partnersRepo } from '../repositories/listings.ts';
-import { decorate, search } from '../services/catalog.ts';
-import { getFx } from '../services/fx.ts';
-import { referenceEnabled, referencePrices } from '../services/reference.ts';
+import { isDestCode, isMarketCode } from '../domain/markets.js';
+import type { ListingQuery } from '../domain/types.js';
+import { listingsRepo, partnersRepo } from '../repositories/listings.js';
+import { decorate, search } from '../services/catalog.js';
+import { getFx } from '../services/fx.js';
+import { referenceEnabled, referencePrices } from '../services/reference.js';
 
 const csv = (v: unknown) => (typeof v === 'string' && v.length ? v.split(',').map((s) => s.trim()).filter(Boolean) : []);
 

@@ -1,13 +1,13 @@
-import { config } from '../config.ts';
-import { ApibaraProvider } from './apibara.ts';
-import { AutoApiProvider } from './autoapi.ts';
-import { CarapisProvider } from './carapis.ts';
-import { EbayMotorsProvider } from './ebay.ts';
-import { EncarProvider } from './encar.ts';
-import { JsonFeedProvider } from './feed.ts';
-import { MarketCheckProvider } from './marketcheck.ts';
-import { MockProvider } from './mock.ts';
-import type { MarketProvider } from './types.ts';
+import { config } from '../config.js';
+import { ApibaraProvider } from './apibara.js';
+import { AutoApiProvider } from './autoapi.js';
+import { CarapisProvider } from './carapis.js';
+import { EbayMotorsProvider } from './ebay.js';
+import { EncarProvider } from './encar.js';
+import { JsonFeedProvider } from './feed.js';
+import { MarketCheckProvider } from './marketcheck.js';
+import { MockProvider } from './mock.js';
+import type { MarketProvider } from './types.js';
 
 const ALL: MarketProvider[] = [
   new MockProvider(),

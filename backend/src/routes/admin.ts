@@ -1,12 +1,12 @@
 import type { FastifyInstance } from 'fastify';
-import { config } from '../config.ts';
-import { query } from '../db.ts';
-import { mapCarapis, parseSources } from '../providers/carapis.ts';
-import { allProviders } from '../providers/index.ts';
-import { listingsRepo } from '../repositories/listings.ts';
-import { carapisEnabled, fetchBrands, fetchSources, fetchVehicles } from '../services/carapisClient.ts';
-import { invalidateListingCache } from '../services/catalog.ts';
-import { lastRuns, syncAll, syncProvider } from '../services/sync.ts';
+import { config } from '../config.js';
+import { query } from '../db.js';
+import { mapCarapis, parseSources } from '../providers/carapis.js';
+import { allProviders } from '../providers/index.js';
+import { listingsRepo } from '../repositories/listings.js';
+import { carapisEnabled, fetchBrands, fetchSources, fetchVehicles } from '../services/carapisClient.js';
+import { invalidateListingCache } from '../services/catalog.js';
+import { lastRuns, syncAll, syncProvider } from '../services/sync.js';
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('onRequest', async (req, reply) => {

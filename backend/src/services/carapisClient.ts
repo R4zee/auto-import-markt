@@ -1,5 +1,5 @@
-import { config } from '../config.ts';
-import { getJson } from '../providers/http.ts';
+import { config } from '../config.js';
+import { getJson } from '../providers/http.js';
 
 /**
  * Dünner Client für das Carapis Catalog API (v1.0.0).

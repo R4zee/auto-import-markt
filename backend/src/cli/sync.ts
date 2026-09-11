@@ -1,6 +1,6 @@
-import { closeDb, ready } from '../db.ts';
-import { getFx } from '../services/fx.ts';
-import { syncAll } from '../services/sync.ts';
+import { closeDb, ready } from '../db.js';
+import { getFx } from '../services/fx.js';
+import { syncAll } from '../services/sync.js';
 
 await ready();
 await getFx();

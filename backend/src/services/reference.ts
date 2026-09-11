@@ -1,9 +1,9 @@
-import { config } from '../config.ts';
-import type { Listing } from '../domain/types.ts';
-import { carapisPrice, pick } from '../providers/carapis.ts';
-import { num } from '../providers/http.ts';
-import { carapisEnabled, fetchVehicles } from './carapisClient.ts';
-import { eurRate, getFx } from './fx.ts';
+import { config } from '../config.js';
+import type { Listing } from '../domain/types.js';
+import { carapisPrice, pick } from '../providers/carapis.js';
+import { num } from '../providers/http.js';
+import { carapisEnabled, fetchVehicles } from './carapisClient.js';
+import { eurRate, getFx } from './fx.js';
 
 /**
  * Referenzpreise im Zielmarkt (mobile.de über Carapis): vergleichbare Angebote

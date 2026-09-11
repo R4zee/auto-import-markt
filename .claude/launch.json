@@ -4,7 +4,7 @@
     {
       "name": "backend",
       "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
-      "runtimeArgs": ["--watch", "--env-file-if-exists=backend/.env", "backend/src/server.ts"],
+      "runtimeArgs": ["--import", "tsx", "--watch", "--env-file-if-exists=backend/.env", "backend/src/server.ts"],
       "port": 4000
     },
     {

@@ -1,5 +1,5 @@
-import { DESTINATIONS, FEES, MARKETS } from './markets.ts';
-import type { CostLine, DestCode, LandedCost, MarketCode } from './types.ts';
+import { DESTINATIONS, FEES, MARKETS } from './markets.js';
+import type { CostLine, DestCode, LandedCost, MarketCode } from './types.js';
 
 export interface LandedCostParams {
   market: MarketCode;

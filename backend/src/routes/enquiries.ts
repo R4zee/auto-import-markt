@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { db, run } from '../db.ts';
-import { DEST_CODES } from '../domain/markets.ts';
-import { listingsRepo, partnersRepo } from '../repositories/listings.ts';
-import { decorate } from '../services/catalog.ts';
-import { getFx } from '../services/fx.ts';
+import { db, run } from '../db.js';
+import { DEST_CODES } from '../domain/markets.js';
+import { listingsRepo, partnersRepo } from '../repositories/listings.js';
+import { decorate } from '../services/catalog.js';
+import { getFx } from '../services/fx.js';
 
 const base = {
   dest: z.enum(DEST_CODES as [string, ...string[]]).default('DE'),

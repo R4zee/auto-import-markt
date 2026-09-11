@@ -1,4 +1,4 @@
-import type { Fuel, VehicleTax } from './types.ts';
+import type { Fuel, VehicleTax } from './types.js';
 
 /**
  * Deutsche Kfz-Steuer nach § 9 KraftStG für Pkw.

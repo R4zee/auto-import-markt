@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { mapApibara } from '../src/providers/apibara.ts';
-import { mapAutoApi } from '../src/providers/autoapi.ts';
-import { carapisPrice, mapCarapis, parseSources } from '../src/providers/carapis.ts';
-import { encarDrive, encarFuel, mapEncar } from '../src/providers/encar.ts';
+import { mapApibara } from '../src/providers/apibara.js';
+import { mapAutoApi } from '../src/providers/autoapi.js';
+import { carapisPrice, mapCarapis, parseSources } from '../src/providers/carapis.js';
+import { encarDrive, encarFuel, mapEncar } from '../src/providers/encar.js';
 
 const NOW = '2026-09-11T10:00:00.000Z';
 

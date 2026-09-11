@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { calcLandedCost } from '../src/domain/landedCost.ts';
-import { calcGermanVehicleTax } from '../src/domain/vehicleTax.ts';
+import { calcLandedCost } from '../src/domain/landedCost.js';
+import { calcGermanVehicleTax } from '../src/domain/vehicleTax.js';
 
 describe('calcLandedCost', () => {
   it('rechnet einen Japan-Import wie im Design (10 % Zoll, 19 % EUSt)', () => {

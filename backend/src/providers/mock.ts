@@ -1,6 +1,6 @@
-import type { DamageEntry, Listing } from '../domain/types.ts';
-import { SEED_PARTNERS } from '../seed/partners.ts';
-import { listingId, type MarketProvider, type ProviderResult } from './types.ts';
+import type { DamageEntry, Listing } from '../domain/types.js';
+import { SEED_PARTNERS } from '../seed/partners.js';
+import { listingId, type MarketProvider, type ProviderResult } from './types.js';
 
 /**
  * Beispieldaten aus dem Claude-Design (14 Fahrzeuge). Auktionsenden sind relativ

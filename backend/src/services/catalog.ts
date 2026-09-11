@@ -1,9 +1,9 @@
-import { calcLandedCost } from '../domain/landedCost.ts';
-import { DESTINATIONS, MARKETS, MARKET_CODES } from '../domain/markets.ts';
-import type { DecoratedListing, DestCode, Listing, ListingQuery } from '../domain/types.ts';
-import { calcGermanVehicleTax } from '../domain/vehicleTax.ts';
-import { listingsRepo } from '../repositories/listings.ts';
-import { eurRate } from './fx.ts';
+import { calcLandedCost } from '../domain/landedCost.js';
+import { DESTINATIONS, MARKETS, MARKET_CODES } from '../domain/markets.js';
+import type { DecoratedListing, DestCode, Listing, ListingQuery } from '../domain/types.js';
+import { calcGermanVehicleTax } from '../domain/vehicleTax.js';
+import { listingsRepo } from '../repositories/listings.js';
+import { eurRate } from './fx.js';
 
 export function decorate(l: Listing, dest: DestCode): DecoratedListing {
   const landed = calcLandedCost({

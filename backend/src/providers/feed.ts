@@ -1,8 +1,8 @@
-import { config } from '../config.ts';
-import { isMarketCode } from '../domain/markets.ts';
-import type { Listing, MarketCode } from '../domain/types.ts';
-import { defaultPartnerFor } from '../seed/partners.ts';
-import { listingId, normalizeDrive, normalizeFuel, normalizeTransmission, type MarketProvider, type ProviderResult } from './types.ts';
+import { config } from '../config.js';
+import { isMarketCode } from '../domain/markets.js';
+import type { Listing, MarketCode } from '../domain/types.js';
+import { defaultPartnerFor } from '../seed/partners.js';
+import { listingId, normalizeDrive, normalizeFuel, normalizeTransmission, type MarketProvider, type ProviderResult } from './types.js';
 
 /**
  * Generischer JSON-Feed-Adapter für Partner-/Exporteur-Feeds (z. B. ein

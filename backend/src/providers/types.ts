@@ -1,4 +1,4 @@
-import type { Listing, Partner } from '../domain/types.ts';
+import type { Listing, Partner } from '../domain/types.js';
 
 export interface ProviderResult {
   listings: Listing[];

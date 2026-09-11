@@ -1,4 +1,4 @@
-import type { DestCode, MarketCode } from './types.ts';
+import type { DestCode, MarketCode } from './types.js';
 
 export interface MarketMeta {
   code: MarketCode;

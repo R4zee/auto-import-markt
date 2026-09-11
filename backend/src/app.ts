@@ -1,15 +1,15 @@
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { config, databaseMissing, isServerless } from './config.ts';
-import { ready } from './db.ts';
-import { listingsRepo } from './repositories/listings.ts';
-import { adminRoutes } from './routes/admin.ts';
-import { calcRoutes } from './routes/calc.ts';
-import { enquiryRoutes } from './routes/enquiries.ts';
-import { listingRoutes } from './routes/listings.ts';
-import { invalidateListingCache } from './services/catalog.ts';
-import { syncAll } from './services/sync.ts';
+import { config, databaseMissing, isServerless } from './config.js';
+import { ready } from './db.js';
+import { listingsRepo } from './repositories/listings.js';
+import { adminRoutes } from './routes/admin.js';
+import { calcRoutes } from './routes/calc.js';
+import { enquiryRoutes } from './routes/enquiries.js';
+import { listingRoutes } from './routes/listings.js';
+import { invalidateListingCache } from './services/catalog.js';
+import { syncAll } from './services/sync.js';
 
 export async function buildApp(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? true, trustProxy: true });

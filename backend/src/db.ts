@@ -1,7 +1,7 @@
 import { createClient, type Client, type InValue } from '@libsql/client';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { config } from './config.ts';
+import { config } from './config.js';
 
 let client: Client | null = null;
 let migration: Promise<void> | null = null;

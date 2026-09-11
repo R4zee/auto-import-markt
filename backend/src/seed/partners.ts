@@ -1,4 +1,4 @@
-import type { Partner } from '../domain/types.ts';
+import type { Partner } from '../domain/types.js';
 
 /** Partner-Importeure aus dem Design. E-Mails sind Platzhalter bis Verträge stehen. */
 export const SEED_PARTNERS: Partner[] = [

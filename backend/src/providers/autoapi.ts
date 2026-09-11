@@ -1,8 +1,8 @@
-import { config } from '../config.ts';
-import type { Listing } from '../domain/types.ts';
-import { defaultPartnerFor } from '../seed/partners.ts';
-import { getJson, num, sleep, str } from './http.ts';
-import { listingId, normalizeDrive, normalizeFuel, normalizeTransmission, type MarketProvider, type ProviderResult } from './types.ts';
+import { config } from '../config.js';
+import type { Listing } from '../domain/types.js';
+import { defaultPartnerFor } from '../seed/partners.js';
+import { getJson, num, sleep, str } from './http.js';
+import { listingId, normalizeDrive, normalizeFuel, normalizeTransmission, type MarketProvider, type ProviderResult } from './types.js';
 
 /**
  * auto-api.com – lizenzierter Datenfeed für Dubizzle Motors und Dubicars (VAE).

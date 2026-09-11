@@ -1,5 +1,5 @@
-import { buildApp, startBackgroundSync } from './app.ts';
-import { config } from './config.ts';
+import { buildApp, startBackgroundSync } from './app.js';
+import { config } from './config.js';
 
 const app = await buildApp();
 await startBackgroundSync(app);

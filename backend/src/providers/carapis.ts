@@ -1,10 +1,10 @@
-import { config } from '../config.ts';
-import { isMarketCode } from '../domain/markets.ts';
-import type { Listing, MarketCode } from '../domain/types.ts';
-import { defaultPartnerFor } from '../seed/partners.ts';
-import { carapisEnabled, fetchVehicles, type CarapisVehicle } from '../services/carapisClient.ts';
-import { num, sleep, str } from './http.ts';
-import { listingId, normalizeDrive, normalizeFuel, type MarketProvider, type ProviderResult } from './types.ts';
+import { config } from '../config.js';
+import { isMarketCode } from '../domain/markets.js';
+import type { Listing, MarketCode } from '../domain/types.js';
+import { defaultPartnerFor } from '../seed/partners.js';
+import { carapisEnabled, fetchVehicles, type CarapisVehicle } from '../services/carapisClient.js';
+import { num, sleep, str } from './http.js';
+import { listingId, normalizeDrive, normalizeFuel, type MarketProvider, type ProviderResult } from './types.js';
 
 /**
  * Carapis Catalog API – ein Adapter für alle dort angebotenen Märkte (Encar, KB Chachacha,

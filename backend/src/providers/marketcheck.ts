@@ -1,7 +1,7 @@
-import { config } from '../config.ts';
-import type { Listing } from '../domain/types.ts';
-import { defaultPartnerFor } from '../seed/partners.ts';
-import { listingId, milesToKm, normalizeDrive, normalizeFuel, normalizeTransmission, type MarketProvider, type ProviderResult } from './types.ts';
+import { config } from '../config.js';
+import type { Listing } from '../domain/types.js';
+import { defaultPartnerFor } from '../seed/partners.js';
+import { listingId, milesToKm, normalizeDrive, normalizeFuel, normalizeTransmission, type MarketProvider, type ProviderResult } from './types.js';
 
 /**
  * MarketCheck – US-Händlerbestand (Festpreis). Self-Service-Key unter

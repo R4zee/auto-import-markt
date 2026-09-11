@@ -13,8 +13,8 @@ process.env.CRON_SECRET = 'cron-secret';
 process.env.VERCEL = '';
 process.env.FX_BASE_URL = 'http://127.0.0.1:1'; // erzwingt Fallback-Kurse
 
-const { buildApp, startBackgroundSync } = await import('../src/app.ts');
-const { closeDb } = await import('../src/db.ts');
+const { buildApp, startBackgroundSync } = await import('../src/app.js');
+const { closeDb } = await import('../src/db.js');
 
 describe('API', async () => {
   const app = await buildApp({ logger: false });

@@ -1,5 +1,5 @@
-import { config } from '../config.ts';
-import { db, query } from '../db.ts';
+import { config } from '../config.js';
+import { db, query } from '../db.js';
 
 /** EUR je Einheit Fremdwährung. Fallback = Designwerte, falls die EZB-Abfrage scheitert. */
 const FALLBACK: Record<string, number> = {

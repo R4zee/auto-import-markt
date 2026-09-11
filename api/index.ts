@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { FastifyInstance } from 'fastify';
 // Statischer Import: nur so nimmt der Vercel-Bundler die Backend-Quellen mit ins Function-Bundle.
-import { buildApp } from '../backend/src/app.ts';
+import { buildApp } from '../backend/src/app.js';
 
 /**
  * Vercel Serverless Function: alle /api/* Anfragen werden per vercel.json-Rewrite hierher

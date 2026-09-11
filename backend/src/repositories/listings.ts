@@ -1,6 +1,6 @@
 import type { InStatement } from '@libsql/client';
-import { db, one, query, run, type Row } from '../db.ts';
-import type { Listing, Partner } from '../domain/types.ts';
+import { db, one, query, run, type Row } from '../db.js';
+import type { Listing, Partner } from '../domain/types.js';
 
 interface ListingRow extends Row {
   id: string; source: string; external_id: string; market: string; country: string; location: string;

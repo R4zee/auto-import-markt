@@ -1,8 +1,8 @@
-import { query, run } from '../db.ts';
-import { activeProviders } from '../providers/index.ts';
-import type { MarketProvider } from '../providers/types.ts';
-import { listingsRepo, partnersRepo } from '../repositories/listings.ts';
-import { SEED_PARTNERS } from '../seed/partners.ts';
+import { query, run } from '../db.js';
+import { activeProviders } from '../providers/index.js';
+import type { MarketProvider } from '../providers/types.js';
+import { listingsRepo, partnersRepo } from '../repositories/listings.js';
+import { SEED_PARTNERS } from '../seed/partners.js';
 
 export interface SyncReport {
   provider: string;
