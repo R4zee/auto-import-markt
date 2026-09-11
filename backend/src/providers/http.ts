@@ -1,3 +1,5 @@
+import { fetch as undiciFetch, type RequestInit as UndiciRequestInit } from 'undici';
+
 /** Kleine HTTP-Hilfen für Provider: Timeout, Retry bei 429/5xx (mit Retry-After), JSON. */
 export class HttpError extends Error {
   readonly status: number;
@@ -18,12 +20,30 @@ export class HttpError extends Error {
   }
 }
 
+/**
+ * HTTP-Abruf: zuerst das globale fetch; schlägt es ohne Netzwerkursache fehl (auf Vercel ist
+ * fetch instrumentiert und lehnt manche URLs ab), Wiederholung mit dem ungepatchten undici-Client.
+ */
+export async function robustFetch(url: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<Response> {
+  const { timeoutMs = 20000, ...rest } = init;
+  try {
+    return await fetch(url, { ...rest, signal: AbortSignal.timeout(timeoutMs) });
+  } catch (e) {
+    const cause = (e as Error & { cause?: { code?: string } }).cause;
+    if (e instanceof Error && e.name !== 'TimeoutError' && !(cause && cause.code)) {
+      const res = await undiciFetch(url, { ...(rest as UndiciRequestInit), signal: AbortSignal.timeout(timeoutMs) });
+      return res as unknown as Response;
+    }
+    throw e;
+  }
+}
+
 export async function getJson<T>(url: string, init: RequestInit & { retries?: number; timeoutMs?: number; maxRetryWaitMs?: number } = {}): Promise<T> {
   const { retries = 2, timeoutMs = 20000, maxRetryWaitMs = 15000, ...rest } = init;
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await fetch(url, { ...rest, signal: AbortSignal.timeout(timeoutMs) });
+      const res = await robustFetch(url, { ...rest, timeoutMs });
       if (res.ok) return (await res.json()) as T;
       const body = await res.text().catch(() => '');
       const retryAfter = Number(res.headers.get('retry-after'));

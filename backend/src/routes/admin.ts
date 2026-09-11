@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { config } from '../config.js';
 import { query } from '../db.js';
-import { describeNetworkError } from '../providers/http.js';
+import { fetch as undiciFetch } from 'undici';
+import { describeNetworkError, robustFetch } from '../providers/http.js';
 import { allProviders } from '../providers/index.js';
 import { listingsRepo } from '../repositories/listings.js';
 import { invalidateListingCache } from '../services/catalog.js';
@@ -46,24 +47,30 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       ? [req.query.url]
       : [
           'https://api.encar.com/search/car/list/premium?count=true&q=(And.Hidden.N._.CarType.Y.)&sr=%7CModifiedDate%7C0%7C1',
-          'http://api.encar.com/search/car/list/premium?count=true&q=(And.Hidden.N._.CarType.Y.)&sr=%7CModifiedDate%7C0%7C1',
+          'https://api.encar.com/search/car/list/premium?count=true&q=%28And.Hidden.N._.CarType.Y.%29&sr=%7CModifiedDate%7C0%7C1',
+          'https://api.encar.com/search/car/list/premium?count=true',
           'https://api.encar.com/v1/readside/vehicle/39781874?include=CATEGORY',
-          'https://fem.encar.com/',
-          'https://api.frankfurter.dev/v1/latest?base=EUR&symbols=USD',
         ];
     const results = [];
+    const clients: Array<['global' | 'undici' | 'robust', (u: string) => Promise<Response>]> = [
+      ['global', (u) => fetch(u, { signal: AbortSignal.timeout(10000), headers: { Accept: 'application/json,text/html' }, redirect: 'manual' })],
+      ['undici', (u) => undiciFetch(u, { signal: AbortSignal.timeout(10000), headers: { Accept: 'application/json,text/html' }, redirect: 'manual' }) as unknown as Promise<Response>],
+      ['robust', (u) => robustFetch(u, { timeoutMs: 10000, headers: { Accept: 'application/json,text/html' }, redirect: 'manual' })],
+    ];
     for (const url of targets) {
-      const t0 = Date.now();
-      try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(10000), headers: { Accept: 'application/json,text/html' }, redirect: 'manual' });
-        const body = await res.text().catch(() => '');
-        results.push({ url, ok: res.ok, status: res.status, ms: Date.now() - t0, server: res.headers.get('server'), bodyStart: body.slice(0, 160) });
-      } catch (e) {
-        const err = describeNetworkError(e, url);
-        results.push({ url, ok: false, error: err.message, name: err.name, ms: Date.now() - t0 });
+      for (const [client, run] of clients) {
+        const t0 = Date.now();
+        try {
+          const res = await run(url);
+          const body = await res.text().catch(() => '');
+          results.push({ url, client, ok: res.ok, status: res.status, ms: Date.now() - t0, server: res.headers.get('server'), bodyStart: body.slice(0, 120) });
+        } catch (e) {
+          const err = describeNetworkError(e, url);
+          results.push({ url, client, ok: false, error: err.message, name: err.name, ms: Date.now() - t0 });
+        }
       }
     }
-    return { region: process.env.VERCEL_REGION ?? null, node: process.version, results };
+    return { region: process.env.VERCEL_REGION ?? null, node: process.version, fetchPatched: fetch.toString().length > 200 || !/native code/.test(fetch.toString()), results };
   });
 
   app.get<{ Querystring: { limit?: string } }>('/api/admin/enquiries', async (req) => {
