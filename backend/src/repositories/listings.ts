@@ -103,6 +103,14 @@ export const listingsRepo = {
     return (await query<ListingRow>('SELECT * FROM listings WHERE active = 1')).map(rowToListing);
   },
 
+  /** Listings einer Quelle (aktiv oder kürzlich deaktiviert), zuletzt geholte zuerst – für die Nachprüfung beim Sync. */
+  async recentBySource(source: string, sinceIso: string, limit: number): Promise<Listing[]> {
+    return (await query<ListingRow>(
+      'SELECT * FROM listings WHERE source = ? AND fetched_at >= ? ORDER BY active DESC, fetched_at DESC LIMIT ?',
+      [source, sinceIso, limit],
+    )).map(rowToListing);
+  },
+
   async byId(id: string): Promise<Listing | null> {
     const row = await one<ListingRow>('SELECT * FROM listings WHERE id = ?', [id]);
     return row ? rowToListing(row) : null;

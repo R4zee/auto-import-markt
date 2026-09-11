@@ -91,6 +91,12 @@ export const config = {
      * api.encar.com sperrt Rechenzentrums-IPs; über einen Residential-Proxy läuft der Abruf auch aus Vercel.
      */
     proxyUrl: env.ENCAR_PROXY_URL ?? '',
+    /**
+     * Bestehende Fahrzeuge, die im aktuellen Lauf nicht mehr unter den neuesten sind, werden einzeln
+     * bei Encar nachgeprüft (noch inseriert → Preis/km aktualisieren, sonst deaktivieren).
+     */
+    verifyLimit: num(env.ENCAR_VERIFY_LIMIT, 400),
+    verifyWindowDays: num(env.ENCAR_VERIFY_WINDOW_DAYS, 14),
   },
   apibara: {
     apiKey: env.APIBARA_API_KEY ?? '',

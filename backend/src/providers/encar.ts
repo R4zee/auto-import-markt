@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import type { Listing } from '../domain/types.js';
+import { listingsRepo } from '../repositories/listings.js';
 import { defaultPartnerFor } from '../seed/partners.js';
 import { getJson, HttpError, num, sleep, str } from './http.js';
 import { listingId, type MarketProvider, type ProviderResult } from './types.js';
@@ -225,7 +226,62 @@ export class EncarProvider implements MarketProvider {
     };
     await Promise.all(Array.from({ length: Math.max(1, config.encar.detailConcurrency) }, worker));
 
+    // 3) Bestand nachprüfen: Fahrzeuge aus früheren Läufen, die jetzt nicht mehr unter den neuesten sind,
+    //    bleiben aktiv, solange Encar sie noch inseriert (Preis/km werden aktualisiert). Verkaufte fallen weg.
+    const verified = await this.verifyExisting(new Set(listings.map((l) => l.id)), fetchedAt, warnings, throttled);
+    listings.push(...verified);
+
     // Nur ein vollständiger Lauf deaktiviert Fahrzeuge, die nicht mehr gelistet sind
     return { listings, complete: failedJobs === 0, warnings };
   }
+
+  private async verifyExisting(currentIds: Set<string>, fetchedAt: string, warnings: string[], alreadyThrottled: boolean): Promise<Listing[]> {
+    if (config.encar.verifyLimit <= 0) return [];
+    const since = new Date(Date.now() - config.encar.verifyWindowDays * 86_400_000).toISOString();
+    const candidates = (await listingsRepo.recentBySource(this.id, since, config.encar.verifyLimit + currentIds.size))
+      .filter((l) => !currentIds.has(l.id))
+      .slice(0, config.encar.verifyLimit);
+    if (!candidates.length) return [];
+    if (alreadyThrottled) return candidates; // nichts prüfen, aber auch nichts deaktivieren
+
+    const kept: Listing[] = [];
+    let gone = 0;
+    let throttled = false;
+    const queue = [...candidates];
+    const worker = async () => {
+      while (queue.length) {
+        const l = queue.shift()!;
+        if (throttled) { kept.push(l); continue; }
+        try {
+          const d = await getJson<EncarDetail & { advertisement?: { price?: number; status?: string } }>(
+            `https://api.encar.com/v1/readside/vehicle/${l.externalId}?include=ADVERTISEMENT,SPEC`,
+            { headers: { Accept: 'application/json' }, retries: 0, timeoutMs: 10000, proxyUrl: config.encar.proxyUrl || undefined },
+          );
+          const status = d.advertisement?.status ?? 'ADVERTISE';
+          if (status !== 'ADVERTISE') { gone++; continue; }
+          kept.push(refreshListing(l, d, fetchedAt));
+        } catch (e) {
+          if (e instanceof HttpError && e.status === 404) { gone++; continue; }
+          if (e instanceof HttpError && e.rateLimited) { throttled = true; warnings.push('Nachprüfung gedrosselt – Restbestand bleibt aktiv'); }
+          kept.push(l); // bei Netzfehlern nicht deaktivieren
+        }
+        await sleep(config.encar.delayMs);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.max(1, config.encar.detailConcurrency) }, worker));
+    warnings.push(`Nachprüfung: ${candidates.length} Fahrzeuge geprüft, ${kept.length} weiter inseriert, ${gone} verkauft/entfernt`);
+    return kept;
+  }
+}
+
+/** Bestehendes Listing mit frischen Werten aus dem Encar-Detail (Preis in 만원, km) aktualisieren. */
+export function refreshListing(l: Listing, d: { advertisement?: { price?: number }; spec?: { mileage?: number } }, fetchedAt: string): Listing {
+  const priceManwon = num(d.advertisement?.price);
+  return {
+    ...l,
+    price: priceManwon && priceManwon > 0 ? priceManwon * 10000 : l.price,
+    km: d.spec?.mileage != null ? Math.round(d.spec.mileage) : l.km,
+    fetchedAt,
+    active: true,
+  };
 }
