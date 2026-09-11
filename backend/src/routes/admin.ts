@@ -1,12 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { config } from '../config.js';
 import { query } from '../db.js';
-import { mapCarapis, parseSources } from '../providers/carapis.js';
 import { allProviders } from '../providers/index.js';
 import { listingsRepo } from '../repositories/listings.js';
-import { carapisEnabled, fetchBrands, fetchSources, fetchVehicle, fetchVehicles } from '../services/carapisClient.js';
 import { invalidateListingCache } from '../services/catalog.js';
-import { lastRuns, syncAll, syncProvider } from '../services/sync.js';
+import { deactivateOrphans, lastRuns, syncAll, syncProvider } from '../services/sync.js';
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('onRequest', async (req, reply) => {
@@ -34,39 +32,15 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return reports;
   });
 
+  /** Bestände von Quellen ohne (aktiven) Provider deaktivieren, z. B. nach dem Entfernen eines Anbieters */
+  app.post('/api/admin/cleanup', async () => {
+    const deactivated = await deactivateOrphans();
+    invalidateListingCache();
+    return { deactivated, remaining: await listingsRepo.countBySource() };
+  });
+
   app.get<{ Querystring: { limit?: string } }>('/api/admin/enquiries', async (req) => {
     const limit = Math.min(500, Number(req.query.limit) || 100);
     return query('SELECT * FROM enquiries ORDER BY created_at DESC LIMIT ?', [limit]);
-  });
-
-  /** Carapis: verfügbare Quellen (Codes für CARAPIS_SOURCES) */
-  app.get('/api/admin/carapis/sources', async (_req, reply) => {
-    if (!carapisEnabled()) return reply.code(400).send({ error: 'carapis_not_configured' });
-    return { configured: parseSources(config.carapis.sources), sources: await fetchSources() };
-  });
-
-  /** Carapis: Rohdatensatz + Mapping-Ergebnis zur Prüfung der Feldnamen */
-  app.get<{ Querystring: { source?: string; brand?: string; model?: string } }>('/api/admin/carapis/probe', async (req, reply) => {
-    if (!carapisEnabled()) return reply.code(400).send({ error: 'carapis_not_configured' });
-    const source = req.query.source ?? parseSources(config.carapis.sources)[0]?.source ?? 'encar';
-    const market = parseSources(config.carapis.sources).find((s) => s.source === source)?.market ?? 'KR';
-    const page = await fetchVehicles({ source, brand: req.query.brand, model: req.query.model, page_size: 2 });
-    const firstId = page.results[0] ? String((page.results[0] as Record<string, unknown>).id ?? '') : '';
-    let rawDetail: unknown = null;
-    if (firstId) {
-      try { rawDetail = await fetchVehicle(firstId); } catch (e) { rawDetail = { error: e instanceof Error ? e.message : String(e) }; }
-    }
-    return {
-      source, market, count: page.count, next: page.next,
-      raw: page.results,
-      /** Detail-Endpunkt des ersten Treffers – enthält ggf. Hubraum, Originalpreis, Inserats-URL */
-      rawDetail,
-      mapped: page.results.map((v) => mapCarapis(v, market, new Date().toISOString(), source)),
-    };
-  });
-
-  app.get<{ Querystring: { search?: string } }>('/api/admin/carapis/brands', async (req, reply) => {
-    if (!carapisEnabled()) return reply.code(400).send({ error: 'carapis_not_configured' });
-    return fetchBrands(req.query.search);
   });
 }

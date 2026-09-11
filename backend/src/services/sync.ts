@@ -1,5 +1,5 @@
 import { query, run } from '../db.js';
-import { activeProviders } from '../providers/index.js';
+import { activeProviders, isKnownSource } from '../providers/index.js';
 import type { MarketProvider } from '../providers/types.js';
 import { listingsRepo, partnersRepo } from '../repositories/listings.js';
 import { SEED_PARTNERS } from '../seed/partners.js';
@@ -42,9 +42,30 @@ export async function syncProvider(p: MarketProvider): Promise<SyncReport> {
   }
 }
 
+/**
+ * Deaktiviert Listings von Quellen, für die es keinen Provider mehr gibt (z. B. nach dem
+ * Entfernen eines Anbieters) oder deren Provider abgeschaltet ist.
+ */
+export async function deactivateOrphans(): Promise<Record<string, number>> {
+  const active = new Set(activeProviders().map((p) => p.id));
+  const counts = await listingsRepo.countBySource();
+  const out: Record<string, number> = {};
+  for (const source of Object.keys(counts)) {
+    const providerId = active.has(source) ? source : [...active].find((id) => source.startsWith(`${id}-`));
+    if (!isKnownSource(source) || !providerId) {
+      out[source] = await listingsRepo.deactivateMissing(source, []);
+    }
+  }
+  return out;
+}
+
 export async function syncAll(): Promise<SyncReport[]> {
   const reports: SyncReport[] = [];
   for (const p of activeProviders()) reports.push(await syncProvider(p));
+  const orphans = await deactivateOrphans();
+  for (const [source, n] of Object.entries(orphans)) {
+    if (n > 0) reports.push({ provider: source, status: 'ok', upserted: 0, deactivated: n, warnings: ['Quelle ohne aktiven Provider – Bestand deaktiviert'], durationMs: 0 });
+  }
   return reports;
 }
 

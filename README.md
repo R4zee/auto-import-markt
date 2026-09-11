@@ -48,10 +48,10 @@ Alternativ über die Claude-Code-Vorschau: `.claude/launch.json` enthält die Ko
 | `GET /api/listings/batch?ids=` | Merkliste/Vergleich |
 | `POST /api/calc/landed-cost` | Freie Kalkulation (Markt, Preis, Währung, Oldtimer, Präferenzursprung, Fahrzeugdaten) |
 | `POST /api/enquiries`, `POST /api/enquiries/bulk` | Anfrage an den Partner-Importeur / Sammelanfrage je Partner |
-| `GET /api/listings/:id/reference` | Referenzpreise vergleichbarer Angebote im Zielmarkt (mobile.de via Carapis), 204 ohne Key |
+| `GET /api/listings/:id/reference` | Referenzpreise im Zielmarkt – Provider-Registry in `services/reference.ts`, derzeit ohne Quelle → 204 |
 | `GET /api/cron/sync` | Vercel-Cron (Header `Authorization: Bearer CRON_SECRET`) |
 | `GET /api/partners` | Partner-Importeure |
-| `POST /api/admin/sync`, `GET /api/admin/status`, `GET /api/admin/enquiries` | Admin (Header `x-admin-key`) |
+| `POST /api/admin/sync`, `POST /api/admin/cleanup`, `GET /api/admin/status`, `GET /api/admin/enquiries` | Admin (Header `x-admin-key`); `cleanup` deaktiviert Bestände entfernter Anbieter |
 
 Filter-Parameter: `q, offer, markets, make, model, location, yearFrom, yearTo, maxKm, fuels,
 transmissions, cocOnly, maxLanded, dest, sort (landed-asc|landed-desc|year-desc|km-asc|ending)`.
@@ -64,9 +64,9 @@ transmissions, cocOnly, maxLanded, dest, sort (landed-asc|landed-desc|year-desc|
 | `marketcheck` | USA (Händler, Festpreis) | `MARKETCHECK_API_KEY` |
 | `ebay` | USA (eBay Motors, Auktion + Festpreis) | `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET` |
 | `apibara` | USA (Copart/IAAI-Auktionen) | `APIBARA_API_KEY` (Test-Plan kostenlos, 100 Req/Monat) |
-| `encar` | Südkorea (Encar, direkt, keyless) | `ENCAR_ENABLED=true` – öffentliche Frontend-Endpunkte, Preise 만원→KRW, Details für englische Namen/Hubraum |
+| `encar` | **Südkorea (Hauptquelle)** – Encar direkt, keyless | `ENCAR_ENABLED=true` – seitenweise je Hersteller, Preise 만원→KRW, Details für englische Namen/Hubraum, gedrosselt |
+| `xapikorea` | Südkorea (Fallback, Encar-Wrapper mit englischen Feldern) | `XAPIKOREA_API_KEY` (Free 500 Req/Monat) |
 | `autoapi` | VAE (Dubizzle, Dubicars) | `AUTOAPI_ACCESS_NAME`, `AUTOAPI_API_KEY` (Zugang via access@auto-api.com) |
-| `carapis` | Multi-Markt über Carapis Catalog API (`/apix/catalog_api/vehicles/`) | `CARAPIS_API_KEY`, `CARAPIS_SOURCES=encar:KR,dubizzle:GCC` (Codes via `/api/admin/carapis/sources`) |
 | `jpfeed` | Japan / beliebig (Partner-Feed JSON) | `JP_FEED_URL`, `JP_FEED_MAPPING` (Feldzuordnung, siehe `feed.ts`) |
 
 Marktplatzweit werden nur Linkslenker übernommen. Sync läuft beim Start (leere DB) und alle
@@ -80,7 +80,7 @@ Marktplatzweit werden nur Linkslenker übernommen. Sync läuft beim Start (leere
 - `vehicleTax.ts`: Kfz-Steuer nach § 9 KraftStG (Hubraum + CO2-Staffel, Altregelungen, Elektro-Befreiung).
 - `markets.ts`: Frachtpauschalen, Zollsätze, Präferenzregeln (EPA Japan, FTA Korea, EU-US 07/2026), Zielländer.
 
-Tests: `npm test` (37 Tests: Kalkulation, Kfz-Steuer, API, Provider-Mappings).
+Tests: `npm test` (36 Tests: Kalkulation, Kfz-Steuer, API, Provider-Mappings).
 
 Manueller Sync eines Providers: `curl -X POST -H "x-admin-key: …" "http://localhost:4000/api/admin/sync?provider=encar"`.
 
@@ -94,7 +94,7 @@ Alle Farben, Abstände und Radien kommen aus `src/styles/nocturne.css` (Designsy
 
 GitHub → Vercel (Function + statisches Frontend, Cron 04:00 UTC) → Turso: Schritt-für-Schritt in
 [docs/deployment.md](docs/deployment.md). Umgebungsvariablen: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`,
-`CARAPIS_API_KEY`, `ADMIN_KEY`, `CRON_SECRET`.
+`ENCAR_ENABLED`, `ADMIN_KEY`, `CRON_SECRET`.
 
 ## Datenquellen
 

@@ -1,4 +1,4 @@
-# Deployment: GitHub → Vercel → Turso, Carapis-Key hinterlegen
+# Deployment: GitHub → Vercel → Turso, Umgebungsvariablen hinterlegen
 
 Stand 11.09.2026. Das Repository ist lokal initialisiert (Branch `main`, erster Commit vorhanden).
 Die Architektur auf Vercel:
@@ -88,7 +88,7 @@ Dashboard **Generate Token** → die beiden Werte manuell als `TURSO_DATABASE_UR
 
 ---
 
-## Teil D – Carapis-API-Key und weitere Variablen hinterlegen
+## Teil D – Umgebungsvariablen hinterlegen
 
 1. Im Vercel-Projekt: **Settings** (oben) → linke Leiste **Environment Variables**.
 2. Für jede Variable: **Key** eintippen, **Value** einfügen, **Environments** = alle drei angehakt
@@ -96,14 +96,13 @@ Dashboard **Generate Token** → die beiden Werte manuell als `TURSO_DATABASE_UR
 
 | Key | Value | Zweck |
 |---|---|---|
-| `CARAPIS_API_KEY` | dein Key aus <https://my.carapis.com> (beginnt mit `car_`) | Carapis-Zugang (Sensitive) |
-| `CARAPIS_SOURCES` | `encar:KR,kbchachacha:KR,kcar:KR,autotrader_us:US,opensooq_ae:GCC,automobile_it:SE,autovit:EE` | welche Carapis-Quelle in welchen Markt (alle "live") |
-| `CARAPIS_REFERENCE_SOURCE` | `kleinanzeigen` | Referenzpreise in der Detailansicht (`mobile_de` ist bei Carapis nur "on_demand") |
-| `CARAPIS_MIN_PRICE_USD` | `4000` | Mindestpreis je Sync, filtert Schrottpreise |
+| `ENCAR_ENABLED` | `true` | Südkorea: Encar direkt (Hauptquelle, kein Key) |
+| `ENCAR_MANUFACTURERS` | `현대,기아,제네시스` | Hersteller je Lauf; Importmarken (BMW, 벤츠 …) sind zusätzlich möglich |
+| `ENCAR_LIMIT_PER_MAKER` | `60` | Fahrzeuge je Hersteller und Lauf |
+| `XAPIKOREA_API_KEY` | optional, Key von <https://xapikorea.com> | Fallback für Korea, falls Encar den Direktzugriff sperrt (Sensitive) |
 | `ADMIN_KEY` | ein langes Zufallspasswort | schützt `/api/admin/*` (Sensitive) |
 | `CRON_SECRET` | ein weiteres langes Zufallspasswort | Vercel sendet es beim Cron-Aufruf mit (Sensitive) |
 | `ENABLE_MOCK_PROVIDER` | `false` | Beispieldaten aus dem Design abschalten (für Demo: `true`) |
-| `ENCAR_ENABLED` | `false` | Direktzugriff auf Encar; über Carapis nicht nötig |
 | `CORS_ORIGINS` | `https://<projekt>.vercel.app` | eigene Domain später ergänzen (kommagetrennt) |
 
 Zufallspasswörter erzeugen (PowerShell):
@@ -121,34 +120,31 @@ Der Vercel-Cron liest `CRON_SECRET` automatisch aus den Environment Variables un
 
 ---
 
-## Teil E – Erstbefüllung und Carapis-Quellen prüfen
+## Teil E – Erstbefüllung und Kontrolle
 
 Nach dem Redeploy ist die Datenbank leer. Einmal den Sync von Hand anstoßen (PowerShell, Werte
-einsetzen):
+einsetzen; der Encar-Lauf mit drei Herstellern dauert 30–60 Sekunden):
 
 ```powershell
-$h = @{ "x-admin-key" = "<ADMIN_KEY>" }; Invoke-RestMethod -Method Post -Headers $h "https://<projekt>.vercel.app/api/admin/sync"
+$h = @{ "x-admin-key" = "<ADMIN_KEY>" }; Invoke-RestMethod -Method Post -Headers $h -ContentType "application/json" -Body "{}" "https://<projekt>.vercel.app/api/admin/sync"
 ```
 
 Antwort ist eine Liste mit `provider`, `status`, `upserted`. Danach <https://<projekt>.vercel.app>
 neu laden.
 
-Welche Quellcodes Carapis für deinen Zugang anbietet (mit `availability: live` oder `on_demand`):
+Status je Provider und letzte Läufe (inkl. Warnungen, z. B. Drosselung):
 
 ```powershell
-Invoke-RestMethod -Headers $h "https://<projekt>.vercel.app/api/admin/carapis/sources" | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Headers $h "https://<projekt>.vercel.app/api/admin/status" | ConvertTo-Json -Depth 4
 ```
 
-Einen Rohdatensatz mit unserem Mapping daneben ansehen (zur Kontrolle der Feldnamen):
+Bestände entfernter Anbieter (z. B. Carapis) deaktivieren – passiert auch automatisch am Ende jedes Sync-Laufs:
 
 ```powershell
-Invoke-RestMethod -Headers $h "https://<projekt>.vercel.app/api/admin/carapis/probe?source=encar" | ConvertTo-Json -Depth 6
+Invoke-RestMethod -Method Post -Headers $h -ContentType "application/json" -Body "{}" "https://<projekt>.vercel.app/api/admin/cleanup"
 ```
 
-Quellcodes laut `sources` (Stand 11.09.2026, "live" = laufend gecrawlt): Korea `encar`, `kbchachacha`, `kcar`, `bobaedream`; USA `autotrader_us` (Cars.com/Carvana on_demand); Golf `opensooq_ae` (kein Dubizzle bei Carapis); Südeuropa `automobile_it`, `standvirtual`; Osteuropa `autovit`, `olx_pl`; Deutschland `kleinanzeigen` (mobile_de/autoscout24 on_demand); Japan `goonet_exchange`, `carsensor` (Rechtslenker, werden ohne LHD-Hinweis verworfen), `aucnet` on_demand. Nach Änderung von `CARAPIS_SOURCES` → Redeploy → Sync erneut anstoßen.
-
-Beides geht auch lokal gegen `http://localhost:4000`, sobald `CARAPIS_API_KEY` in `backend/.env`
-steht (dort ist `ADMIN_KEY=dev-admin-key`).
+Beides geht auch lokal gegen `http://localhost:4000` (dort ist `ADMIN_KEY=dev-admin-key`).
 
 ---
 

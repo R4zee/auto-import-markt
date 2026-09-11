@@ -1,5 +1,7 @@
 # Anbindungsstand USA · Dubai · Südkorea und Aucnet-Prüfung
 
+> **Update 11.09.2026 (abends):** Carapis wurde wieder entfernt. Der Testzugang lieferte Bestände mit Stand „vor 42 Tagen“ (Encar-Fahrzeuge zuletzt am 30.07. gesehen) und drosselte nach wenigen Dutzend Aufrufen mit HTTP 429. Strategie jetzt: Marktplatz für Marktplatz direkt anbinden. Korea läuft über den Encar-Direktadapter (Echtzeit, keyless), als Fallback ist xapikorea.com angebunden. Die Tabellen unten zu Carapis sind damit historisch.
+
 Stand: 11.09.2026. Ergänzt [datenquellen.md](datenquellen.md). **[B]** = bestätigt (Doku/Live-Abruf),
 **[G]** = gefolgert.
 

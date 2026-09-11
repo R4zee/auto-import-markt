@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { mapApibara } from '../src/providers/apibara.js';
 import { mapAutoApi } from '../src/providers/autoapi.js';
-import { carapisPrice, guessDrive, mapCarapis, parseSources, prettyBrand, prettyModel } from '../src/providers/carapis.js';
-import { encarDrive, encarFuel, mapEncar } from '../src/providers/encar.js';
+import { encarDrive, encarFuel, encarTrim, mapEncar } from '../src/providers/encar.js';
+import { mapXapi } from '../src/providers/xapikorea.js';
 
 const NOW = '2026-09-11T10:00:00.000Z';
 
@@ -120,126 +120,35 @@ describe('auto-api.com mapping (Dubizzle)', () => {
   });
 });
 
-describe('Carapis mapping (apix/catalog_api)', () => {
-  it('parst die Quellen-Zuordnung', () => {
-    assert.deepEqual(parseSources('encar:KR, dubizzle:GCC ,goonet:JP'), [
-      { source: 'encar', market: 'KR' }, { source: 'dubizzle', market: 'GCC' }, { source: 'goonet', market: 'JP' },
-    ]);
+describe('Encar trim', () => {
+  it('lässt koreanische Bestandteile weg und dedupliziert', () => {
+    const item = { Id: '1', Manufacturer: '현대', Model: '그랜저 IG', Badge: '2.5', BadgeDetail: '프리미엄 초이스' };
+    const detail = { vehicleId: 1, category: { gradeEnglishName: '2.5 Premium', gradeDetailName: null, modelGroupName: '그랜저', modelName: '더 뉴 그랜저 IG' } };
+    assert.equal(encarTrim(item, detail), '2.5 Premium · 2.5');
+    assert.equal(encarTrim({ Id: '2', Manufacturer: '기아', Model: 'X', Badge: 'Gasoline 2.5T 2WD', BadgeDetail: '(세부등급 없음)' }, null), 'Gasoline 2.5T 2WD');
   });
+});
 
-  it('bereinigt Slug-artige Marken- und Modellnamen', () => {
-    assert.equal(prettyBrand('Bmw'), 'BMW');
-    assert.equal(prettyBrand('Kg Mobility'), 'KG Mobility');
-    assert.equal(prettyBrand('mercedes-benz'), 'Mercedes-Benz');
-    assert.equal(prettyBrand('Hyundai'), 'Hyundai');
-    assert.equal(prettyModel('3Series'), '3 Series');
-    assert.equal(prettyModel('Gs300'), 'GS300');
-    assert.equal(prettyModel('e-class'), 'E-Class');
-    assert.equal(prettyModel('Grandeur'), 'Grandeur');
-    assert.equal(prettyModel('Cooper S Convertible'), 'Cooper S Convertible');
-  });
-
-  it('schätzt den Antrieb aus Hinweisen und Marke', () => {
-    assert.equal(guessDrive('awd', '', 'Hyundai'), 'AWD');
-    assert.equal(guessDrive('', '3.5 HTRAC Luxury', 'Genesis'), 'AWD');
-    assert.equal(guessDrive('', 'Club · pickup', 'SsangYong'), '4WD');
-    assert.equal(guessDrive('', '2.0 LTZ · sedan', 'Chevrolet'), 'FWD');
-    assert.equal(guessDrive('unknown', 'STD · sedan', 'Lexus'), 'RWD');
-  });
-
-  it('bevorzugt den Originalpreis der Quelle, sonst USD', () => {
-    assert.deepEqual(carapisPrice({ price: 28500000, currency: 'KRW' }, 'KRW'), { price: 28500000, currency: 'KRW' });
-    assert.deepEqual(carapisPrice({ price_original: 12500, currency: 'EUR', price_usd: 13600 }, 'EUR'), { price: 12500, currency: 'EUR' });
-    assert.deepEqual(carapisPrice({ price_usd: 13600 }, 'KRW'), { price: 13600, currency: 'USD' });
-    assert.equal(carapisPrice({}, 'KRW'), null);
-  });
-
-  it('bildet ein Encar-Fahrzeug mit Slug-Feldern ab', () => {
-    const l = mapCarapis({
-      id: '3f1c9a7e-1111-2222-3333-444455556666', source: 'encar', brand_name: 'Hyundai', brand_slug: 'hyundai', model_name: 'Grandeur', model_slug: 'grandeur',
-      trim: '3.5 Calligraphy', year: 2022, mileage: 31500, price: 28500000, currency: 'KRW', location: 'Seoul', fuel_type: 'gasoline', transmission: 'auto',
-      body_type: 'sedan', engine_cc: 3470, photos: ['https://p/1.jpg', { url: 'https://p/2.jpg' }], url: 'https://fem.encar.com/cars/detail/38217645', has_accident: false,
-    }, 'KR', NOW, 'encar');
+describe('xapikorea mapping', () => {
+  it('bildet Suchtreffer plus Detail ab (KRW, Hubraum, Antrieb)', () => {
+    const l = mapXapi(
+      { id: 42248769, manufacturer: 'Hyundai', model: 'Avante', badge: '1.6 GDI Value Plus', year: 2018, mileage_km: 59216, price_krw: 11500000, price_eur: 7300, fuel_type: 'gasoline', transmission: 'automatic', location: 'Busan', thumbnail: 'https://ci.encar.com/a_001.jpg', encar_url: 'https://fem.encar.com/cars/detail/42248769' },
+      { id: 42248769, form_year: 2018, engine_cc: 1591, drive_type: 'FWD', photos: ['https://ci.encar.com/a_001.jpg', 'https://ci.encar.com/a_002.jpg'] },
+      NOW,
+    );
     assert.ok(l);
-    assert.equal(l.country, 'kr');
-    assert.equal(l.make, 'Hyundai');
-    assert.equal(l.model, 'Grandeur');
-    assert.equal(l.price, 28_500_000);
+    assert.equal(l.source, 'xapikorea');
+    assert.equal(l.price, 11_500_000);
     assert.equal(l.currency, 'KRW');
-    assert.equal(l.offerType, 'fixed');
-    assert.equal(l.fuel, 'Petrol');
-    assert.equal(l.transmission, 'Automatic');
-    assert.equal(l.engineCcm, 3470);
-    assert.deepEqual(l.photos, ['https://p/1.jpg', 'https://p/2.jpg']);
-    assert.match(l.trim, /sedan/);
-  });
-
-  it('bildet die echte Carapis-Listenantwort ab (price_usd, region, Foto-Objekte)', () => {
-    const l = mapCarapis({
-      id: '990599e3-fbe9-4d11-934b-6c702d41e3bf', source_code: 'encar', brand_name: 'Kia', brand_slug: 'kia', model_name: 'Sportage', model_slug: 'sportage',
-      trim: 'Trendy', year: 2014, price_usd: 6400, mileage: 114972, fuel_type: 'diesel', transmission: 'auto', body_type: 'suv', color: 'white',
-      seller_type: 'dealer', region: 'Gyeonggi', source_location: null, has_accident: false, is_new_vehicle: false,
-      photos: [
-        { url: '/media/vehicles/990/599/x.webp', thumb_url: '/media/x.webp', original_url: 'https://ci.encar.com/carpicture08/pic3978/39781874_001.jpg?rw=1280', is_main: true, position: 0 },
-        { url: 'https://ci.encar.com/carpicture08/pic3978/39781874_002.jpg?rw=1280', original_url: 'https://ci.encar.com/carpicture08/pic3978/39781874_002.jpg?rw=1280', is_main: false, position: 1 },
-      ],
-      photos_count: 26,
-    }, 'KR', NOW, 'encar');
-    assert.ok(l);
-    assert.equal(l.price, 6400);
-    assert.equal(l.currency, 'USD');
-    assert.equal(l.location, 'Gyeonggi');
-    assert.equal(l.fuel, 'Diesel');
+    assert.equal(l.engineCcm, 1591);
     assert.equal(l.drive, 'FWD');
     assert.equal(l.photos.length, 2);
-    assert.match(l.photos[0], /39781874_001/);
-    assert.equal(l.photoCount, 26);
-    assert.equal(l.steering, 'LHD');
+    assert.equal(l.url, 'https://fem.encar.com/cars/detail/42248769');
   });
 
-  it('mit Detaildaten: Originalpreis in KRW, Hubraum, Antrieb, Inserats-URL', () => {
-    const l = mapCarapis({
-      id: '990599e3-fbe9-4d11-934b-6c702d41e3bf', brand_name: 'Kia', model_name: 'Sportage', trim: 'Trendy', generation: '', year: 2014,
-      price_usd: 6400, price_original: '8600000.00', price_original_currency: 'KRW', original_msrp: '23800000.00', mileage: 114972,
-      engine_cc: 1995, seat_count: 5, fuel_type: 'diesel', transmission: 'auto', body_type: 'suv', drive_type: 'fwd', region: 'Gyeonggi',
-      has_accident: false, inspection_passed: true, listing_url: 'https://fem.encar.com/cars/detail/39781874', listing_id: '39781874', vin: 'KNAPC813BEK658157',
-      photos: [{ original_url: 'https://ci.encar.com/a_001.jpg', position: 0 }], photos_count: 26,
-    }, 'KR', NOW, 'encar');
-    assert.ok(l);
-    assert.equal(l.price, 8_600_000);
-    assert.equal(l.currency, 'KRW');
-    assert.equal(l.engineCcm, 1995);
-    assert.equal(l.engine, '2.0 L');
-    assert.equal(l.drive, 'FWD');
-    assert.equal(l.url, 'https://fem.encar.com/cars/detail/39781874');
-  });
-
-  it('japanische Inlandsquellen gelten ohne LHD-Hinweis als Rechtslenker', () => {
-    const jp = mapCarapis({ id: 'j1', brand_name: 'Toyota', model_name: 'Land Cruiser', trim: 'ZX', year: 2022, price_usd: 60000, fuel_type: 'gasoline', transmission: 'auto' }, 'JP', NOW, 'goonet_exchange');
-    assert.equal(jp?.steering, 'RHD');
-    const lhd = mapCarapis({ id: 'j2', brand_name: 'Toyota', model_name: 'Land Cruiser', trim: 'ZX LHD export', year: 2022, price_usd: 60000, fuel_type: 'gasoline', transmission: 'auto' }, 'JP', NOW, 'goonet_exchange');
-    assert.equal(lhd?.steering, 'LHD');
-  });
-
-  it('kommt mit verschachtelten brand/model-Objekten und USD-Preis zurecht', () => {
-    const l = mapCarapis({ id: 'x1', brand: { name: 'Nissan', slug: 'nissan' }, model: { name: 'Patrol' }, year: 2021, price_usd: 66700, mileage_km: 42600, fuel_type: 'gasoline', transmission: 'auto', images: [] }, 'GCC', NOW, 'dubizzle');
-    assert.ok(l);
-    assert.equal(l.make, 'Nissan');
-    assert.equal(l.currency, 'USD');
-    assert.equal(l.price, 66700);
-    assert.equal(l.km, 42600);
-  });
-
-  it('Flagge folgt der Quelle, nicht dem Markt (autovit → ro, olx_pl → pl)', () => {
-    const ro = mapCarapis({ id: 'r1', source_code: 'autovit', brand_name: 'Dacia', model_name: 'Duster', year: 2019, price_usd: 9000, fuel_type: 'diesel', transmission: 'manual' }, 'EE', NOW, 'autovit');
-    assert.equal(ro?.country, 'ro');
-    const pl = mapCarapis({ id: 'p1', brand_name: 'Skoda', model_name: 'Fabia', year: 2019, price_usd: 9000, fuel_type: 'gasoline', transmission: 'manual' }, 'EE', NOW, 'olx_pl');
-    assert.equal(pl?.country, 'pl');
-    assert.equal(pl?.transmission, 'Manual');
-  });
-
-  it('EU-Quellen gelten als EU-Ware mit COC', () => {
-    const l = mapCarapis({ id: 'm1', brand: 'BMW', model: 'M4', year: 2021, price: 67200, currency: 'EUR', fuel_type: 'gasoline', transmission: 'auto' }, 'EE', NOW, 'mobile_de');
-    assert.equal(l?.coc, true);
+  it('ohne Detail: Thumbnail als Foto, Antrieb Standard', () => {
+    const l = mapXapi({ id: '1', manufacturer: 'Kia', model: 'K5', year: 2020, price_krw: 20000000, fuel_type: 'gasoline', transmission: 'automatic', thumbnail: 'https://ci.encar.com/k5.jpg' }, null, NOW);
+    assert.equal(l?.photos.length, 1);
+    assert.equal(l?.engineCcm, null);
   });
 });

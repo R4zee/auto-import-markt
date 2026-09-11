@@ -76,10 +76,16 @@ export const config = {
     manufacturers: list(env.ENCAR_MANUFACTURERS ?? '현대,기아,제네시스'),
     /** Hersteller, die bei Encar als Import (CarType.N) geführt werden */
     importedMakers: list(env.ENCAR_IMPORTED_MAKERS ?? 'BMW,벤츠,아우디,폭스바겐,볼보,렉서스,토요타,포르쉐,테슬라,미니,랜드로버'),
-    limitPerMaker: num(env.ENCAR_LIMIT_PER_MAKER, 40),
+    /** Fahrzeuge je Hersteller und Lauf (seitenweise geholt) */
+    limitPerMaker: num(env.ENCAR_LIMIT_PER_MAKER, 60),
+    pageSize: num(env.ENCAR_PAGE_SIZE, 50),
+    /** Mindestpreis in 만원 (1000 = 10 Mio. KRW ≈ 6.500 €) */
     minPriceManwon: num(env.ENCAR_MIN_PRICE_MANWON, 1000),
+    /** Ältestes Baujahr (0 = kein Filter) */
+    minYear: num(env.ENCAR_MIN_YEAR, 2012),
     fetchDetails: bool(env.ENCAR_FETCH_DETAILS, true),
-    delayMs: num(env.ENCAR_DELAY_MS, 250),
+    detailConcurrency: num(env.ENCAR_DETAIL_CONCURRENCY, 3),
+    delayMs: num(env.ENCAR_DELAY_MS, 200),
   },
   apibara: {
     apiKey: env.APIBARA_API_KEY ?? '',
@@ -93,25 +99,13 @@ export const config = {
     sources: list(env.AUTOAPI_SOURCES ?? 'dubizzle').filter((s): s is 'dubizzle' | 'dubicars' => s === 'dubizzle' || s === 'dubicars'),
     pages: num(env.AUTOAPI_PAGES, 5),
   },
-  carapis: {
-    apiKey: env.CARAPIS_API_KEY ?? '',
-    baseUrl: env.CARAPIS_BASE_URL ?? 'https://api.carapis.com',
-    /** "quelle:MARKT,…" – Quellcodes wie von GET /apix/catalog_api/sources/ geliefert */
-    sources: env.CARAPIS_SOURCES ?? 'encar:KR',
-    pageSize: num(env.CARAPIS_PAGE_SIZE, 50),
-    pages: num(env.CARAPIS_PAGES, 2),
-    /** Optional: nur bestimmte Marken je Sync (Slugs, kommagetrennt) */
-    brands: list(env.CARAPIS_BRANDS),
-    /** Mindestpreis in USD je Sync (Carapis filtert in USD); 0 = kein Filter */
-    minPriceUsd: num(env.CARAPIS_MIN_PRICE_USD, 4000),
-    /** Sortierfeld der Carapis-Abfrage (z. B. "-first_seen_at"); leer = API-Standard */
-    ordering: env.CARAPIS_ORDERING ?? '',
-    /** Detailabrufe je Sync (Originalpreis, Hubraum, URL) – schont das Kontingent; Rest folgt beim nächsten Lauf */
-    detailLimit: num(env.CARAPIS_DETAIL_LIMIT, 60),
-    detailConcurrency: num(env.CARAPIS_DETAIL_CONCURRENCY, 4),
-    detailDelayMs: num(env.CARAPIS_DETAIL_DELAY_MS, 100),
-    /** Quelle für Referenzpreise im Zielmarkt: kleinanzeigen ist bei Carapis "live", mobile_de nur "on_demand" */
-    referenceSource: env.CARAPIS_REFERENCE_SOURCE ?? 'kleinanzeigen',
+  xapikorea: {
+    apiKey: env.XAPIKOREA_API_KEY ?? '',
+    brands: list(env.XAPIKOREA_BRANDS ?? 'Hyundai,Kia,Genesis'),
+    pages: num(env.XAPIKOREA_PAGES, 1),
+    minPriceKrw: num(env.XAPIKOREA_MIN_PRICE_KRW, 10_000_000),
+    fetchDetails: bool(env.XAPIKOREA_FETCH_DETAILS, false),
+    delayMs: num(env.XAPIKOREA_DELAY_MS, 250),
   },
   fxBaseUrl: env.FX_BASE_URL ?? 'https://api.frankfurter.dev/v1',
 } as const;
