@@ -10,6 +10,8 @@ export interface SyncReport {
   upserted: number;
   deactivated: number;
   error?: string;
+  /** Nicht-fatale Hinweise, z. B. gedrosselte Teilquellen */
+  warnings?: string[];
   durationMs: number;
 }
 
@@ -25,10 +27,12 @@ export async function syncProvider(p: MarketProvider): Promise<SyncReport> {
     const lhd = result.listings.filter((l) => l.steering === 'LHD');
     const upserted = await listingsRepo.upsertMany(lhd);
     const deactivated = result.complete ? await listingsRepo.deactivateMissing(p.id, lhd.map((l) => l.id)) : 0;
+    const warnings = result.warnings?.length ? result.warnings : undefined;
     if (runId != null) {
-      await run('UPDATE sync_runs SET finished_at = ?, status = ?, upserted = ?, deactivated = ? WHERE id = ?', [new Date().toISOString(), 'ok', upserted, deactivated, runId]);
+      await run('UPDATE sync_runs SET finished_at = ?, status = ?, upserted = ?, deactivated = ?, error = ? WHERE id = ?',
+        [new Date().toISOString(), 'ok', upserted, deactivated, warnings ? `warnings: ${warnings.join(' | ')}` : null, runId]);
     }
-    return { provider: p.id, status: 'ok', upserted, deactivated, durationMs: Date.now() - started.getTime() };
+    return { provider: p.id, status: 'ok', upserted, deactivated, warnings, durationMs: Date.now() - started.getTime() };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (runId != null) {

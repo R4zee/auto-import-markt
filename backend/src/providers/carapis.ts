@@ -4,7 +4,7 @@ import type { Listing, MarketCode } from '../domain/types.js';
 import { defaultPartnerFor } from '../seed/partners.js';
 import { listingsRepo } from '../repositories/listings.js';
 import { carapisEnabled, fetchVehicle, fetchVehicles, type CarapisVehicle } from '../services/carapisClient.js';
-import { num, sleep, str } from './http.js';
+import { HttpError, num, sleep, str } from './http.js';
 import { listingId, normalizeDrive, normalizeFuel, type MarketProvider, type ProviderResult } from './types.js';
 
 /**
@@ -239,23 +239,39 @@ export class CarapisProvider implements MarketProvider {
     const fetchedAt = new Date().toISOString();
     const brands = config.carapis.brands.length ? config.carapis.brands : [undefined];
     const raw: Array<{ v: CarapisVehicle; market: MarketCode; source: string }> = [];
-    for (const { source, market } of parseSources(config.carapis.sources)) {
-      for (const brand of brands) {
-        for (let page = 1; page <= config.carapis.pages; page++) {
-          const res = await fetchVehicles({
-            source, brand, page, page_size: config.carapis.pageSize, available_only: true, is_new_vehicle: false,
-            min_price: config.carapis.minPriceUsd > 0 ? config.carapis.minPriceUsd : undefined,
-            ordering: config.carapis.ordering || undefined,
-          });
-          for (const v of res.results) raw.push({ v, market, source });
-          if (!res.next || res.results.length === 0) break;
-          await sleep(200);
+    const warnings: string[] = [];
+    const sources = parseSources(config.carapis.sources);
+    let failedSources = 0;
+    for (const { source, market } of sources) {
+      try {
+        for (const brand of brands) {
+          for (let page = 1; page <= config.carapis.pages; page++) {
+            const res = await fetchVehicles({
+              source, brand, page, page_size: config.carapis.pageSize, available_only: true, is_new_vehicle: false,
+              min_price: config.carapis.minPriceUsd > 0 ? config.carapis.minPriceUsd : undefined,
+              ordering: config.carapis.ordering || undefined,
+            });
+            for (const v of res.results) raw.push({ v, market, source });
+            if (!res.next || res.results.length === 0) break;
+            await sleep(200);
+          }
+        }
+      } catch (e) {
+        failedSources++;
+        warnings.push(`${source}: ${e instanceof Error ? e.message : String(e)}`);
+        if (e instanceof HttpError && e.rateLimited) {
+          // Gedrosselt: kurz warten, dann mit der nächsten Quelle weiter statt den ganzen Lauf zu verwerfen
+          await sleep(Math.min(15000, (e.retryAfterSec ?? 5) * 1000));
         }
       }
     }
-    // Jeder Lauf holt den konfigurierten Ausschnitt vollständig neu → Fahrzeuge, die nicht mehr
-    // erscheinen (verkauft, unter Mindestpreis, Quelle entfernt), werden deaktiviert.
-    return { listings: await this.enrich(raw, fetchedAt), complete: true };
+    if (failedSources === sources.length) {
+      throw new Error(`Carapis: alle ${sources.length} Quellen fehlgeschlagen – ${warnings.join(' | ')}`);
+    }
+    const { listings, detailWarnings } = await this.enrich(raw, fetchedAt);
+    warnings.push(...detailWarnings);
+    // Nur ein vollständiger Lauf (alle Quellen geladen) darf nicht mehr gelistete Fahrzeuge deaktivieren.
+    return { listings, complete: failedSources === 0, warnings };
   }
 
   /**
@@ -263,10 +279,11 @@ export class CarapisProvider implements MarketProvider {
    * der Detail-Endpunkt (/vehicles/{id}/). Um das Kontingent zu schonen, werden Details nur für
    * Fahrzeuge geholt, die noch nicht mit Detaildaten in der Datenbank liegen, begrenzt je Lauf.
    */
-  private async enrich(raw: Array<{ v: CarapisVehicle; market: MarketCode; source: string }>, fetchedAt: string): Promise<Listing[]> {
+  private async enrich(raw: Array<{ v: CarapisVehicle; market: MarketCode; source: string }>, fetchedAt: string): Promise<{ listings: Listing[]; detailWarnings: string[] }> {
     const ids = raw.map((r) => listingId('carapis', str(pick(r.v, 'id', 'uuid', 'pk'))));
     const existing = new Map((await listingsRepo.byIds(ids)).map((l) => [l.id, l]));
     let budget = config.carapis.detailLimit;
+    const detailWarnings: string[] = [];
     const out: Listing[] = [];
     const queue = [...raw];
     const worker = async () => {
@@ -290,8 +307,12 @@ export class CarapisProvider implements MarketProvider {
           try {
             const detail = await fetchVehicle(str(pick(item.v, 'id', 'uuid', 'pk')));
             merged = { ...item.v, ...detail };
-          } catch {
-            /* ohne Detail weiter – Listenfelder reichen für die Anzeige */
+          } catch (e) {
+            // Ohne Detail weiter – Listenfelder reichen für die Anzeige. Bei Drosselung keine weiteren Details in diesem Lauf.
+            if (e instanceof HttpError && e.rateLimited) {
+              budget = 0;
+              detailWarnings.push(`Detailabrufe gedrosselt (${e.message}); Rest folgt beim nächsten Lauf`);
+            }
           }
           await sleep(config.carapis.detailDelayMs);
         }
@@ -300,6 +321,6 @@ export class CarapisProvider implements MarketProvider {
       }
     };
     await Promise.all(Array.from({ length: Math.max(1, config.carapis.detailConcurrency) }, worker));
-    return out;
+    return { listings: out, detailWarnings: detailWarnings.slice(0, 1) };
   }
 }

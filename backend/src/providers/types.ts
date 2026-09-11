@@ -9,6 +9,8 @@ export interface ProviderResult {
    * Dann werden fehlende Listings dieser Quelle deaktiviert.
    */
   complete: boolean;
+  /** Nicht-fatale Probleme (z. B. gedrosselte Teilquellen) – landen im Sync-Protokoll */
+  warnings?: string[];
 }
 
 export interface MarketProvider {

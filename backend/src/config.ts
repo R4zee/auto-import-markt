@@ -107,7 +107,7 @@ export const config = {
     /** Sortierfeld der Carapis-Abfrage (z. B. "-first_seen_at"); leer = API-Standard */
     ordering: env.CARAPIS_ORDERING ?? '',
     /** Detailabrufe je Sync (Originalpreis, Hubraum, URL) – schont das Kontingent; Rest folgt beim nächsten Lauf */
-    detailLimit: num(env.CARAPIS_DETAIL_LIMIT, 200),
+    detailLimit: num(env.CARAPIS_DETAIL_LIMIT, 60),
     detailConcurrency: num(env.CARAPIS_DETAIL_CONCURRENCY, 4),
     detailDelayMs: num(env.CARAPIS_DETAIL_DELAY_MS, 100),
     /** Quelle für Referenzpreise im Zielmarkt: kleinanzeigen ist bei Carapis "live", mobile_de nur "on_demand" */

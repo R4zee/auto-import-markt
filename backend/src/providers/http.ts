@@ -1,18 +1,45 @@
-/** Kleine HTTP-Hilfen für Provider: Timeout, Retry bei 429/5xx, JSON. */
-export async function getJson<T>(url: string, init: RequestInit & { retries?: number; timeoutMs?: number } = {}): Promise<T> {
-  const { retries = 2, timeoutMs = 20000, ...rest } = init;
+/** Kleine HTTP-Hilfen für Provider: Timeout, Retry bei 429/5xx (mit Retry-After), JSON. */
+export class HttpError extends Error {
+  readonly status: number;
+  readonly url: string;
+  readonly body: string;
+  readonly retryAfterSec: number | null;
+
+  constructor(status: number, url: string, body: string, retryAfterSec: number | null) {
+    super(`HTTP ${status} ${url}${body ? ` – ${body.slice(0, 200)}` : ''}${retryAfterSec ? ` (Retry-After ${retryAfterSec}s)` : ''}`);
+    this.name = 'HttpError';
+    this.status = status;
+    this.url = url;
+    this.body = body;
+    this.retryAfterSec = retryAfterSec;
+  }
+  get rateLimited(): boolean {
+    return this.status === 429;
+  }
+}
+
+export async function getJson<T>(url: string, init: RequestInit & { retries?: number; timeoutMs?: number; maxRetryWaitMs?: number } = {}): Promise<T> {
+  const { retries = 2, timeoutMs = 20000, maxRetryWaitMs = 15000, ...rest } = init;
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await fetch(url, { ...rest, signal: AbortSignal.timeout(timeoutMs) });
+      if (res.ok) return (await res.json()) as T;
+      const body = await res.text().catch(() => '');
+      const retryAfter = Number(res.headers.get('retry-after'));
+      const err = new HttpError(res.status, url, body, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null);
       if (res.status === 429 || res.status >= 500) {
-        lastErr = new Error(`HTTP ${res.status} ${url}`);
-        await sleep(500 * 2 ** attempt);
-        continue;
+        lastErr = err;
+        if (attempt < retries) {
+          const wait = Math.min(maxRetryWaitMs, err.retryAfterSec ? err.retryAfterSec * 1000 : 500 * 2 ** attempt);
+          await sleep(wait);
+          continue;
+        }
+        break;
       }
-      if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
-      return (await res.json()) as T;
+      throw err;
     } catch (e) {
+      if (e instanceof HttpError) throw e;
       lastErr = e;
       if (attempt === retries) break;
       await sleep(300 * 2 ** attempt);
