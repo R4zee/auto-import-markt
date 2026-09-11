@@ -84,11 +84,15 @@ function nameOf(v: unknown): string {
   return String(v);
 }
 
-function photoList(v: unknown): string[] {
+/** Fotos: Carapis liefert Objekte { url (ggf. relativ zum Carapis-Host), thumb_url, original_url, position } */
+export function photoList(v: unknown, baseUrl = config.carapis.baseUrl): string[] {
   if (!Array.isArray(v)) return [];
+  const abs = (u: string) => (/^https?:\/\//.test(u) ? u : u.startsWith('/') ? `${baseUrl}${u}` : '');
   return v
-    .map((p) => (typeof p === 'string' ? p : nameOf(pick((p ?? {}) as Record<string, unknown>, 'url', 'image', 'src', 'large', 'original', 'medium'))))
-    .filter((u): u is string => typeof u === 'string' && /^https?:\/\//.test(u));
+    .slice()
+    .sort((a, b) => (num((a as Record<string, unknown>)?.position) ?? 0) - (num((b as Record<string, unknown>)?.position) ?? 0))
+    .map((p) => (typeof p === 'string' ? abs(p) : abs(nameOf(pick((p ?? {}) as Record<string, unknown>, 'original_url', 'url', 'image', 'src', 'large', 'thumb_url')))))
+    .filter((u) => u.length > 0);
 }
 
 /** Antrieb: explizites Feld, sonst Hinweise in Ausstattung/Modell, sonst Heuristik nach Marke. */
@@ -136,7 +140,13 @@ export function mapCarapis(o: CarapisVehicle, market: MarketCode, fetchedAt: str
   const priced = carapisPrice(o, DEFAULT_CCY[market]);
   if (!id || !year || !make || !model || !priced) return null;
 
-  const steering = str(pick(o, 'steering', 'steering_wheel', 'steering_side')).toLowerCase().includes('right') ? 'RHD' : 'LHD';
+  // Carapis liefert keine Lenkradseite. Japanische Inlandsquellen sind fast ausnahmslos Rechtslenker →
+  // dort nur übernehmen, wenn die Ausstattung explizit LHD nennt (der Sync verwirft RHD).
+  const steeringRaw = str(pick(o, 'steering', 'steering_wheel', 'steering_side')).toLowerCase();
+  const trimRaw = str(pick(o, 'trim', 'grade', 'variant')).toLowerCase();
+  const steering: Listing['steering'] = steeringRaw.includes('right') ? 'RHD'
+    : steeringRaw.includes('left') || /\blhd\b|left[- ]hand/.test(trimRaw) ? 'LHD'
+    : market === 'JP' ? 'RHD' : 'LHD';
   const ccm = num(pick(o, 'engine_cc', 'engine_displacement', 'displacement', 'engine_volume'));
   const fuel = carapisFuel(pick(o, 'fuel_type', 'fuel'));
   const photos = photoList(pick(o, 'photos', 'images', 'photo_urls', 'image_urls', 'gallery'));
@@ -194,7 +204,7 @@ export function mapCarapis(o: CarapisVehicle, market: MarketCode, fetchedAt: str
     resaleEur: null,
     partnerId: defaultPartnerFor(market),
     photos,
-    photoCount: photos.length,
+    photoCount: num(pick(o, 'photos_count', 'photo_count')) ?? photos.length,
     damage: [],
     fetchedAt,
     active: true,
@@ -216,7 +226,11 @@ export class CarapisProvider implements MarketProvider {
     for (const { source, market } of parseSources(config.carapis.sources)) {
       for (const brand of brands) {
         for (let page = 1; page <= config.carapis.pages; page++) {
-          const res = await fetchVehicles({ source, brand, page, page_size: config.carapis.pageSize, available_only: true, is_new_vehicle: false });
+          const res = await fetchVehicles({
+            source, brand, page, page_size: config.carapis.pageSize, available_only: true, is_new_vehicle: false,
+            min_price: config.carapis.minPriceUsd > 0 ? config.carapis.minPriceUsd : undefined,
+            ordering: config.carapis.ordering || undefined,
+          });
           for (const v of res.results) {
             const mapped = mapCarapis(v, market, fetchedAt, source);
             if (mapped) listings.push(mapped);

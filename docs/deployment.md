@@ -97,8 +97,9 @@ Dashboard **Generate Token** → die beiden Werte manuell als `TURSO_DATABASE_UR
 | Key | Value | Zweck |
 |---|---|---|
 | `CARAPIS_API_KEY` | dein Key aus <https://my.carapis.com> (beginnt mit `car_`) | Carapis-Zugang (Sensitive) |
-| `CARAPIS_SOURCES` | `encar:KR` (später erweitern, siehe Teil E) | welche Carapis-Quelle in welchen Markt |
-| `CARAPIS_REFERENCE_SOURCE` | `mobile_de` | Referenzpreise in der Detailansicht |
+| `CARAPIS_SOURCES` | `encar:KR,kbchachacha:KR,kcar:KR,autotrader_us:US,opensooq_ae:GCC,automobile_it:SE,autovit:EE` | welche Carapis-Quelle in welchen Markt (alle "live") |
+| `CARAPIS_REFERENCE_SOURCE` | `kleinanzeigen` | Referenzpreise in der Detailansicht (`mobile_de` ist bei Carapis nur "on_demand") |
+| `CARAPIS_MIN_PRICE_USD` | `4000` | Mindestpreis je Sync, filtert Schrottpreise |
 | `ADMIN_KEY` | ein langes Zufallspasswort | schützt `/api/admin/*` (Sensitive) |
 | `CRON_SECRET` | ein weiteres langes Zufallspasswort | Vercel sendet es beim Cron-Aufruf mit (Sensitive) |
 | `ENABLE_MOCK_PROVIDER` | `false` | Beispieldaten aus dem Design abschalten (für Demo: `true`) |
@@ -144,8 +145,7 @@ Einen Rohdatensatz mit unserem Mapping daneben ansehen (zur Kontrolle der Feldna
 Invoke-RestMethod -Headers $h "https://<projekt>.vercel.app/api/admin/carapis/probe?source=encar" | ConvertTo-Json -Depth 6
 ```
 
-Dann `CARAPIS_SOURCES` erweitern, z. B. `encar:KR,kbchachacha:KR,dubizzle:GCC,goonet:JP,copart:US`
-(Codes exakt so, wie `sources` sie liefert) → Redeploy → Sync erneut anstoßen.
+Quellcodes laut `sources` (Stand 11.09.2026, "live" = laufend gecrawlt): Korea `encar`, `kbchachacha`, `kcar`, `bobaedream`; USA `autotrader_us` (Cars.com/Carvana on_demand); Golf `opensooq_ae` (kein Dubizzle bei Carapis); Südeuropa `automobile_it`, `standvirtual`; Osteuropa `autovit`, `olx_pl`; Deutschland `kleinanzeigen` (mobile_de/autoscout24 on_demand); Japan `goonet_exchange`, `carsensor` (Rechtslenker, werden ohne LHD-Hinweis verworfen), `aucnet` on_demand. Nach Änderung von `CARAPIS_SOURCES` → Redeploy → Sync erneut anstoßen.
 
 Beides geht auch lokal gegen `http://localhost:4000`, sobald `CARAPIS_API_KEY` in `backend/.env`
 steht (dort ist `ADMIN_KEY=dev-admin-key`).

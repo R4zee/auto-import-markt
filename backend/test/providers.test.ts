@@ -174,6 +174,36 @@ describe('Carapis mapping (apix/catalog_api)', () => {
     assert.match(l.trim, /sedan/);
   });
 
+  it('bildet die echte Carapis-Listenantwort ab (price_usd, region, Foto-Objekte)', () => {
+    const l = mapCarapis({
+      id: '990599e3-fbe9-4d11-934b-6c702d41e3bf', source_code: 'encar', brand_name: 'Kia', brand_slug: 'kia', model_name: 'Sportage', model_slug: 'sportage',
+      trim: 'Trendy', year: 2014, price_usd: 6400, mileage: 114972, fuel_type: 'diesel', transmission: 'auto', body_type: 'suv', color: 'white',
+      seller_type: 'dealer', region: 'Gyeonggi', source_location: null, has_accident: false, is_new_vehicle: false,
+      photos: [
+        { url: '/media/vehicles/990/599/x.webp', thumb_url: '/media/x.webp', original_url: 'https://ci.encar.com/carpicture08/pic3978/39781874_001.jpg?rw=1280', is_main: true, position: 0 },
+        { url: 'https://ci.encar.com/carpicture08/pic3978/39781874_002.jpg?rw=1280', original_url: 'https://ci.encar.com/carpicture08/pic3978/39781874_002.jpg?rw=1280', is_main: false, position: 1 },
+      ],
+      photos_count: 26,
+    }, 'KR', NOW, 'encar');
+    assert.ok(l);
+    assert.equal(l.price, 6400);
+    assert.equal(l.currency, 'USD');
+    assert.equal(l.location, 'Gyeonggi');
+    assert.equal(l.fuel, 'Diesel');
+    assert.equal(l.drive, 'FWD');
+    assert.equal(l.photos.length, 2);
+    assert.match(l.photos[0], /39781874_001/);
+    assert.equal(l.photoCount, 26);
+    assert.equal(l.steering, 'LHD');
+  });
+
+  it('japanische Inlandsquellen gelten ohne LHD-Hinweis als Rechtslenker', () => {
+    const jp = mapCarapis({ id: 'j1', brand_name: 'Toyota', model_name: 'Land Cruiser', trim: 'ZX', year: 2022, price_usd: 60000, fuel_type: 'gasoline', transmission: 'auto' }, 'JP', NOW, 'goonet_exchange');
+    assert.equal(jp?.steering, 'RHD');
+    const lhd = mapCarapis({ id: 'j2', brand_name: 'Toyota', model_name: 'Land Cruiser', trim: 'ZX LHD export', year: 2022, price_usd: 60000, fuel_type: 'gasoline', transmission: 'auto' }, 'JP', NOW, 'goonet_exchange');
+    assert.equal(lhd?.steering, 'LHD');
+  });
+
   it('kommt mit verschachtelten brand/model-Objekten und USD-Preis zurecht', () => {
     const l = mapCarapis({ id: 'x1', brand: { name: 'Nissan', slug: 'nissan' }, model: { name: 'Patrol' }, year: 2021, price_usd: 66700, mileage_km: 42600, fuel_type: 'gasoline', transmission: 'auto', images: [] }, 'GCC', NOW, 'dubizzle');
     assert.ok(l);

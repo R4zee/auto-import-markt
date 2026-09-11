@@ -102,8 +102,12 @@ export const config = {
     pages: num(env.CARAPIS_PAGES, 2),
     /** Optional: nur bestimmte Marken je Sync (Slugs, kommagetrennt) */
     brands: list(env.CARAPIS_BRANDS),
-    /** Quelle für Referenzpreise im Zielmarkt (mobile.de) */
-    referenceSource: env.CARAPIS_REFERENCE_SOURCE ?? 'mobile_de',
+    /** Mindestpreis in USD je Sync (Carapis filtert in USD); 0 = kein Filter */
+    minPriceUsd: num(env.CARAPIS_MIN_PRICE_USD, 4000),
+    /** Sortierfeld der Carapis-Abfrage (z. B. "-first_seen_at"); leer = API-Standard */
+    ordering: env.CARAPIS_ORDERING ?? '',
+    /** Quelle für Referenzpreise im Zielmarkt: kleinanzeigen ist bei Carapis "live", mobile_de nur "on_demand" */
+    referenceSource: env.CARAPIS_REFERENCE_SOURCE ?? 'kleinanzeigen',
   },
   fxBaseUrl: env.FX_BASE_URL ?? 'https://api.frankfurter.dev/v1',
 } as const;

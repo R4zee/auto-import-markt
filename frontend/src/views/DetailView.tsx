@@ -10,6 +10,7 @@ import { countdown, km, local, title } from '../format';
 function refSourceLabel(code: string): string {
   const c = code.toLowerCase();
   if (c.includes('mobile')) return 'mobile.de';
+  if (c.includes('kleinanzeigen')) return 'Kleinanzeigen';
   if (c.includes('autoscout')) return 'AutoScout24';
   return code;
 }

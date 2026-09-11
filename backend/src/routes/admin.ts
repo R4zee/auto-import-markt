@@ -4,7 +4,7 @@ import { query } from '../db.js';
 import { mapCarapis, parseSources } from '../providers/carapis.js';
 import { allProviders } from '../providers/index.js';
 import { listingsRepo } from '../repositories/listings.js';
-import { carapisEnabled, fetchBrands, fetchSources, fetchVehicles } from '../services/carapisClient.js';
+import { carapisEnabled, fetchBrands, fetchSources, fetchVehicle, fetchVehicles } from '../services/carapisClient.js';
 import { invalidateListingCache } from '../services/catalog.js';
 import { lastRuns, syncAll, syncProvider } from '../services/sync.js';
 
@@ -50,10 +50,17 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!carapisEnabled()) return reply.code(400).send({ error: 'carapis_not_configured' });
     const source = req.query.source ?? parseSources(config.carapis.sources)[0]?.source ?? 'encar';
     const market = parseSources(config.carapis.sources).find((s) => s.source === source)?.market ?? 'KR';
-    const page = await fetchVehicles({ source, brand: req.query.brand, model: req.query.model, page_size: 3 });
+    const page = await fetchVehicles({ source, brand: req.query.brand, model: req.query.model, page_size: 2 });
+    const firstId = page.results[0] ? String((page.results[0] as Record<string, unknown>).id ?? '') : '';
+    let rawDetail: unknown = null;
+    if (firstId) {
+      try { rawDetail = await fetchVehicle(firstId); } catch (e) { rawDetail = { error: e instanceof Error ? e.message : String(e) }; }
+    }
     return {
       source, market, count: page.count, next: page.next,
       raw: page.results,
+      /** Detail-Endpunkt des ersten Treffers – enthält ggf. Hubraum, Originalpreis, Inserats-URL */
+      rawDetail,
       mapped: page.results.map((v) => mapCarapis(v, market, new Date().toISOString(), source)),
     };
   });
