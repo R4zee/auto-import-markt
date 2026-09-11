@@ -2,7 +2,8 @@ import { config } from '../config.js';
 import { isMarketCode } from '../domain/markets.js';
 import type { Listing, MarketCode } from '../domain/types.js';
 import { defaultPartnerFor } from '../seed/partners.js';
-import { carapisEnabled, fetchVehicles, type CarapisVehicle } from '../services/carapisClient.js';
+import { listingsRepo } from '../repositories/listings.js';
+import { carapisEnabled, fetchVehicle, fetchVehicles, type CarapisVehicle } from '../services/carapisClient.js';
 import { num, sleep, str } from './http.js';
 import { listingId, normalizeDrive, normalizeFuel, type MarketProvider, type ProviderResult } from './types.js';
 
@@ -121,7 +122,7 @@ export function carapisFuel(v: unknown): Listing['fuel'] {
 /** Preis + Währung: bevorzugt Originalpreis der Quelle, sonst USD-Normalpreis. */
 export function carapisPrice(o: Record<string, unknown>, fallbackCcy: string): { price: number; currency: string } | null {
   const orig = num(pick(o, 'price_original', 'original_price', 'price_local', 'local_price', 'price.amount', 'price.original'));
-  const origCcy = str(pick(o, 'currency', 'price_currency', 'original_currency', 'currency_code', 'price.currency')).toUpperCase();
+  const origCcy = str(pick(o, 'price_original_currency', 'currency', 'price_currency', 'original_currency', 'currency_code', 'price.currency')).toUpperCase();
   if (orig && origCcy && origCcy !== 'USD') return { price: orig, currency: origCcy };
   const plain = num(pick(o, 'price'));
   if (plain && origCcy) return { price: plain, currency: origCcy };
@@ -221,8 +222,8 @@ export class CarapisProvider implements MarketProvider {
 
   async fetchAll(): Promise<ProviderResult> {
     const fetchedAt = new Date().toISOString();
-    const listings: Listing[] = [];
     const brands = config.carapis.brands.length ? config.carapis.brands : [undefined];
+    const raw: Array<{ v: CarapisVehicle; market: MarketCode; source: string }> = [];
     for (const { source, market } of parseSources(config.carapis.sources)) {
       for (const brand of brands) {
         for (let page = 1; page <= config.carapis.pages; page++) {
@@ -231,15 +232,57 @@ export class CarapisProvider implements MarketProvider {
             min_price: config.carapis.minPriceUsd > 0 ? config.carapis.minPriceUsd : undefined,
             ordering: config.carapis.ordering || undefined,
           });
-          for (const v of res.results) {
-            const mapped = mapCarapis(v, market, fetchedAt, source);
-            if (mapped) listings.push(mapped);
-          }
+          for (const v of res.results) raw.push({ v, market, source });
           if (!res.next || res.results.length === 0) break;
           await sleep(200);
         }
       }
     }
-    return { listings, complete: false };
+    return { listings: await this.enrich(raw, fetchedAt), complete: false };
+  }
+
+  /**
+   * Die Listenantwort enthält weder Originalpreis noch Hubraum noch Inserats-URL. Beides liefert
+   * der Detail-Endpunkt (/vehicles/{id}/). Um das Kontingent zu schonen, werden Details nur für
+   * Fahrzeuge geholt, die noch nicht mit Detaildaten in der Datenbank liegen, begrenzt je Lauf.
+   */
+  private async enrich(raw: Array<{ v: CarapisVehicle; market: MarketCode; source: string }>, fetchedAt: string): Promise<Listing[]> {
+    const ids = raw.map((r) => listingId('carapis', str(pick(r.v, 'id', 'uuid', 'pk'))));
+    const existing = new Map((await listingsRepo.byIds(ids)).map((l) => [l.id, l]));
+    let budget = config.carapis.detailLimit;
+    const out: Listing[] = [];
+    const queue = [...raw];
+    const worker = async () => {
+      while (queue.length) {
+        const item = queue.shift()!;
+        const id = listingId('carapis', str(pick(item.v, 'id', 'uuid', 'pk')));
+        const prev = existing.get(id);
+        let merged: CarapisVehicle = item.v;
+        if (prev?.url) {
+          // Detaildaten liegen schon vor → aus der DB übernehmen, Liste liefert die frischen Werte (km, Fotos, USD-Preis)
+          merged = {
+            ...item.v,
+            listing_url: prev.url,
+            engine_cc: prev.engineCcm ?? undefined,
+            drive_type: prev.drive,
+            price_original: prev.currency !== 'USD' ? prev.price : undefined,
+            price_original_currency: prev.currency !== 'USD' ? prev.currency : undefined,
+          };
+        } else if (budget > 0) {
+          budget--;
+          try {
+            const detail = await fetchVehicle(str(pick(item.v, 'id', 'uuid', 'pk')));
+            merged = { ...item.v, ...detail };
+          } catch {
+            /* ohne Detail weiter – Listenfelder reichen für die Anzeige */
+          }
+          await sleep(config.carapis.detailDelayMs);
+        }
+        const mapped = mapCarapis(merged, item.market, fetchedAt, item.source);
+        if (mapped) out.push(mapped);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.max(1, config.carapis.detailConcurrency) }, worker));
+    return out;
   }
 }

@@ -197,6 +197,23 @@ describe('Carapis mapping (apix/catalog_api)', () => {
     assert.equal(l.steering, 'LHD');
   });
 
+  it('mit Detaildaten: Originalpreis in KRW, Hubraum, Antrieb, Inserats-URL', () => {
+    const l = mapCarapis({
+      id: '990599e3-fbe9-4d11-934b-6c702d41e3bf', brand_name: 'Kia', model_name: 'Sportage', trim: 'Trendy', generation: '', year: 2014,
+      price_usd: 6400, price_original: '8600000.00', price_original_currency: 'KRW', original_msrp: '23800000.00', mileage: 114972,
+      engine_cc: 1995, seat_count: 5, fuel_type: 'diesel', transmission: 'auto', body_type: 'suv', drive_type: 'fwd', region: 'Gyeonggi',
+      has_accident: false, inspection_passed: true, listing_url: 'https://fem.encar.com/cars/detail/39781874', listing_id: '39781874', vin: 'KNAPC813BEK658157',
+      photos: [{ original_url: 'https://ci.encar.com/a_001.jpg', position: 0 }], photos_count: 26,
+    }, 'KR', NOW, 'encar');
+    assert.ok(l);
+    assert.equal(l.price, 8_600_000);
+    assert.equal(l.currency, 'KRW');
+    assert.equal(l.engineCcm, 1995);
+    assert.equal(l.engine, '2.0 L');
+    assert.equal(l.drive, 'FWD');
+    assert.equal(l.url, 'https://fem.encar.com/cars/detail/39781874');
+  });
+
   it('japanische Inlandsquellen gelten ohne LHD-Hinweis als Rechtslenker', () => {
     const jp = mapCarapis({ id: 'j1', brand_name: 'Toyota', model_name: 'Land Cruiser', trim: 'ZX', year: 2022, price_usd: 60000, fuel_type: 'gasoline', transmission: 'auto' }, 'JP', NOW, 'goonet_exchange');
     assert.equal(jp?.steering, 'RHD');
