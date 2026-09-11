@@ -1,9 +1,9 @@
-import { query, run } from '../db.js';
+import { one, query, run } from '../db.js';
 import { activeProviders, isKnownSource } from '../providers/index.js';
-// (activeProviders für syncAll, isKnownSource für die Bereinigung entfernter Anbieter)
 import type { MarketProvider } from '../providers/types.js';
 import { listingsRepo, partnersRepo } from '../repositories/listings.js';
 import { SEED_PARTNERS } from '../seed/partners.js';
+import { fxSync, getFx } from './fx.js';
 
 export interface SyncReport {
   provider: string;
@@ -21,19 +21,27 @@ export async function syncProvider(p: MarketProvider): Promise<SyncReport> {
   const ins = await run('INSERT INTO sync_runs(provider, started_at, status) VALUES (?, ?, ?)', [p.id, started.toISOString(), 'running']);
   const runId = ins.lastInsertRowid == null ? null : Number(ins.lastInsertRowid);
   try {
+    await getFx(); // Kurse für die vorberechneten EUR-/Endpreis-Spalten
     const result = await p.fetchAll();
     await partnersRepo.upsertMany(SEED_PARTNERS);
     if (result.partners?.length) await partnersRepo.upsertMany(result.partners);
     // Marktplatzweit nur Linkslenker
     const lhd = result.listings.filter((l) => l.steering === 'LHD');
-    const upserted = await listingsRepo.upsertMany(lhd);
+    // Nur neue oder geänderte Inserate schreiben (Preis/km) – spart bei großen Beständen den Großteil der Schreibvorgänge
+    const existing = await listingsRepo.activeIdsBySource(p.id);
+    const changed = lhd.filter((l) => {
+      const e = existing.get(l.id);
+      return !e || e.price !== l.price || e.km !== l.km;
+    });
+    const upserted = await listingsRepo.upsertMany(changed);
     const deactivated = result.complete ? await listingsRepo.deactivateMissing(p.id, lhd.map((l) => l.id)) : 0;
-    const warnings = result.warnings?.length ? result.warnings : undefined;
+    const warnings = [...(result.warnings ?? [])];
+    if (lhd.length !== changed.length) warnings.push(`${lhd.length - changed.length} unverändert übersprungen`);
     if (runId != null) {
       await run('UPDATE sync_runs SET finished_at = ?, status = ?, upserted = ?, deactivated = ?, error = ? WHERE id = ?',
-        [new Date().toISOString(), 'ok', upserted, deactivated, warnings ? `warnings: ${warnings.join(' | ')}` : null, runId]);
+        [new Date().toISOString(), 'ok', upserted, deactivated, warnings.length ? `warnings: ${warnings.join(' | ')}` : null, runId]);
     }
-    return { provider: p.id, status: 'ok', upserted, deactivated, warnings, durationMs: Date.now() - started.getTime() };
+    return { provider: p.id, status: 'ok', upserted, deactivated, warnings: warnings.length ? warnings : undefined, durationMs: Date.now() - started.getTime() };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (runId != null) {
@@ -46,7 +54,7 @@ export async function syncProvider(p: MarketProvider): Promise<SyncReport> {
 /**
  * Deaktiviert Listings von Quellen, für die es keinen Provider mehr gibt (z. B. nach dem
  * Entfernen eines Anbieters). Lediglich abgeschaltete Provider bleiben unangetastet: Encar wird
- * etwa vom eigenen Rechner aus synchronisiert (Cloud-IPs sind gesperrt), auf Vercel ist er aus.
+ * etwa per GitHub Actions synchronisiert, auf Vercel ist der Provider aus.
  */
 export async function deactivateOrphans(): Promise<Record<string, number>> {
   const counts = await listingsRepo.countBySource();
@@ -57,6 +65,17 @@ export async function deactivateOrphans(): Promise<Record<string, number>> {
   return out;
 }
 
+/** EUR-/Endpreis-Spalten neu berechnen, wenn sich der Kursstand seit dem letzten Mal geändert hat. */
+export async function recomputeDerivedIfFxChanged(): Promise<number> {
+  const asOf = fxSync().asOf;
+  if (!asOf || asOf === 'fallback') return 0;
+  const last = await one<{ value: string }>("SELECT value FROM meta WHERE key = 'derived_fx_as_of'");
+  if (last?.value === asOf) return 0;
+  const n = await listingsRepo.recomputeDerived();
+  await run("INSERT INTO meta(key, value) VALUES ('derived_fx_as_of', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [asOf]);
+  return n;
+}
+
 export async function syncAll(): Promise<SyncReport[]> {
   const reports: SyncReport[] = [];
   for (const p of activeProviders()) reports.push(await syncProvider(p));
@@ -64,6 +83,9 @@ export async function syncAll(): Promise<SyncReport[]> {
   for (const [source, n] of Object.entries(orphans)) {
     if (n > 0) reports.push({ provider: source, status: 'ok', upserted: 0, deactivated: n, warnings: ['Quelle ohne aktiven Provider – Bestand deaktiviert'], durationMs: 0 });
   }
+  const t0 = Date.now();
+  const recomputed = await recomputeDerivedIfFxChanged();
+  if (recomputed > 0) reports.push({ provider: 'fx-recompute', status: 'ok', upserted: recomputed, deactivated: 0, warnings: ['Endpreise mit neuem Kursstand neu berechnet'], durationMs: Date.now() - t0 });
   return reports;
 }
 

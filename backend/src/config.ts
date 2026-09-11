@@ -73,30 +73,30 @@ export const config = {
   },
   encar: {
     enabled: bool(env.ENCAR_ENABLED, false),
-    manufacturers: list(env.ENCAR_MANUFACTURERS ?? '현대,기아,제네시스'),
+    /** Y = koreanische Hersteller, N = Importmarken */
+    carTypes: list(env.ENCAR_CAR_TYPES ?? 'Y,N').filter((t): t is 'Y' | 'N' => t === 'Y' || t === 'N'),
+    /** Optional auf Hersteller einschränken (koreanische Encar-Namen); leer = alle */
+    manufacturers: list(env.ENCAR_MANUFACTURERS),
     /** Hersteller, die bei Encar als Import (CarType.N) geführt werden */
     importedMakers: list(env.ENCAR_IMPORTED_MAKERS ?? 'BMW,벤츠,아우디,폭스바겐,볼보,렉서스,토요타,포르쉐,테슬라,미니,랜드로버'),
-    /** Fahrzeuge je Hersteller und Lauf (seitenweise geholt) */
-    limitPerMaker: num(env.ENCAR_LIMIT_PER_MAKER, 60),
-    pageSize: num(env.ENCAR_PAGE_SIZE, 50),
+    /** Inserate je Seite (Encar-Maximum 500) und Obergrenze je Teilabfrage (Encar: Offset+Limit ≤ 10.000) */
+    pageSize: num(env.ENCAR_PAGE_SIZE, 500),
+    partitionMax: num(env.ENCAR_PARTITION_MAX, 9500),
+    /** Testhilfe: je Teilabfrage höchstens so viele Inserate laden (0 = alle) */
+    limitPartition: num(env.ENCAR_LIMIT_PARTITION, 0),
     /** Mindestpreis in 만원 (1000 = 10 Mio. KRW ≈ 6.500 €) */
     minPriceManwon: num(env.ENCAR_MIN_PRICE_MANWON, 1000),
-    /** Ältestes Baujahr (0 = kein Filter) */
+    /** Ältestes Baujahr */
     minYear: num(env.ENCAR_MIN_YEAR, 2012),
-    fetchDetails: bool(env.ENCAR_FETCH_DETAILS, true),
+    /** Detailabrufe je Lauf für neue Ausstattungskombinationen (englische Namen, Hubraum) */
+    detailLimit: num(env.ENCAR_DETAIL_LIMIT, 1500),
     detailConcurrency: num(env.ENCAR_DETAIL_CONCURRENCY, 3),
-    delayMs: num(env.ENCAR_DELAY_MS, 200),
+    delayMs: num(env.ENCAR_DELAY_MS, 150),
     /**
      * HTTP(S)-Proxy mit Wohnsitz-IP (Residential), z. B. http://user:pass@p.webshare.io:80.
      * api.encar.com sperrt Rechenzentrums-IPs; über einen Residential-Proxy läuft der Abruf auch aus Vercel.
      */
     proxyUrl: env.ENCAR_PROXY_URL ?? '',
-    /**
-     * Bestehende Fahrzeuge, die im aktuellen Lauf nicht mehr unter den neuesten sind, werden einzeln
-     * bei Encar nachgeprüft (noch inseriert → Preis/km aktualisieren, sonst deaktivieren).
-     */
-    verifyLimit: num(env.ENCAR_VERIFY_LIMIT, 400),
-    verifyWindowDays: num(env.ENCAR_VERIFY_WINDOW_DAYS, 14),
   },
   apibara: {
     apiKey: env.APIBARA_API_KEY ?? '',

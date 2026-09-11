@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { mapApibara } from '../src/providers/apibara.js';
 import { mapAutoApi } from '../src/providers/autoapi.js';
-import { encarDrive, encarFuel, encarTrim, mapEncar, refreshListing } from '../src/providers/encar.js';
+import { encarDrive, encarFuel, encarTrim, gradeFromDetail, mapEncar } from '../src/providers/encar.js';
 import { mapXapi } from '../src/providers/xapikorea.js';
 
 const NOW = '2026-09-11T10:00:00.000Z';
@@ -120,24 +120,13 @@ describe('auto-api.com mapping (Dubizzle)', () => {
   });
 });
 
-describe('Encar Nachprüfung', () => {
-  it('aktualisiert Preis und km aus dem Detail und hält das Fahrzeug aktiv', () => {
-    const base = mapEncar({ Id: '1', Manufacturer: '기아', Model: 'K5', FormYear: '2020', Price: 2000, Mileage: 50000 }, null, NOW)!;
-    const r = refreshListing({ ...base, active: false }, { advertisement: { price: 1950 }, spec: { mileage: 50420 } }, '2026-09-12T00:00:00.000Z');
-    assert.equal(r.price, 19_500_000);
-    assert.equal(r.km, 50420);
-    assert.equal(r.active, true);
-    assert.equal(r.fetchedAt, '2026-09-12T00:00:00.000Z');
-    const unchanged = refreshListing(base, {}, NOW);
-    assert.equal(unchanged.price, 20_000_000);
-  });
-});
-
 describe('Encar trim', () => {
   it('lässt koreanische Bestandteile weg und dedupliziert', () => {
     const item = { Id: '1', Manufacturer: '현대', Model: '그랜저 IG', Badge: '2.5', BadgeDetail: '프리미엄 초이스' };
-    const detail = { vehicleId: 1, category: { gradeEnglishName: '2.5 Premium', gradeDetailName: null, modelGroupName: '그랜저', modelName: '더 뉴 그랜저 IG' } };
-    assert.equal(encarTrim(item, detail), '2.5 Premium · 2.5');
+    const grade = gradeFromDetail(item, { vehicleId: 1, category: { manufacturerEnglishName: 'Hyundai', modelGroupEnglishName: 'Grandeur', gradeEnglishName: '2.5 Premium' }, spec: { displacement: 2497 } });
+    assert.equal(grade.modelEn, 'Grandeur');
+    assert.equal(grade.ccm, 2497);
+    assert.equal(encarTrim(item, grade), '2.5 Premium · 2.5');
     assert.equal(encarTrim({ Id: '2', Manufacturer: '기아', Model: 'X', Badge: 'Gasoline 2.5T 2WD', BadgeDetail: '(세부등급 없음)' }, null), 'Gasoline 2.5T 2WD');
   });
 });

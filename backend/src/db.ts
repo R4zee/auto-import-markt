@@ -48,6 +48,12 @@ export async function run(sql: string, args: InValue[] = []): Promise<{ rowsAffe
   return { rowsAffected: res.rowsAffected, lastInsertRowid: res.lastInsertRowid };
 }
 
+/** Spalte nachrüsten, falls sie fehlt (SQLite kennt kein ADD COLUMN IF NOT EXISTS). */
+async function ensureColumn(c: Client, table: string, column: string, ddl: string): Promise<void> {
+  const cols = (await c.execute(`PRAGMA table_info(${table})`)).rows as unknown as Array<{ name: string }>;
+  if (!cols.some((r) => r.name === column)) await c.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+}
+
 async function migrate(): Promise<void> {
   const c = db();
   if (config.database.url.startsWith('file:')) {
@@ -136,5 +142,37 @@ async function migrate(): Promise<void> {
       landed_json TEXT,
       status TEXT NOT NULL DEFAULT 'new'
     );
+
+    CREATE TABLE IF NOT EXISTS meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
+    -- Übersetzungs-/Spezifikations-Cache je Encar-Ausstattungskombination (Hersteller, Modell, Badge → englische Namen, Hubraum)
+    CREATE TABLE IF NOT EXISTS encar_grades (
+      manufacturer TEXT NOT NULL,
+      model TEXT NOT NULL,
+      badge TEXT NOT NULL,
+      make_en TEXT,
+      model_en TEXT,
+      grade_en TEXT,
+      ccm INTEGER,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (manufacturer, model, badge)
+    );
+  `);
+
+  // Vorberechnete Werte für SQL-Filter/-Sortierung bei großen Beständen
+  await ensureColumn(c, 'listings', 'price_eur', 'REAL');
+  await ensureColumn(c, 'listings', 'landed_de', 'REAL');
+  await ensureColumn(c, 'listings', 'landed_at', 'REAL');
+  await ensureColumn(c, 'listings', 'landed_nl', 'REAL');
+  await ensureColumn(c, 'listings', 'landed_pl', 'REAL');
+  await ensureColumn(c, 'listings', 'auction_ends_at', 'TEXT');
+  await c.executeMultiple(`
+    CREATE INDEX IF NOT EXISTS idx_listings_active_landed_de ON listings(active, landed_de);
+    CREATE INDEX IF NOT EXISTS idx_listings_active_year ON listings(active, year);
+    CREATE INDEX IF NOT EXISTS idx_listings_active_km ON listings(active, km);
+    CREATE INDEX IF NOT EXISTS idx_listings_active_make ON listings(active, make, model);
   `);
 }

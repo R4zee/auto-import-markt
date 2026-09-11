@@ -64,13 +64,14 @@ transmissions, cocOnly, maxLanded, dest, sort (landed-asc|landed-desc|year-desc|
 | `marketcheck` | USA (Händler, Festpreis) | `MARKETCHECK_API_KEY` |
 | `ebay` | USA (eBay Motors, Auktion + Festpreis) | `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET` |
 | `apibara` | USA (Copart/IAAI-Auktionen) | `APIBARA_API_KEY` (Test-Plan kostenlos, 100 Req/Monat) |
-| `encar` | **Südkorea (Hauptquelle)** – Encar direkt, keyless | `ENCAR_ENABLED=true` – seitenweise je Hersteller, Preise 만원→KRW, Details für englische Namen/Hubraum, gedrosselt |
+| `encar` | **Südkorea (Hauptquelle)** – Encar direkt, Vollabgleich (~150.000 Inserate) | `ENCAR_ENABLED=true` + `ENCAR_PROXY_URL` (Residential-Proxy); läuft per GitHub Actions alle 6 h, Teilabfragen < 10.000, Übersetzungs-Cache `encar_grades` |
 | `xapikorea` | Südkorea (Fallback, Encar-Wrapper mit englischen Feldern) | `XAPIKOREA_API_KEY` (Free 500 Req/Monat) |
 | `autoapi` | VAE (Dubizzle, Dubicars) | `AUTOAPI_ACCESS_NAME`, `AUTOAPI_API_KEY` (Zugang via access@auto-api.com) |
 | `jpfeed` | Japan / beliebig (Partner-Feed JSON) | `JP_FEED_URL`, `JP_FEED_MAPPING` (Feldzuordnung, siehe `feed.ts`) |
 
-Marktplatzweit werden nur Linkslenker übernommen. Sync läuft beim Start (leere DB) und alle
-`SYNC_INTERVAL_MIN` Minuten; manuell: `npm run sync`.
+Marktplatzweit werden nur Linkslenker übernommen. Große Bestände synchronisiert der GitHub-Actions-Job
+`.github/workflows/sync.yml` direkt in Turso (Vercel liest nur). Lokal: `npm run sync` (Datei-DB) bzw. `npm run sync:turso`.
+Suche/Filter/Sortierung laufen in SQL mit vorberechneten Endpreisen je Zielland (`landed_de/at/nl/pl`).
 
 ### Rechenmodell (`backend/src/domain`)
 

@@ -22,8 +22,6 @@ export function decorate(l: Listing, dest: DestCode): DecoratedListing {
   return { ...l, landed, vehicleTax };
 }
 
-const AUTOMATIC_LIKE = new Set(['Automatic', 'PDK', 'Single speed']);
-
 export interface SearchResult {
   items: DecoratedListing[];
   total: number;
@@ -34,80 +32,24 @@ export interface SearchResult {
   facets: { makes: string[]; models: string[]; locations: string[] };
 }
 
-/** Kurzer Cache des aktiven Bestands – schont die Datenbank bei vielen Filterabfragen. */
-let cache: { at: number; items: Listing[] } | null = null;
-const CACHE_MS = 30_000;
-
-export async function activeListings(): Promise<Listing[]> {
-  if (cache && Date.now() - cache.at < CACHE_MS) return cache.items;
-  const items = await listingsRepo.allActive();
-  cache = { at: Date.now(), items };
-  return items;
-}
-
+/** Kein Bestands-Cache mehr nötig – Filter/Sortierung laufen in SQL. Bleibt als No-op für Aufrufer. */
 export function invalidateListingCache(): void {
-  cache = null;
+  /* SQL-basierte Suche, nichts zu invalidieren */
 }
 
 export async function search(q: ListingQuery): Promise<SearchResult> {
   const dest = q.dest ?? 'DE';
-  const all = await activeListings();
-  const text = (q.q ?? '').trim().toLowerCase();
-
+  const res = await listingsRepo.search(q, dest);
   const marketCounts: Record<string, number> = {};
-  for (const m of MARKET_CODES) {
-    marketCounts[m] = all.filter((c) => c.market === m && (!q.offer || q.offer === 'all' || c.offerType === q.offer)).length;
-  }
-
-  const uniq = (a: string[]) => Array.from(new Set(a)).sort();
-  const facets = {
-    makes: uniq(all.map((c) => c.make)),
-    models: uniq(all.filter((c) => !q.make || c.make === q.make).map((c) => c.model)),
-    locations: uniq(all.map((c) => c.location).filter(Boolean)),
+  for (const m of MARKET_CODES) marketCounts[m] = res.marketCounts[m] ?? 0;
+  return {
+    items: res.items.map((l) => decorate(l, dest)),
+    total: res.total,
+    page: res.page,
+    pageSize: res.pageSize,
+    marketCounts,
+    facets: res.facets,
   };
-
-  const list = all.filter((c) => {
-    if (q.offer && q.offer !== 'all' && c.offerType !== q.offer) return false;
-    if (q.markets?.length && !q.markets.includes(c.market)) return false;
-    if (q.make && c.make !== q.make) return false;
-    if (q.model && c.model !== q.model) return false;
-    if (q.location && c.location !== q.location) return false;
-    if (q.yearFrom != null && c.year < q.yearFrom) return false;
-    if (q.yearTo != null && c.year > q.yearTo) return false;
-    if (q.maxKm != null && c.km > q.maxKm) return false;
-    if (q.fuels?.length && !q.fuels.includes(c.fuel)) return false;
-    if (q.transmissions?.length) {
-      const bucket = AUTOMATIC_LIKE.has(c.transmission) ? 'Automatic' : 'Manual';
-      if (!q.transmissions.includes(bucket)) return false;
-    }
-    if (q.cocOnly && !c.coc) return false;
-    if (text) {
-      const hay = `${c.make} ${c.model} ${c.trim} ${c.auction?.lot ?? ''} ${c.auction?.house ?? ''} ${c.location}`.toLowerCase();
-      if (!hay.includes(text)) return false;
-    }
-    return true;
-  });
-
-  let decorated = list.map((c) => decorate(c, dest));
-  if (q.maxLandedEur != null) decorated = decorated.filter((d) => d.landed.totalEur <= q.maxLandedEur!);
-
-  const ends = (d: DecoratedListing) => (d.auction ? new Date(d.auction.endsAt).getTime() : Number.MAX_SAFE_INTEGER);
-  const sort = q.sort ?? 'landed-asc';
-  decorated.sort((a, b) => {
-    switch (sort) {
-      case 'landed-asc': return a.landed.totalEur - b.landed.totalEur;
-      case 'landed-desc': return b.landed.totalEur - a.landed.totalEur;
-      case 'year-desc': return b.year - a.year;
-      case 'km-asc': return a.km - b.km;
-      case 'ending': return ends(a) - ends(b);
-      default: return 0;
-    }
-  });
-
-  const page = Math.max(1, q.page ?? 1);
-  const pageSize = Math.min(200, Math.max(1, q.pageSize ?? 60));
-  const items = decorated.slice((page - 1) * pageSize, page * pageSize);
-  return { items, total: decorated.length, page, pageSize, marketCounts, facets };
 }
 
 export function publicConfig() {

@@ -270,3 +270,48 @@ Bewertung der Wege: (1) eigener Proxy = volle Kontrolle über Aktualität (Sorti
 `ModifiedDate`, 404 = verkauft), Kosten unter 1 €/Monat; (2) lokaler PC (Teil G) = 0 €, aber
 Rechner muss laufen; (3) xapikorea.com = Live-Durchgriff mit 60 s/5 min Cache, 20 €/Monat, Einzelbetreiber
 ohne Impressum und SLA. Offizieller Weg parallel: partnership@encar.com / price@encar.com.
+
+---
+
+## Teil I – Vollständiger Encar-Bestand per GitHub Actions (löst Teil G/H ab)
+
+Stand 11.09.2026 abends. Encar liefert 500 Inserate je Seite, erlaubt aber nur Offsets bis 10.000 je
+Abfrage. Der Adapter zerlegt den Bestand deshalb in Teilabfragen (Baujahr, bei Bedarf Preisklasse),
+lädt alles (rund 94.000 koreanische + 55.000 importierte Fahrzeuge ab 10 Mio. KRW und Baujahr 2012),
+lernt englische Modellnamen und Hubraum je Ausstattungskombination in einen Cache (1.500 neue
+Kombinationen je Lauf) und deaktiviert alles, was nicht mehr gelistet ist. Ein Lauf dauert 10–20
+Minuten und übersteigt damit Vercels Function-Limit; er läuft deshalb als **GitHub-Actions-Job**
+(`.github/workflows/sync.yml`, alle 6 Stunden, kostenlos im Rahmen der 2.000 Minuten/Monat).
+
+**Schritt 1 – Secrets im GitHub-Repository**
+1. <https://github.com/R4zee/auto-import-markt> → **Settings** (Tab oben) → linke Leiste
+   **Secrets and variables** → **Actions**.
+2. **New repository secret**, dreimal:
+   - Name `TURSO_DATABASE_URL`, Secret = Wert aus Vercel (Settings → Environment Variables, Auge-Symbol)
+   - Name `TURSO_AUTH_TOKEN`, Secret = Wert aus Vercel
+   - Name `ENCAR_PROXY_URL`, Secret = `http://LOGIN__cr.de:PASSWORD@gw.dataimpulse.com:823`
+   Jeweils **Add secret**.
+
+**Schritt 2 – Ersten Lauf von Hand starten**
+1. Tab **Actions** → links **Sync Listings** → rechts **Run workflow** → Feld
+   „Max. Inserate je Teilabfrage“ leer lassen (oder für einen 3-Minuten-Test `500` eintragen) → **Run workflow**.
+2. Auf den laufenden Job klicken → Schritt **Sync → Turso** aufklappen. Am Ende steht eine Zeile
+   `✔ encar upserted=… deactivated=…` mit der Zusammenfassung (Partitionen, geladen, gelernt,
+   zurückgestellt) und „Bestand je Quelle“.
+3. Der erste volle Lauf schreibt rund 150.000 Zeilen (10–20 Minuten). Folgeläufe schreiben nur
+   geänderte Inserate. Inserate, deren Ausstattung noch nicht übersetzt ist, kommen in den nächsten
+   Läufen nach (1.500 Kombinationen je Lauf; die häufigsten zuerst, damit der Großteil sofort sichtbar ist).
+
+**Schritt 3 – Vercel entlasten**
+- `ENCAR_ENABLED` in Vercel auf `false` (der 300-Sekunden-Cron dort würde den Vollabgleich nie schaffen).
+  Der Vercel-Cron bleibt für leichte Provider bestehen.
+- Vercel liest nur noch aus Turso; Suche, Filter und Sortierung laufen in SQL mit vorberechneten
+  Endpreisen je Zielland (werden bei Kursänderung im Sync neu berechnet).
+
+**Kosten/Volumen:** rund 300 Listen- und 1.500 Detailabrufe je Lauf. Encar liefert gzip-komprimiert,
+Erfahrungswert nach dem ersten Lauf im DataImpulse-Dashboard unter **Usage** prüfen; erwartet werden
+1–6 $ pro Monat bei vier Läufen täglich. Frequenz in `sync.yml` unter `cron` anpassen
+(`'15 */6 * * *'` = alle 6 h; `'15 */3 * * *'` = alle 3 h).
+
+**Ablauf ändern:** Zeitplan oder Umfang (`ENCAR_MIN_PRICE_MANWON`, `ENCAR_MIN_YEAR`, `ENCAR_CAR_TYPES`)
+in `.github/workflows/sync.yml` bzw. als weitere `env:`-Einträge dort setzen, committen, pushen.

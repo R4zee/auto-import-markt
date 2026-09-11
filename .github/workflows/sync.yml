@@ -1,0 +1,40 @@
+name: Sync Listings
+
+# Läuft alle 6 Stunden (UTC) und auf Knopfdruck. Holt die Bestände aller aktiven Provider und schreibt
+# sie direkt in die Turso-Datenbank. Encar wird über den Residential-Proxy abgerufen (ENCAR_PROXY_URL).
+on:
+  schedule:
+    - cron: '15 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      encar_limit_partition:
+        description: 'Max. Inserate je Teilabfrage (Test: z. B. 500)'
+        required: false
+        default: ''
+
+concurrency:
+  group: sync-listings
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Sync → Turso
+        working-directory: backend
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          ENCAR_PROXY_URL: ${{ secrets.ENCAR_PROXY_URL }}
+          ENABLE_MOCK_PROVIDER: 'false'
+          ENCAR_ENABLED: 'true'
+          ENCAR_LIMIT_PARTITION: ${{ github.event.inputs.encar_limit_partition }}
+          # weitere Provider-Keys hier ergänzen, z. B. APIBARA_API_KEY: ${{ secrets.APIBARA_API_KEY }}
+        run: node --import tsx src/cli/sync.ts
