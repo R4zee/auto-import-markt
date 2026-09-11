@@ -1,4 +1,19 @@
-import { fetch as undiciFetch, type RequestInit as UndiciRequestInit } from 'undici';
+import { fetch as undiciFetch, ProxyAgent, type Dispatcher, type RequestInit as UndiciRequestInit } from 'undici';
+
+const proxyAgents = new Map<string, Dispatcher>();
+
+/**
+ * Dispatcher für einen HTTP(S)-Proxy (z. B. Residential-Proxy mit Wohnsitz-IP).
+ * URL-Form: http://user:pass@host:port – wird je URL einmal angelegt und wiederverwendet.
+ */
+export function proxyDispatcher(proxyUrl: string): Dispatcher {
+  let agent = proxyAgents.get(proxyUrl);
+  if (!agent) {
+    agent = new ProxyAgent({ uri: proxyUrl, connectTimeout: 15000 });
+    proxyAgents.set(proxyUrl, agent);
+  }
+  return agent;
+}
 
 /** Kleine HTTP-Hilfen für Provider: Timeout, Retry bei 429/5xx (mit Retry-After), JSON. */
 export class HttpError extends Error {
@@ -24,8 +39,13 @@ export class HttpError extends Error {
  * HTTP-Abruf: zuerst das globale fetch; schlägt es ohne Netzwerkursache fehl (auf Vercel ist
  * fetch instrumentiert und lehnt manche URLs ab), Wiederholung mit dem ungepatchten undici-Client.
  */
-export async function robustFetch(url: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<Response> {
-  const { timeoutMs = 20000, ...rest } = init;
+export async function robustFetch(url: string, init: RequestInit & { timeoutMs?: number; proxyUrl?: string } = {}): Promise<Response> {
+  const { timeoutMs = 20000, proxyUrl, ...rest } = init;
+  if (proxyUrl) {
+    // Über Proxy immer der undici-Client (das globale fetch kennt keinen Dispatcher)
+    const res = await undiciFetch(url, { ...(rest as UndiciRequestInit), dispatcher: proxyDispatcher(proxyUrl), signal: AbortSignal.timeout(timeoutMs) });
+    return res as unknown as Response;
+  }
   try {
     return await fetch(url, { ...rest, signal: AbortSignal.timeout(timeoutMs) });
   } catch (e) {
@@ -38,12 +58,12 @@ export async function robustFetch(url: string, init: RequestInit & { timeoutMs?:
   }
 }
 
-export async function getJson<T>(url: string, init: RequestInit & { retries?: number; timeoutMs?: number; maxRetryWaitMs?: number } = {}): Promise<T> {
-  const { retries = 2, timeoutMs = 20000, maxRetryWaitMs = 15000, ...rest } = init;
+export async function getJson<T>(url: string, init: RequestInit & { retries?: number; timeoutMs?: number; maxRetryWaitMs?: number; proxyUrl?: string } = {}): Promise<T> {
+  const { retries = 2, timeoutMs = 20000, maxRetryWaitMs = 15000, proxyUrl, ...rest } = init;
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await robustFetch(url, { ...rest, timeoutMs });
+      const res = await robustFetch(url, { ...rest, timeoutMs, proxyUrl });
       if (res.ok) return (await res.json()) as T;
       const body = await res.text().catch(() => '');
       const retryAfter = Number(res.headers.get('retry-after'));

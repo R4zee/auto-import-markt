@@ -156,6 +156,7 @@ export class EncarProvider implements MarketProvider {
     const url = `https://api.encar.com/search/car/list/premium?count=true&q=${encodeURIComponent(q)}&sr=${encodeURIComponent(`|ModifiedDate|${offset}|${limit}`)}`;
     const json = await getJson<{ Count: number; SearchResults: EncarListItem[] }>(url, {
       headers: { Accept: 'application/json', 'User-Agent': 'auto-import-markt/0.2 (+contact via website)' },
+      proxyUrl: config.encar.proxyUrl || undefined,
     });
     return { count: json.Count ?? 0, items: json.SearchResults ?? [] };
   }
@@ -163,7 +164,7 @@ export class EncarProvider implements MarketProvider {
   async fetchDetail(id: string): Promise<EncarDetail | null> {
     try {
       return await getJson<EncarDetail>(`https://api.encar.com/v1/readside/vehicle/${id}?include=CATEGORY,SPEC,ADVERTISEMENT`, {
-        headers: { Accept: 'application/json' }, retries: 1, timeoutMs: 10000,
+        headers: { Accept: 'application/json' }, retries: 1, timeoutMs: 10000, proxyUrl: config.encar.proxyUrl || undefined,
       });
     } catch (e) {
       if (e instanceof HttpError && e.rateLimited) throw e;

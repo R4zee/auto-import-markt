@@ -52,11 +52,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           'https://api.encar.com/v1/readside/vehicle/39781874?include=CATEGORY',
         ];
     const results = [];
-    const clients: Array<['global' | 'undici' | 'robust', (u: string) => Promise<Response>]> = [
+    const clients: Array<['global' | 'undici' | 'robust' | 'proxy', (u: string) => Promise<Response>]> = [
       ['global', (u) => fetch(u, { signal: AbortSignal.timeout(10000), headers: { Accept: 'application/json,text/html' }, redirect: 'manual' })],
       ['undici', (u) => undiciFetch(u, { signal: AbortSignal.timeout(10000), headers: { Accept: 'application/json,text/html' }, redirect: 'manual' }) as unknown as Promise<Response>],
       ['robust', (u) => robustFetch(u, { timeoutMs: 10000, headers: { Accept: 'application/json,text/html' }, redirect: 'manual' })],
     ];
+    if (config.encar.proxyUrl) {
+      clients.push(['proxy', (u) => robustFetch(u, { timeoutMs: 15000, headers: { Accept: 'application/json,text/html' }, redirect: 'manual', proxyUrl: config.encar.proxyUrl })]);
+    }
     for (const url of targets) {
       for (const [client, run] of clients) {
         const t0 = Date.now();

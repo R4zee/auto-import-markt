@@ -203,3 +203,23 @@ Register-ScheduledTask -TaskName "auto-import-markt Sync" -Action $act -Trigger 
 Entfernen mit `Unregister-ScheduledTask -TaskName "auto-import-markt Sync" -Confirm:$false`.
 Der Rechner muss zur Laufzeit an sein. Alternative ohne eigenen Rechner: xapikorea.com-Key
 (`XAPIKOREA_API_KEY`, ab 20 €/Monat für 10.000 Aufrufe) – deren Server rufen Encar ab.
+
+## Teil H – Encar aus der Cloud über Residential-Proxy (Alternative zu Teil G)
+
+Encar filtert ausschließlich nach IP-Typ: Wohnsitz- und Mobil-IPs kommen durch (30/30 Anfragen aus
+einem deutschen Vodafone-Anschluss, auch ohne User-Agent), Rechenzentrums-Bereiche werden gedroppt.
+Genau so arbeiten alle „Encar-API“-Anbieter, die nichts anderes tun als Anfragen über solche IPs zu
+leiten. Mit einem eigenen Residential-Proxy läuft der Sync deshalb auch aus der Vercel-Function:
+
+1. Proxy-Zugang buchen, z. B. Webshare (ab 3,50 $/GB), Decodo (4 $/GB, 3-Tage-Test) oder DataImpulse
+   (1 $/GB). Ein Encar-Sync mit 180 Fahrzeugen inkl. Details überträgt rund 5 MB; 30 Läufe pro Monat
+   liegen damit unter 0,5 $. Korea-Targeting ist nicht nötig.
+2. In Vercel `ENCAR_PROXY_URL` = `http://user:pass@host:port` (Sensitive) und `ENCAR_ENABLED=true`
+   setzen → Redeploy.
+3. Prüfen: `/api/admin/diag` zeigt jetzt zusätzlich den Client `proxy`; steht dort `ok: true` für
+   api.encar.com, den Sync anstoßen. Danach übernimmt der tägliche Cron.
+
+Bewertung der Wege: (1) eigener Proxy = volle Kontrolle über Aktualität (Sortierung nach
+`ModifiedDate`, 404 = verkauft), Kosten unter 1 €/Monat; (2) lokaler PC (Teil G) = 0 €, aber
+Rechner muss laufen; (3) xapikorea.com = Live-Durchgriff mit 60 s/5 min Cache, 20 €/Monat, Einzelbetreiber
+ohne Impressum und SLA. Offizieller Weg parallel: partnership@encar.com / price@encar.com.

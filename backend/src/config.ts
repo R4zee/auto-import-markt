@@ -86,6 +86,11 @@ export const config = {
     fetchDetails: bool(env.ENCAR_FETCH_DETAILS, true),
     detailConcurrency: num(env.ENCAR_DETAIL_CONCURRENCY, 3),
     delayMs: num(env.ENCAR_DELAY_MS, 200),
+    /**
+     * HTTP(S)-Proxy mit Wohnsitz-IP (Residential), z. B. http://user:pass@p.webshare.io:80.
+     * api.encar.com sperrt Rechenzentrums-IPs; über einen Residential-Proxy läuft der Abruf auch aus Vercel.
+     */
+    proxyUrl: env.ENCAR_PROXY_URL ?? '',
   },
   apibara: {
     apiKey: env.APIBARA_API_KEY ?? '',
