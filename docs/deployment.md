@@ -211,13 +211,60 @@ einem deutschen Vodafone-Anschluss, auch ohne User-Agent), Rechenzentrums-Bereic
 Genau so arbeiten alle „Encar-API“-Anbieter, die nichts anderes tun als Anfragen über solche IPs zu
 leiten. Mit einem eigenen Residential-Proxy läuft der Sync deshalb auch aus der Vercel-Function:
 
-1. Proxy-Zugang buchen, z. B. Webshare (ab 3,50 $/GB), Decodo (4 $/GB, 3-Tage-Test) oder DataImpulse
-   (1 $/GB). Ein Encar-Sync mit 180 Fahrzeugen inkl. Details überträgt rund 5 MB; 30 Läufe pro Monat
-   liegen damit unter 0,5 $. Korea-Targeting ist nicht nötig.
-2. In Vercel `ENCAR_PROXY_URL` = `http://user:pass@host:port` (Sensitive) und `ENCAR_ENABLED=true`
-   setzen → Redeploy.
-3. Prüfen: `/api/admin/diag` zeigt jetzt zusätzlich den Client `proxy`; steht dort `ok: true` für
-   api.encar.com, den Sync anstoßen. Danach übernimmt der tägliche Cron.
+Empfohlener Anbieter: **DataImpulse** (1 $/GB, Guthaben verfällt nicht, Mindestaufladung ca. 5 $).
+Ein Encar-Sync mit 180 Fahrzeugen inkl. Details überträgt rund 5 MB; 30 Läufe pro Monat liegen
+damit unter 0,20 $. Korea-Targeting ist nicht nötig, eine deutsche Wohnsitz-IP genügt.
+
+**Schritt 1 – Konto und Guthaben (dataimpulse.com)**
+1. <https://dataimpulse.com> → oben rechts **Sign up** → E-Mail + Passwort → Bestätigungsmail anklicken.
+2. Im Dashboard links **Residential** (Residential Proxies) → **Buy** / **Top up balance** → Betrag
+   (5 $ reicht für Monate) → Zahlung per Karte oder PayPal abschließen.
+3. Im Bereich Residential erscheint der **Proxy-Zugang**: `Host gw.dataimpulse.com`, `Port 823` (HTTP),
+   `Login` und `Password`. Falls ein Knopf **Create proxy user / Generate credentials** angeboten wird,
+   einmal klicken. Beide Werte kopieren.
+4. Dort ist auch **IP whitelist** möglich – leer lassen; Vercel hat keine feste Ausgangs-IP, wir
+   nutzen Login/Passwort.
+
+**Schritt 2 – Proxy-URL zusammensetzen**
+Format: `http://LOGIN__cr.de:PASSWORD@gw.dataimpulse.com:823`
+- `__cr.de` (zwei Unterstriche) hängt die Länderwahl Deutschland an den Login; ohne Zusatz kommt eine
+  zufällige Wohnsitz-IP weltweit, was ebenfalls funktioniert.
+- Enthält das Passwort Sonderzeichen wie `@`, `:`, `/`, `#`, `?`, müssen sie URL-kodiert werden
+  (`@` → `%40`, `:` → `%3A`, `/` → `%2F`, `#` → `%23`, `?` → `%3F`).
+- Test vom eigenen Rechner (PowerShell), zeigt zuerst die Austritts-IP, dann Encar durch den Proxy:
+
+```powershell
+curl.exe -s -x "http://LOGIN__cr.de:PASSWORD@gw.dataimpulse.com:823" https://ipinfo.io/json
+```
+
+```powershell
+curl.exe -s -x "http://LOGIN__cr.de:PASSWORD@gw.dataimpulse.com:823" "https://api.encar.com/search/car/list/premium?count=true&q=(And.Hidden.N._.CarType.Y.)&sr=%7CModifiedDate%7C0%7C1"
+```
+
+Die zweite Antwort muss mit `{"Count":` beginnen.
+
+**Schritt 3 – In Vercel eintragen**
+1. Vercel → Projekt `auto-import-markt` → **Settings** → **Environment Variables**.
+2. **Add**: Key `ENCAR_PROXY_URL`, Value = die URL aus Schritt 2, alle Environments, Schalter **Sensitive** an → **Save**.
+3. `ENCAR_ENABLED` auf `true` stellen (Stift-Symbol → Wert ändern → Save).
+4. **Deployments** → oberster Eintrag → **⋯** → **Redeploy** → bestätigen, 1–2 Minuten warten.
+
+**Schritt 4 – Prüfen und Sync**
+```powershell
+Invoke-RestMethod -Headers $h "https://auto-import-markt.vercel.app/api/admin/diag" | ConvertTo-Json -Depth 5
+```
+Neu ist der Client `proxy`; er muss für die api.encar.com-URLs `ok: true`, `status: 200` melden.
+Dann der Sync (30–60 Sekunden):
+
+```powershell
+Invoke-RestMethod -Method Post -Headers $h -ContentType "application/json" -Body "{}" "https://auto-import-markt.vercel.app/api/admin/sync" | ConvertTo-Json -Depth 4
+```
+
+Danach übernimmt der tägliche Cron (04:00 UTC). Verbrauch im DataImpulse-Dashboard unter
+**Usage/Statistics** kontrollierbar.
+
+Alternative Anbieter mit gleichem Prinzip: Webshare (`p.webshare.io:80`, Login `user-de-rotate`,
+ab 3,50 $/GB), Decodo (4 $/GB, 3-Tage-Test).
 
 Bewertung der Wege: (1) eigener Proxy = volle Kontrolle über Aktualität (Sortierung nach
 `ModifiedDate`, 404 = verkauft), Kosten unter 1 €/Monat; (2) lokaler PC (Teil G) = 0 €, aber
