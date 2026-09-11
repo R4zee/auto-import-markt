@@ -1,22 +1,22 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { FastifyInstance } from 'fastify';
+// Statischer Import: nur so nimmt der Vercel-Bundler die Backend-Quellen mit ins Function-Bundle.
+import { buildApp } from '../backend/src/app.ts';
 
 /**
  * Vercel Serverless Function: alle /api/* Anfragen werden per vercel.json-Rewrite hierher
  * geleitet und an die Fastify-App durchgereicht. Die App wird pro Instanz einmal gebaut.
- * Startfehler (fehlende Umgebungsvariablen, Bundling) werden als JSON gemeldet statt als
+ * Startfehler (fehlende Umgebungsvariablen …) werden als JSON gemeldet statt als
  * FUNCTION_INVOCATION_FAILED.
  */
 let appPromise: Promise<FastifyInstance> | null = null;
 
-async function getApp(): Promise<FastifyInstance> {
+function getApp(): Promise<FastifyInstance> {
   if (!appPromise) {
-    appPromise = (async () => {
-      const { buildApp } = await import('../backend/src/app.ts');
-      const app = await buildApp({ logger: false });
+    appPromise = buildApp({ logger: false }).then(async (app) => {
       await app.ready();
       return app;
-    })();
+    });
     appPromise.catch(() => { appPromise = null; });
   }
   return appPromise;
