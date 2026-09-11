@@ -96,10 +96,8 @@ Dashboard **Generate Token** → die beiden Werte manuell als `TURSO_DATABASE_UR
 
 | Key | Value | Zweck |
 |---|---|---|
-| `ENCAR_ENABLED` | `true` | Südkorea: Encar direkt (Hauptquelle, kein Key) |
-| `ENCAR_MANUFACTURERS` | `현대,기아,제네시스` | Hersteller je Lauf; Importmarken (BMW, 벤츠 …) sind zusätzlich möglich |
-| `ENCAR_LIMIT_PER_MAKER` | `60` | Fahrzeuge je Hersteller und Lauf |
-| `XAPIKOREA_API_KEY` | optional, Key von <https://xapikorea.com> | Fallback für Korea, falls Encar den Direktzugriff sperrt (Sensitive) |
+| `ENCAR_ENABLED` | `false` | Der Encar-Vollabgleich läuft per GitHub Actions (Teil I), nicht in der Vercel-Function |
+| `XAPIKOREA_API_KEY` | optional, Key von <https://xapikorea.com> | Fallback für Korea (Sensitive) |
 | `ADMIN_KEY` | ein langes Zufallspasswort | schützt `/api/admin/*` (Sensitive) |
 | `CRON_SECRET` | ein weiteres langes Zufallspasswort | Vercel sendet es beim Cron-Aufruf mit (Sensitive) |
 | `ENABLE_MOCK_PROVIDER` | `false` | Beispieldaten aus dem Design abschalten (für Demo: `true`) |
