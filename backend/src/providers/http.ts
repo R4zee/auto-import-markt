@@ -40,12 +40,24 @@ export async function getJson<T>(url: string, init: RequestInit & { retries?: nu
       throw err;
     } catch (e) {
       if (e instanceof HttpError) throw e;
-      lastErr = e;
+      lastErr = describeNetworkError(e, url);
       if (attempt === retries) break;
       await sleep(300 * 2 ** attempt);
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
+/** "fetch failed" um die eigentliche Ursache (DNS, TLS, Reset, Timeout) ergänzen. */
+export function describeNetworkError(e: unknown, url: string): Error {
+  if (!(e instanceof Error)) return new Error(`${String(e)} (${url})`);
+  const cause = (e as Error & { cause?: unknown }).cause as (Error & { code?: string; errno?: number; syscall?: string; hostname?: string }) | undefined;
+  const parts = [e.message];
+  if (cause) parts.push([cause.code, cause.syscall, cause.hostname, cause.message].filter(Boolean).join(' '));
+  if (e.name === 'TimeoutError') parts.push('timeout');
+  const err = new Error(`${parts.filter(Boolean).join(' – ')} (${new URL(url).host})`);
+  err.name = e.name;
+  return err;
 }
 
 export function sleep(ms: number): Promise<void> {
