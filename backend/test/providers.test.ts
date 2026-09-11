@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { mapApibara } from '../src/providers/apibara.js';
 import { mapAutoApi } from '../src/providers/autoapi.js';
-import { carapisPrice, mapCarapis, parseSources } from '../src/providers/carapis.js';
+import { carapisPrice, guessDrive, mapCarapis, parseSources, prettyBrand, prettyModel } from '../src/providers/carapis.js';
 import { encarDrive, encarFuel, mapEncar } from '../src/providers/encar.js';
 
 const NOW = '2026-09-11T10:00:00.000Z';
@@ -125,6 +125,26 @@ describe('Carapis mapping (apix/catalog_api)', () => {
     assert.deepEqual(parseSources('encar:KR, dubizzle:GCC ,goonet:JP'), [
       { source: 'encar', market: 'KR' }, { source: 'dubizzle', market: 'GCC' }, { source: 'goonet', market: 'JP' },
     ]);
+  });
+
+  it('bereinigt Slug-artige Marken- und Modellnamen', () => {
+    assert.equal(prettyBrand('Bmw'), 'BMW');
+    assert.equal(prettyBrand('Kg Mobility'), 'KG Mobility');
+    assert.equal(prettyBrand('mercedes-benz'), 'Mercedes-Benz');
+    assert.equal(prettyBrand('Hyundai'), 'Hyundai');
+    assert.equal(prettyModel('3Series'), '3 Series');
+    assert.equal(prettyModel('Gs300'), 'GS300');
+    assert.equal(prettyModel('e-class'), 'E-Class');
+    assert.equal(prettyModel('Grandeur'), 'Grandeur');
+    assert.equal(prettyModel('Cooper S Convertible'), 'Cooper S Convertible');
+  });
+
+  it('schätzt den Antrieb aus Hinweisen und Marke', () => {
+    assert.equal(guessDrive('awd', '', 'Hyundai'), 'AWD');
+    assert.equal(guessDrive('', '3.5 HTRAC Luxury', 'Genesis'), 'AWD');
+    assert.equal(guessDrive('', 'Club · pickup', 'SsangYong'), '4WD');
+    assert.equal(guessDrive('', '2.0 LTZ · sedan', 'Chevrolet'), 'FWD');
+    assert.equal(guessDrive('unknown', 'STD · sedan', 'Lexus'), 'RWD');
   });
 
   it('bevorzugt den Originalpreis der Quelle, sonst USD', () => {
