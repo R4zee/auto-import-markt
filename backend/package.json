@@ -12,7 +12,8 @@
     "start": "node --import tsx --env-file-if-exists=.env src/server.ts",
     "sync": "node --import tsx --env-file-if-exists=.env src/cli/sync.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test \"test/**/*.test.ts\""
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "sync:turso": "node --import tsx --env-file=.env.turso src/cli/sync.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.1",

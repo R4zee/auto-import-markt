@@ -169,3 +169,37 @@ ergänzen und redeployen.
 - **Cron läuft nicht:** Settings → Cron Jobs → Status; `CRON_SECRET` muss gesetzt sein.
 - **0 Fahrzeuge trotz Sync:** `/api/admin/status` zeigt `lastRuns` mit Fehlermeldung je Provider.
 - Logs live: Tab **Logs** im Projekt (Function-Ausgaben, auch `enquiry stored`).
+
+---
+
+## Teil G – Korea-Sync vom eigenen Rechner (Encar sperrt Cloud-IPs)
+
+Befund 11.09.2026: api.encar.com bricht Verbindungen aus Rechenzentren (Vercel Frankfurt und
+Seoul, alle HTTP-Clients) nach dem ersten Kontakt ab. Von einer Wohnsitz-IP funktioniert der Abruf
+zuverlässig. Deshalb läuft der Encar-Sync vom eigenen Rechner direkt in die Turso-Datenbank; Vercel
+liefert die Daten nur aus.
+
+1. In Vercel `ENCAR_ENABLED` auf `false` setzen (sonst meldet der tägliche Cron einen Fehler). Die
+   Encar-Bestände bleiben erhalten, weil nur Quellen ohne bekannten Provider bereinigt werden.
+2. Datei `backend/.env.turso` anlegen (Vorlage: `backend/.env.turso.example`) und dort
+   `TURSO_DATABASE_URL` und `TURSO_AUTH_TOKEN` aus Vercel → Settings → Environment Variables
+   eintragen (Auge-Symbol zeigt den Wert). Die Datei ist per `.gitignore` ausgeschlossen.
+3. Sync starten (PowerShell im Projektordner, dauert 30–60 Sekunden):
+
+```powershell
+npm run sync:turso
+```
+
+Ausgabe: eine Zeile je Provider plus „Bestand je Quelle“. Danach die Seite neu laden.
+
+4. Täglich automatisch (Windows-Aufgabenplanung), einmal ausführen:
+
+```powershell
+$act = New-ScheduledTaskAction -Execute "cmd.exe" -Argument '/c cd /d "C:\Users\BenKretschmann\Desktop\auto_import_markt" && "C:\Program Files\nodejs\npm.cmd" run sync:turso >> backend\data\sync.log 2>&1'
+$trg = New-ScheduledTaskTrigger -Daily -At 06:30
+Register-ScheduledTask -TaskName "auto-import-markt Sync" -Action $act -Trigger $trg -Description "Encar → Turso"
+```
+
+Entfernen mit `Unregister-ScheduledTask -TaskName "auto-import-markt Sync" -Confirm:$false`.
+Der Rechner muss zur Laufzeit an sein. Alternative ohne eigenen Rechner: xapikorea.com-Key
+(`XAPIKOREA_API_KEY`, ab 20 €/Monat für 10.000 Aufrufe) – deren Server rufen Encar ab.

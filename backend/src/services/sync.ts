@@ -1,5 +1,6 @@
 import { query, run } from '../db.js';
 import { activeProviders, isKnownSource } from '../providers/index.js';
+// (activeProviders für syncAll, isKnownSource für die Bereinigung entfernter Anbieter)
 import type { MarketProvider } from '../providers/types.js';
 import { listingsRepo, partnersRepo } from '../repositories/listings.js';
 import { SEED_PARTNERS } from '../seed/partners.js';
@@ -44,17 +45,14 @@ export async function syncProvider(p: MarketProvider): Promise<SyncReport> {
 
 /**
  * Deaktiviert Listings von Quellen, für die es keinen Provider mehr gibt (z. B. nach dem
- * Entfernen eines Anbieters) oder deren Provider abgeschaltet ist.
+ * Entfernen eines Anbieters). Lediglich abgeschaltete Provider bleiben unangetastet: Encar wird
+ * etwa vom eigenen Rechner aus synchronisiert (Cloud-IPs sind gesperrt), auf Vercel ist er aus.
  */
 export async function deactivateOrphans(): Promise<Record<string, number>> {
-  const active = new Set(activeProviders().map((p) => p.id));
   const counts = await listingsRepo.countBySource();
   const out: Record<string, number> = {};
   for (const source of Object.keys(counts)) {
-    const providerId = active.has(source) ? source : [...active].find((id) => source.startsWith(`${id}-`));
-    if (!isKnownSource(source) || !providerId) {
-      out[source] = await listingsRepo.deactivateMissing(source, []);
-    }
+    if (!isKnownSource(source)) out[source] = await listingsRepo.deactivateMissing(source, []);
   }
   return out;
 }

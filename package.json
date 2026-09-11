@@ -16,7 +16,8 @@
     "dev:frontend": "npm run dev -w frontend",
     "sync": "npm run sync -w backend",
     "test": "npm test -w backend",
-    "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend"
+    "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend",
+    "sync:turso": "npm run sync:turso -w backend"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.1",

@@ -4,6 +4,7 @@ dist/
 .env
 .env.*
 !.env.example
+!.env.turso.example
 backend/data/
 *.log
 .DS_Store
