@@ -20,6 +20,21 @@ import { listingId, normalizeDrive, normalizeFuel, type MarketProvider, type Pro
  */
 
 const COUNTRY: Record<MarketCode, string> = { JP: 'jp', KR: 'kr', US: 'us', GCC: 'ae', SE: 'it', EE: 'pl' };
+
+/** Land je Carapis-Quelle (Flagge auf der Card); Fallback ist das Marktland. */
+const SOURCE_COUNTRY: Record<string, string> = {
+  encar: 'kr', kbchachacha: 'kr', kb_chachacha: 'kr', kcar: 'kr', bobaedream: 'kr', autohub: 'kr',
+  goonet: 'jp', goo_net: 'jp', goonet_exchange: 'jp', goo_net_exchange: 'jp', carsensor: 'jp', aucnet: 'jp', tcv: 'jp', beforward: 'jp', sbt_japan: 'jp',
+  autotrader_us: 'us', cars_com: 'us', carvana: 'us', carused: 'us', uss_openlane: 'us', autotrader_ca: 'ca',
+  opensooq_ae: 'ae', opensooq_sa: 'sa', opensooq_iq: 'iq',
+  automobile_it: 'it', subito: 'it', standvirtual: 'pt', autoscout24: 'de', mobile_de: 'de', kleinanzeigen: 'de', leboncoin: 'fr',
+  autovit: 'ro', olx_pl: 'pl', otomoto: 'pl', bazos_cz: 'cz', polovni_rs: 'rs', auto_ria_ua: 'ua', autobazar_eu: 'sk',
+  willhaben: 'at', marktplaats: 'nl', tweedehands_be: 'be', ememain_be: 'be', blocket_se: 'se', dba_dk: 'dk', finn_no: 'no', donedeal: 'ie', autotrader_uk: 'gb',
+};
+
+export function sourceCountry(source: string, market: MarketCode): string {
+  return SOURCE_COUNTRY[source.toLowerCase()] ?? COUNTRY[market];
+}
 const DEFAULT_CCY: Record<MarketCode, string> = { JP: 'JPY', KR: 'KRW', US: 'USD', GCC: 'AED', SE: 'EUR', EE: 'EUR' };
 
 export function parseSources(spec: string): Array<{ source: string; market: MarketCode }> {
@@ -169,7 +184,7 @@ export function mapCarapis(o: CarapisVehicle, market: MarketCode, fetchedAt: str
     source: 'carapis',
     externalId: id,
     market,
-    country: COUNTRY[market],
+    country: sourceCountry(str(pick(o, 'source_code', 'source')) || sourceCode, market),
     location,
     offerType: isAuction ? 'auction' : 'fixed',
     url: url || null,
@@ -238,7 +253,9 @@ export class CarapisProvider implements MarketProvider {
         }
       }
     }
-    return { listings: await this.enrich(raw, fetchedAt), complete: false };
+    // Jeder Lauf holt den konfigurierten Ausschnitt vollständig neu → Fahrzeuge, die nicht mehr
+    // erscheinen (verkauft, unter Mindestpreis, Quelle entfernt), werden deaktiviert.
+    return { listings: await this.enrich(raw, fetchedAt), complete: true };
   }
 
   /**

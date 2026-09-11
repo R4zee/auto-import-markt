@@ -230,6 +230,14 @@ describe('Carapis mapping (apix/catalog_api)', () => {
     assert.equal(l.km, 42600);
   });
 
+  it('Flagge folgt der Quelle, nicht dem Markt (autovit → ro, olx_pl → pl)', () => {
+    const ro = mapCarapis({ id: 'r1', source_code: 'autovit', brand_name: 'Dacia', model_name: 'Duster', year: 2019, price_usd: 9000, fuel_type: 'diesel', transmission: 'manual' }, 'EE', NOW, 'autovit');
+    assert.equal(ro?.country, 'ro');
+    const pl = mapCarapis({ id: 'p1', brand_name: 'Skoda', model_name: 'Fabia', year: 2019, price_usd: 9000, fuel_type: 'gasoline', transmission: 'manual' }, 'EE', NOW, 'olx_pl');
+    assert.equal(pl?.country, 'pl');
+    assert.equal(pl?.transmission, 'Manual');
+  });
+
   it('EU-Quellen gelten als EU-Ware mit COC', () => {
     const l = mapCarapis({ id: 'm1', brand: 'BMW', model: 'M4', year: 2021, price: 67200, currency: 'EUR', fuel_type: 'gasoline', transmission: 'auto' }, 'EE', NOW, 'mobile_de');
     assert.equal(l?.coc, true);
