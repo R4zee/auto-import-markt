@@ -113,6 +113,16 @@ describe('API', async () => {
     assert.equal(ok.json().listingsBySource.mock, 14);
   });
 
+  it('POST ohne Body / mit Formular-Content-Type wird nicht mit 415 abgelehnt', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/admin/sync?provider=mock',
+      headers: { 'x-admin-key': 'test-key', 'content-type': 'application/x-www-form-urlencoded' },
+      payload: '',
+    });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.json()[0].provider, 'mock');
+  });
+
   it('Cron-Route akzeptiert nur das CRON_SECRET', async () => {
     const denied = await app.inject({ method: 'GET', url: '/api/cron/sync' });
     assert.equal(denied.statusCode, 401);

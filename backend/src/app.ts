@@ -23,6 +23,13 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   });
   await app.register(rateLimit, { max: 300, timeWindow: '1 minute' });
 
+  // Leere oder nicht-JSON-Bodys (z. B. PowerShell Invoke-RestMethod ohne -Body) nicht mit 415 ablehnen
+  app.addContentTypeParser('*', { parseAs: 'string' }, (_req, body, done) => {
+    const text = typeof body === 'string' ? body.trim() : '';
+    if (!text) return done(null, undefined);
+    try { done(null, JSON.parse(text)); } catch (e) { done(e as Error, undefined); }
+  });
+
   app.get('/api/health', async () => ({
     ok: !databaseMissing,
     listings: await listingsRepo.countBySource(),
