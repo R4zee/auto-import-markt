@@ -9,7 +9,7 @@ const proxyAgents = new Map<string, Dispatcher>();
 export function proxyDispatcher(proxyUrl: string): Dispatcher {
   let agent = proxyAgents.get(proxyUrl);
   if (!agent) {
-    agent = new ProxyAgent({ uri: proxyUrl, connectTimeout: 15000 });
+    agent = new ProxyAgent({ uri: proxyUrl, connectTimeout: 30000 });
     proxyAgents.set(proxyUrl, agent);
   }
   return agent;

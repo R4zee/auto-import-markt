@@ -4,8 +4,16 @@ import { syncAll } from '../services/sync.js';
 import { listingsRepo } from '../repositories/listings.js';
 import { config } from '../config.js';
 
-const target = config.database.url.startsWith('file:') ? 'lokale Datei' : config.database.url === ':memory:' ? 'In-Memory' : config.database.url;
+const target = config.database.url.startsWith('file:') ? 'lokale Datei' : config.database.url === ':memory:' ? 'In-Memory' : 'Turso (remote)';
 console.log(`Sync → ${target}`);
+if (config.encar.enabled) {
+  let proxyInfo = 'KEIN Proxy (Direktverbindung – aus Rechenzentren blockiert Encar!)';
+  if (config.encar.proxyUrl) {
+    try { const u = new URL(config.encar.proxyUrl); proxyInfo = `Proxy ${u.hostname}:${u.port || '80'} (Login ${u.username ? u.username.slice(0, 4) + '…' : 'ohne'})`; }
+    catch { proxyInfo = 'Proxy-URL UNGÜLTIG (Form: http://user:pass@host:port)'; }
+  }
+  console.log(`Encar: ${proxyInfo} · Typen ${config.encar.carTypes.join(',')} · ab ${config.encar.minPriceManwon}만원 · ab ${config.encar.minYear}${config.encar.limitPartition ? ` · Test: max ${config.encar.limitPartition} je Teilabfrage` : ''}`);
+}
 await ready();
 await getFx();
 const reports = await syncAll();
@@ -15,3 +23,5 @@ for (const r of reports) {
 }
 console.log('Bestand je Quelle:', JSON.stringify(await listingsRepo.countBySource()));
 await closeDb();
+// Fehlgeschlagene Provider lassen den Job rot werden (GitHub Actions), damit Probleme auffallen
+if (reports.some((r) => r.status === 'error')) process.exitCode = 1;
