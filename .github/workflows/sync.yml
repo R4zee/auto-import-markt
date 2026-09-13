@@ -27,6 +27,16 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --no-audit --no-fund
+      - name: Proxy-Check (Austritts-IP und Encar durch den Tunnel)
+        env:
+          ENCAR_PROXY_URL: ${{ secrets.ENCAR_PROXY_URL }}
+        run: |
+          if [ -z "$ENCAR_PROXY_URL" ]; then echo "ENCAR_PROXY_URL fehlt"; exit 0; fi
+          echo "Runner-IP (direkt):"; curl -s --max-time 15 https://ipinfo.io/json | head -c 300; echo
+          echo "Austritts-IP über Proxy:"; curl -s --max-time 30 -x "$ENCAR_PROXY_URL" https://ipinfo.io/json | head -c 300; echo
+          echo "Encar-Liste über Proxy (Status/Zeit):"
+          curl -s -o /dev/null --max-time 40 -x "$ENCAR_PROXY_URL" -w "HTTP %{http_code} · connect %{time_connect}s · total %{time_total}s\n" \
+            "https://api.encar.com/search/car/list/premium?count=true&q=(And.Hidden.N._.CarType.Y.)&sr=%7CModifiedDate%7C0%7C1" || echo "curl exit $?"
       - name: Sync → Turso
         working-directory: backend
         env:
