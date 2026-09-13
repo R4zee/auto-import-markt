@@ -45,6 +45,8 @@ jobs:
           ENCAR_PROXY_URL: ${{ secrets.ENCAR_PROXY_URL }}
           ENABLE_MOCK_PROVIDER: 'false'
           ENCAR_ENABLED: 'true'
+          # Auf dem Runner kommt curl durch den Proxy zuverlässig zu Encar, der Node-Tunnel nicht
+          HTTP_CLIENT: 'curl'
           ENCAR_LIMIT_PARTITION: ${{ github.event.inputs.encar_limit_partition }}
           # weitere Provider-Keys hier ergänzen, z. B. APIBARA_API_KEY: ${{ secrets.APIBARA_API_KEY }}
         run: node --import tsx src/cli/sync.ts

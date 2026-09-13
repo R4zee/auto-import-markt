@@ -1,4 +1,8 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { fetch as undiciFetch, ProxyAgent, type Dispatcher, type RequestInit as UndiciRequestInit } from 'undici';
+
+const execFileAsync = promisify(execFile);
 
 const proxyAgents = new Map<string, Dispatcher>();
 
@@ -14,6 +18,41 @@ export function proxyDispatcher(proxyUrl: string): Dispatcher {
     proxyAgents.set(proxyUrl, agent);
   }
   return agent;
+}
+
+/**
+ * HTTP über das System-curl (HTTP_CLIENT=curl). Auf GitHub-Runnern kommt curl durch den Residential-
+ * Proxy zuverlässig zu Encar, während der undici-Tunnel dort in den Connect-Timeout läuft.
+ * Antwort wird als Standard-Response zurückgegeben (Status, Header, Body).
+ */
+export async function curlFetch(url: string, o: { proxyUrl?: string; timeoutMs?: number; headers?: Record<string, string> }): Promise<Response> {
+  const args = ['-sS', '--compressed', '--max-time', String(Math.ceil((o.timeoutMs ?? 20000) / 1000)), '-D', '-'];
+  if (o.proxyUrl) args.push('-x', o.proxyUrl);
+  for (const [k, v] of Object.entries(o.headers ?? {})) args.push('-H', `${k}: ${v}`);
+  args.push(url);
+  const { stdout } = await execFileAsync('curl', args, { maxBuffer: 64 * 1024 * 1024, encoding: 'buffer' });
+  // Header-Blöcke (bei Proxy ggf. "HTTP/1.1 200 Connection established" zuerst) vom Body trennen
+  let buf: Buffer = stdout as Buffer;
+  let status = 0;
+  const headers = new Headers();
+  for (;;) {
+    const sep = buf.indexOf('\r\n\r\n');
+    if (sep < 0 || !buf.subarray(0, 5).toString().startsWith('HTTP/')) break;
+    const block = buf.subarray(0, sep).toString('utf8').split('\r\n');
+    buf = buf.subarray(sep + 4);
+    const m = /^HTTP\/\S+\s+(\d{3})/.exec(block[0] ?? '');
+    status = m ? Number(m[1]) : status;
+    if (status === 200 && /connection established/i.test(block[0] ?? '')) { status = 0; continue; } // Proxy-Tunnel-Zeile überspringen
+    for (const line of block.slice(1)) {
+      const i = line.indexOf(':');
+      if (i > 0) headers.set(line.slice(0, i).trim(), line.slice(i + 1).trim());
+    }
+    if (status >= 200 && status !== 100) break;
+  }
+  if (!status) throw new Error(`curl: keine HTTP-Statuszeile erhalten (${new URL(url).host})`);
+  headers.delete('content-encoding'); // curl hat bereits dekomprimiert
+  headers.delete('content-length');
+  return new Response(new Uint8Array(buf), { status, headers });
 }
 
 /** Kleine HTTP-Hilfen für Provider: Timeout, Retry bei 429/5xx (mit Retry-After), JSON. */
@@ -42,6 +81,9 @@ export class HttpError extends Error {
  */
 export async function robustFetch(url: string, init: RequestInit & { timeoutMs?: number; proxyUrl?: string } = {}): Promise<Response> {
   const { timeoutMs = 20000, proxyUrl, ...rest } = init;
+  if (process.env.HTTP_CLIENT === 'curl') {
+    return curlFetch(url, { proxyUrl, timeoutMs, headers: rest.headers as Record<string, string> | undefined });
+  }
   if (proxyUrl) {
     // Über Proxy immer der undici-Client (das globale fetch kennt keinen Dispatcher)
     const res = await undiciFetch(url, { ...(rest as UndiciRequestInit), dispatcher: proxyDispatcher(proxyUrl), signal: AbortSignal.timeout(timeoutMs) });
