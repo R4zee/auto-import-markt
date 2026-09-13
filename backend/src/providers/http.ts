@@ -26,33 +26,27 @@ export function proxyDispatcher(proxyUrl: string): Dispatcher {
  * Antwort wird als Standard-Response zurückgegeben (Status, Header, Body).
  */
 export async function curlFetch(url: string, o: { proxyUrl?: string; timeoutMs?: number; headers?: Record<string, string> }): Promise<Response> {
-  const args = ['-sS', '--compressed', '--max-time', String(Math.ceil((o.timeoutMs ?? 20000) / 1000)), '-D', '-'];
+  // Body auf stdout, danach – durch -w – eine eigene Schlusszeile mit Status, Content-Type und Retry-After.
+  // (Kein Header-Dump: der unterscheidet sich zwischen HTTP/1.1 und HTTP/2 und bei Proxy-Tunneln.)
+  const marker = '\n__CURL_META__ ';
+  const args = [
+    '-sS', '--compressed', '--max-time', String(Math.ceil((o.timeoutMs ?? 20000) / 1000)),
+    '-w', `${marker}%{http_code} %{content_type} %header{retry-after}`,
+  ];
   if (o.proxyUrl) args.push('-x', o.proxyUrl);
   for (const [k, v] of Object.entries(o.headers ?? {})) args.push('-H', `${k}: ${v}`);
   args.push(url);
   const { stdout } = await execFileAsync('curl', args, { maxBuffer: 64 * 1024 * 1024, encoding: 'buffer' });
-  // Header-Blöcke (bei Proxy ggf. "HTTP/1.1 200 Connection established" zuerst) vom Body trennen
-  let buf: Buffer = stdout as Buffer;
-  let status = 0;
+  const out = stdout as Buffer;
+  const at = out.lastIndexOf(marker);
+  if (at < 0) throw new Error(`curl: keine Statuszeile erhalten (${new URL(url).host})`);
+  const meta = out.subarray(at + marker.length).toString('utf8').trim().split(' ');
+  const status = Number(meta[0]);
+  if (!status) throw new Error(`curl: ungültiger Status "${meta[0]}" (${new URL(url).host})`);
   const headers = new Headers();
-  for (;;) {
-    const sep = buf.indexOf('\r\n\r\n');
-    if (sep < 0 || !buf.subarray(0, 5).toString().startsWith('HTTP/')) break;
-    const block = buf.subarray(0, sep).toString('utf8').split('\r\n');
-    buf = buf.subarray(sep + 4);
-    const m = /^HTTP\/\S+\s+(\d{3})/.exec(block[0] ?? '');
-    status = m ? Number(m[1]) : status;
-    if (status === 200 && /connection established/i.test(block[0] ?? '')) { status = 0; continue; } // Proxy-Tunnel-Zeile überspringen
-    for (const line of block.slice(1)) {
-      const i = line.indexOf(':');
-      if (i > 0) headers.set(line.slice(0, i).trim(), line.slice(i + 1).trim());
-    }
-    if (status >= 200 && status !== 100) break;
-  }
-  if (!status) throw new Error(`curl: keine HTTP-Statuszeile erhalten (${new URL(url).host})`);
-  headers.delete('content-encoding'); // curl hat bereits dekomprimiert
-  headers.delete('content-length');
-  return new Response(new Uint8Array(buf), { status, headers });
+  if (meta[1]) headers.set('content-type', meta[1]);
+  if (meta[2]) headers.set('retry-after', meta[2]);
+  return new Response(new Uint8Array(out.subarray(0, at)), { status, headers });
 }
 
 /** Kleine HTTP-Hilfen für Provider: Timeout, Retry bei 429/5xx (mit Retry-After), JSON. */
