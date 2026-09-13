@@ -90,7 +90,9 @@ export const config = {
     minYear: num(env.ENCAR_MIN_YEAR, 2012),
     /** Detailabrufe je Lauf für neue Ausstattungskombinationen (englische Namen, Hubraum) */
     detailLimit: num(env.ENCAR_DETAIL_LIMIT, 1500),
-    detailConcurrency: num(env.ENCAR_DETAIL_CONCURRENCY, 3),
+    detailConcurrency: num(env.ENCAR_DETAIL_CONCURRENCY, 4),
+    /** Parallel geladene Teilabfragen (Listen) */
+    listConcurrency: num(env.ENCAR_LIST_CONCURRENCY, 4),
     delayMs: num(env.ENCAR_DELAY_MS, 150),
     /**
      * HTTP(S)-Proxy mit Wohnsitz-IP (Residential), z. B. http://user:pass@p.webshare.io:80.

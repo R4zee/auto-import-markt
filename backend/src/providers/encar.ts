@@ -233,25 +233,30 @@ export class EncarProvider implements MarketProvider {
     const parts = await this.partitions(warnings);
     const expected = parts.reduce((a, p) => a + p.count, 0);
 
-    // 1) Alle Partitionen seitenweise laden
+    // 1) Alle Partitionen seitenweise laden – mehrere Partitionen parallel (jede Anfrage kostet über Proxy ~1 s)
     const items = new Map<string, EncarListItem>();
     let failed = 0;
-    for (const p of parts) {
-      try {
-        const cap = config.encar.limitPartition > 0 ? Math.min(p.count, config.encar.limitPartition) : p.count;
-        for (let offset = 0; offset < cap; offset += config.encar.pageSize) {
-          const limit = Math.min(config.encar.pageSize, cap - offset);
-          const page = await this.fetchList(p.q, offset, limit);
-          for (const it of page.items) items.set(it.Id, it);
-          if (page.items.length < limit) break;
-          await sleep(config.encar.delayMs);
+    const partQueue = [...parts];
+    const partWorker = async () => {
+      while (partQueue.length) {
+        const p = partQueue.shift()!;
+        try {
+          const cap = config.encar.limitPartition > 0 ? Math.min(p.count, config.encar.limitPartition) : p.count;
+          for (let offset = 0; offset < cap; offset += config.encar.pageSize) {
+            const limit = Math.min(config.encar.pageSize, cap - offset);
+            const page = await this.fetchList(p.q, offset, limit);
+            for (const it of page.items) items.set(it.Id, it);
+            if (page.items.length < limit) break;
+            await sleep(config.encar.delayMs);
+          }
+        } catch (e) {
+          failed++;
+          warnings.push(`${p.label}: ${e instanceof Error ? e.message : String(e)}`);
+          if (e instanceof HttpError && e.rateLimited) await sleep(Math.min(30000, (e.retryAfterSec ?? 10) * 1000));
         }
-      } catch (e) {
-        failed++;
-        warnings.push(`${p.label}: ${e instanceof Error ? e.message : String(e)}`);
-        if (e instanceof HttpError && e.rateLimited) await sleep(Math.min(30000, (e.retryAfterSec ?? 10) * 1000));
       }
-    }
+    };
+    await Promise.all(Array.from({ length: Math.max(1, config.encar.listConcurrency) }, partWorker));
     if (parts.length && failed === parts.length) throw new Error(`Encar: alle ${parts.length} Teilabfragen fehlgeschlagen – ${warnings.slice(0, 3).join(' | ')}`);
 
     // 2) Übersetzungs-Cache ergänzen: häufigste unbekannte Kombinationen zuerst
