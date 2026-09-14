@@ -33,6 +33,7 @@ async function tryVariants(url: string, variants: Array<[string, Record<string, 
       console.log(`   ✖ ${label.padEnd(28)} ${e instanceof Error ? e.message.slice(0, 100) : String(e)}`);
     }
   }
+  if (variants.length < 2) return;
   const t0 = Date.now();
   try {
     const res = await curlFetch(url, { headers: variants[0]?.[1], timeoutMs: 20000, proxyUrl });
@@ -53,11 +54,17 @@ async function probeOlx() {
     try {
       const json = await getJson<{ data?: unknown[]; metadata?: unknown }>(url, { ...p.http(site), retries: 0 });
       console.log('metadata:', short(json.metadata, 400));
-      console.log('Rohantwort data[0]:', short(json.data?.[0], 3000));
+      const first = (json.data?.[0] ?? {}) as Record<string, unknown>;
+      console.log('data[0].params:', short(first.params, 2500));
+      console.log('data[0] ohne params/description:', short({ ...first, params: undefined, description: undefined, user: undefined }, 1500));
       for (const o of (json.data ?? []).slice(0, 5)) {
         const l = mapOlxOffer(o as never, site, fetchedAt);
-        console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.km} km · ${l.price} ${l.currency} · ${l.location} · ${l.photos.length} Fotos` : '  ✖ nicht abbildbar (Preis/Baujahr/Titel fehlt?)');
+        console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.location} · ${l.photos.length} Fotos` : '  ✖ nicht abbildbar (Preis/Baujahr/Titel fehlt?)');
       }
+      // Welche Serverfilter der WAF durchlässt (nur zur Information; Standard ist ohne)
+      const base = p.offersUrl(site, 0, false).replace(/limit=\d+/, 'limit=1');
+      await tryVariants(`${base}&filter_float_price%3Afrom=20000`, [['nur Preisfilter', olxHeaders(site, 'browser')]]);
+      await tryVariants(`${base}&filter_float_year%3Afrom=2012`, [['nur Baujahrfilter', olxHeaders(site, 'browser')]]);
     } catch (e) {
       console.log('  ✖', e instanceof Error ? e.message.slice(0, 200) : String(e));
       const plain = p.offersUrl(site, 0, false).replace(/limit=\d+/, 'limit=5');
@@ -85,7 +92,10 @@ async function probeSubito() {
       console.log('  ✖ keine Inserate – Kategorie prüfen: im Browser https://www.subito.it/annunci-italia/vendita/auto/ öffnen → Netzwerk-Tab → Aufruf hades.subito.it/v1/search/items?c=… ablesen und als SUBITO_CATEGORY_ID setzen');
       return;
     }
-    console.log('Rohantwort ads[0]:', short(ads[0], 3500));
+    const first = ads[0] as Record<string, unknown>;
+    console.log('Schlüssel von ads[0]:', Object.keys(first).join(', '));
+    console.log('ads[0].features:', short(first.features, 4000));
+    console.log('ads[0] ohne body/images/features:', short({ ...first, body: undefined, images: undefined, features: undefined }, 1500));
     for (const ad of ads.slice(0, 5)) {
       const l = mapSubito(ad as never, fetchedAt);
       console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.km} km · ${l.price} ${l.currency} · ${l.location} · ${l.photos.length} Fotos` : '  ✖ nicht abbildbar');

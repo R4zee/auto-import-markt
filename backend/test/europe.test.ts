@@ -126,6 +126,31 @@ describe('Subito.it mapping', () => {
     assert.equal(l.partnerId, 'adriatica');
   });
 
+  it('features als Array und Rückfall auf den Beschreibungstext (Live-Antwort 14.09.2026)', () => {
+    const arr = {
+      ...ad,
+      features: [{ uri: '/price', values: [{ key: '15900', value: '15.900 €' }] }, { uri: '/register_date', values: [{ key: '2017', value: '2017' }] }],
+    };
+    assert.equal(mapSubito(arr, NOW)?.price, 15900);
+    const bodyOnly = {
+      urn: 'id:ad:34a42066:list:660705243', subject: 'Audi Q2 1.6 TDI Design Unico proprietario', type: { key: 's', value: 'In vendita' }, category: { key: '2', value: 'Auto' },
+      body: 'Audi Q2 1.6 TDI Design Diesel, manuale. …\nImmatricolazione: 10/2017, Chilometraggio: 169.000 km\nMotore e trasmissione: Diesel, manuale, 1598 cc, 85 kW/115 PS\nPrezzo: 15.900 €',
+      images: [{ base_url: 'https://s.sbito.it/img/3f/3f3d', cdn_base_url: 'https://images.sbito.it/api/v1/sbt-ads-images-pro/images/3f/3f3d' }],
+      urls: { default: 'https://www.subito.it/auto/audi-q2-660705243.htm' },
+    };
+    const l = mapSubito(bodyOnly, NOW);
+    assert.ok(l);
+    assert.equal(l.id, 'subito:660705243');
+    assert.equal(l.make, 'Audi');
+    assert.equal(l.model, 'Q2');
+    assert.equal(l.year, 2017);
+    assert.equal(l.km, 169000);
+    assert.equal(l.engineCcm, 1598);
+    assert.equal(l.price, 15900);
+    assert.equal(l.fuel, 'Diesel');
+    assert.equal(l.transmission, 'Manual');
+  });
+
   it('Gesuche und Inserate ohne Preis/Baujahr fallen weg', () => {
     assert.equal(mapSubito({ ...ad, type: { key: 'k', value: 'Cerco' } }, NOW), null);
     assert.equal(mapSubito({ ...ad, features: { ...ad.features, '/price': { values: [] } } }, NOW), null);

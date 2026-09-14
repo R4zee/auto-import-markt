@@ -185,7 +185,11 @@ export class OlxProvider implements MarketProvider {
     return { headers: olxHeaders(site), proxyUrl: config.europe.proxyUrl || undefined, timeoutMs: 30000 };
   }
 
-  offersUrl(site: OlxSite, offset: number, withFilters = true): string {
+  /**
+   * Filterparameter (filter_float_price:from, filter_float_year:from) beantwortet der WAF mit 403 (Probe 14.09.2026),
+   * die ungefilterte Liste mit 200 → standardmäßig ohne Serverfilter, Mindestpreis/-baujahr werden nach dem Abruf geprüft.
+   */
+  offersUrl(site: OlxSite, offset: number, withFilters = config.olx.serverFilters): string {
     const p = new URLSearchParams({ category_id: String(site.categoryId), offset: String(offset), limit: String(config.olx.pageSize), sort_by: 'created_at:desc' });
     if (withFilters && config.olx.minPriceLocal > 0) p.set('filter_float_price:from', String(config.olx.minPriceLocal));
     if (withFilters && config.olx.minYear > 0) p.set('filter_float_year:from', String(config.olx.minYear));
@@ -219,7 +223,7 @@ export class OlxProvider implements MarketProvider {
       }
       for (const o of offers) {
         const l = mapOlxOffer(o, site, fetchedAt, makeByCategory);
-        if (l) listings.push(l);
+        if (l && l.price >= config.olx.minPriceLocal && l.year >= config.olx.minYear) listings.push(l);
       }
       offset += offers.length;
       if (!json.links?.next?.href || offers.length < config.olx.pageSize) break;

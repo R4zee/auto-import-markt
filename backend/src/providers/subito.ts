@@ -25,9 +25,10 @@ export interface SubitoFeatureValue { key?: string | number | null; value?: stri
 export interface SubitoFeature { uri?: string; label?: string; type?: string; values?: SubitoFeatureValue[] }
 export interface SubitoAd {
   urn?: string; subject?: string; body?: string;
-  type?: { key?: string; value?: string }; category?: { key?: string; value?: string };
-  dates?: { display?: string; expiration?: string };
-  features?: Record<string, SubitoFeature>;
+  type?: { key?: string; value?: string }; category?: { key?: string; value?: string; friendly_name?: string };
+  dates?: { display?: string; expiration?: string; display_iso8601?: string };
+  /** Objekt je URI oder Array von Features – beide Formen kommen vor */
+  features?: Record<string, SubitoFeature> | SubitoFeature[];
   geo?: { region?: { value?: string }; city?: { value?: string; short_name?: string }; town?: { value?: string } };
   images?: Array<{ uri?: string; cdn_base_url?: string; base_url?: string }>;
   urls?: { default?: string; mobile?: string };
@@ -36,9 +37,28 @@ export interface SubitoAd {
 export interface SubitoResponse { ads?: SubitoAd[]; count_all?: number; start?: number; limit?: number }
 
 export function subitoFeature(ad: SubitoAd, uri: string): { key: string; value: string } {
-  const f = ad.features?.[uri];
+  const fs = ad.features;
+  const bare = uri.replace(/^\//, '');
+  let f: SubitoFeature | undefined;
+  if (Array.isArray(fs)) f = fs.find((x) => x.uri === uri || x.uri === bare || x.label?.toLowerCase() === bare);
+  else if (fs) f = fs[uri] ?? fs[bare];
   const v = f?.values?.[0];
   return { key: str(v?.key), value: str(v?.value) };
+}
+
+/** Rückfall auf den Beschreibungstext (z. B. "Immatricolazione: 10/2017, Chilometraggio: 169.000 km … 1598 cc") */
+export function subitoFromBody(body: string | undefined): { year: number | null; km: number | null; ccm: number | null; price: number | null } {
+  const b = str(body);
+  const year = b.match(/Immatricolazione:\s*(?:\d{1,2}\/)?((?:19|20)\d{2})/i)?.[1];
+  const km = b.match(/Chilometraggio:\s*([\d.]+)\s*km/i)?.[1];
+  const ccm = b.match(/\b(\d{3,4})\s*cc\b/i)?.[1];
+  const price = b.match(/Prezzo:\s*€?\s*([\d.]+)/i)?.[1];
+  return {
+    year: year ? Number(year) : null,
+    km: km ? Number(km.replace(/\./g, '')) : null,
+    ccm: ccm ? Number(ccm) : null,
+    price: price ? Number(price.replace(/\./g, '')) : null,
+  };
 }
 
 export function subitoId(urn: string | undefined): string {
@@ -50,21 +70,27 @@ export function subitoId(urn: string | undefined): string {
 export function mapSubito(ad: SubitoAd, fetchedAt: string): Listing | null {
   const externalId = subitoId(ad.urn);
   const title = str(ad.subject).trim();
-  const price = num(subitoFeature(ad, '/price').key) ?? num(subitoFeature(ad, '/price').value);
-  const year = num(subitoFeature(ad, '/register_date').key) ?? num(subitoFeature(ad, '/register_date').value.slice(-4));
+  const fromBody = subitoFromBody(ad.body);
+  const priceFeature = subitoFeature(ad, '/price');
+  const price = num(priceFeature.key) ?? num(priceFeature.value.replace(/\./g, '')) ?? fromBody.price;
+  const regFeature = subitoFeature(ad, '/register_date');
+  const yearRaw = num(regFeature.key) ?? num(regFeature.value.match(/(19|20)\d{2}/)?.[0]) ?? fromBody.year;
+  const year = yearRaw && yearRaw > 1900 && yearRaw < 2100 ? yearRaw : null;
   if (!externalId || !title || !price || !year) return null;
   if (ad.type?.key && ad.type.key !== 's') return null; // nur Verkauf
 
   const make = subitoFeature(ad, '/car_brand').value || makeFromTitle(title);
   const model = subitoFeature(ad, '/car_model').value || title.replace(new RegExp(`^${make.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '').split(/\s+/)[0] || title;
   const version = subitoFeature(ad, '/car_version').value;
-  const fuelText = subitoFeature(ad, '/fuel').value;
+  const bodyText = str(ad.body);
+  const fuelText = subitoFeature(ad, '/fuel').value || (bodyText.match(/\b(Diesel|Benzina|Elettrica|Ibrida|GPL|Metano)\b/i)?.[1] ?? '');
   const fuel = /elettric/i.test(fuelText) && !/ibrid/i.test(fuelText) ? 'Electric' : /ibrid/i.test(fuelText) ? 'Hybrid' : /diesel/i.test(fuelText) ? 'Diesel' : normalizeFuel(fuelText);
-  const gear = subitoFeature(ad, '/gearbox').value;
+  const gear = subitoFeature(ad, '/gearbox').value || (bodyText.match(/\b(manuale|automatico|automatica)\b/i)?.[1] ?? '');
   const transmission = /manual/i.test(gear) ? 'Manual' : normalizeTransmission(gear || 'automatico');
-  const ccmRaw = num(subitoFeature(ad, '/cubic_capacity').key) ?? num(subitoFeature(ad, '/cubic_capacity').value);
+  const ccmRaw = num(subitoFeature(ad, '/cubic_capacity').key) ?? num(subitoFeature(ad, '/cubic_capacity').value) ?? fromBody.ccm;
   const ccm = fuel === 'Electric' ? null : ccmRaw && ccmRaw > 400 && ccmRaw < 9000 ? Math.round(ccmRaw) : null;
-  const km = Math.round(num(subitoFeature(ad, '/mileage_scalar').key) ?? num(subitoFeature(ad, '/mileage_scalar').value) ?? 0);
+  const kmFeature = subitoFeature(ad, '/mileage_scalar');
+  const km = Math.round(num(kmFeature.key) ?? num(kmFeature.value.replace(/\./g, '')) ?? fromBody.km ?? 0);
   const photos = (ad.images ?? [])
     .map((i) => str(i.cdn_base_url ?? i.base_url))
     .filter(Boolean)

@@ -174,9 +174,11 @@ export const config = {
     /** Seiten je Land und Lauf (OLX sortiert nach Einstelldatum → die neuesten N×pageSize Inserate) */
     pages: num(env.OLX_PAGES, 25),
     pageSize: Math.min(50, num(env.OLX_PAGE_SIZE, 40)),
-    /** Mindestpreis in Landeswährung (0 = aus) und ältestes Baujahr */
+    /** Mindestpreis in Landeswährung (0 = aus) und ältestes Baujahr – werden nach dem Abruf geprüft */
     minPriceLocal: num(env.OLX_MIN_PRICE, 20000),
     minYear: num(env.OLX_MIN_YEAR, 2012),
+    /** Filter zusätzlich als URL-Parameter senden (der WAF lehnte das im Test mit 403 ab) */
+    serverFilters: bool(env.OLX_SERVER_FILTERS, false),
     delayMs: num(env.OLX_DELAY_MS, 400),
   },
   subito: {
