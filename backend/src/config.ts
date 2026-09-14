@@ -113,7 +113,7 @@ const OLX_DEFAULT_SITES: OlxSite[] = [
   { country: 'pl', host: 'www.olx.pl', categoryId: 84, currency: 'PLN', enabled: true }, // Motoryzacja › Samochody osobowe (Live-Probe 14.09.2026)
   { country: 'ro', host: 'www.olx.ro', categoryId: 84, currency: 'RON', enabled: true }, // Auto, moto si ambarcatiuni › Autoturisme (Kategorie-Scan 14.09.2026)
   { country: 'bg', host: 'www.olx.bg', categoryId: null, currency: 'BGN', enabled: true },
-  { country: 'pt', host: 'www.olx.pt', categoryId: null, currency: 'EUR', enabled: true },
+  { country: 'pt', host: 'www.olx.pt', categoryId: 378, currency: 'EUR', enabled: true }, // Carros, motos e barcos › Carros (Seitenquelltext + Scan 14.09.2026)
 ];
 
 function olxSites(): OlxSite[] {

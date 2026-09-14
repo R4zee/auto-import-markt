@@ -12,7 +12,8 @@ import { mapSubito, SubitoProvider } from '../providers/subito.js';
  *
  *   npm run probe -- olx        (alle konfigurierten OLX-Seiten, je 5 Inserate; bei 403 mehrere Header-Varianten)
  *   npm run probe -- olx-scan ro [bis] | olx-scan bg von bis   (Kategorienamen der Seite – Pkw-Kategorie-ID finden)
- *   npm run probe -- olx-page bg /avtomobili-i-dzhipove/        (Kategorie-ID aus dem Seitenquelltext der Pkw-Kategorie)
+ *   npm run probe -- olx-page pt /carros-motos-e-barcos/carros/  (Kategorie-ID aus dem Seitenquelltext der Pkw-Kategorie)
+ *   npm run probe -- olx-children bg 360                          (Unterkategorien aus den Inseraten einer Oberkategorie)
  *   npm run probe -- subito
  *   npm run probe -- sauto
  *   npm run probe -- <provider> (jeder andere Provider: fetchAll mit Ausgabe der ersten 3 Inserate)
@@ -188,6 +189,38 @@ async function olxPage(country: string, path: string) {
   }
 }
 
+/**
+ * Unterkategorien einer OLX-Oberkategorie aus ihren Inseraten ablesen: `npm run probe -- olx-children bg 360`
+ * lädt Inserate der Kategorie, sammelt die verwendeten category.id-Werte und benennt sie über den Breadcrumb-Endpunkt.
+ */
+async function olxChildren(country: string, parentId: number) {
+  const site = olxSiteFor(country);
+  const p = new OlxProvider();
+  console.log(`\n=== OLX ${country.toUpperCase()} · Unterkategorien aus Inseraten der Kategorie ${parentId}`);
+  const ids = new Map<number, number>();
+  for (let offset = 0; offset < 200; offset += 40) {
+    const json = await p.get<{ data?: Array<{ category?: { id?: number }; title?: string }> }>(`https://${site.host}/api/v1/offers/?category_id=${parentId}&offset=${offset}&limit=40&sort_by=created_at:desc`, site);
+    const offers = json.data ?? [];
+    for (const o of offers) if (o.category?.id != null) ids.set(o.category.id, (ids.get(o.category.id) ?? 0) + 1);
+    if (offers.length < 40) break;
+  }
+  if (!ids.size) { console.log('  keine Inserate/Kategorien gefunden'); return; }
+  const seen = new Set<string>();
+  for (const [id, n] of [...ids.entries()].sort((a, b) => b[1] - a[1])) {
+    try {
+      const json = await p.get<unknown>(`https://${site.host}/api/v1/offers/metadata/breadcrumbs/?category_id=${id}`, site, 4);
+      const labels = OlxProvider.breadcrumbLabels(json).slice(1);
+      // Marken-Unterkategorien auf die Pkw-Ebene zusammenfassen: die vorletzte Ebene ist die gesuchte Kategorie
+      const parentChain = labels.slice(0, -1).join(' › ');
+      console.log(`  ${String(id).padStart(5)} ×${String(n).padEnd(3)} ${labels.join(' › ')}`);
+      if (labels.length >= 3 && !seen.has(parentChain)) {
+        seen.add(parentChain);
+        console.log(`         → Oberkategorie dieser Marke: "${parentChain}" – deren ID mit olx-scan im passenden Bereich oder aus der Seite ermitteln`);
+      }
+    } catch (e) { console.log(`  ${String(id).padStart(5)} ×${String(n).padEnd(3)} ✖ ${e instanceof Error ? e.message.slice(0, 60) : String(e)}`); }
+  }
+}
+
 async function probeSubito() {
   const p = new SubitoProvider();
   const url = p.searchUrl(0).replace(/lim=\d+/, 'lim=5');
@@ -238,6 +271,7 @@ try {
     const a = Number(process.argv[4] ?? 1); const b = Number(process.argv[5] ?? (process.argv[4] ? a : 120));
     await scanOlxCategories((process.argv[3] ?? 'ro').toLowerCase(), process.argv[5] ? a : 1, b);
   } else if (name === 'olx-page') await olxPage((process.argv[3] ?? 'bg').toLowerCase(), process.argv[4] ?? '/');
+  else if (name === 'olx-children') await olxChildren((process.argv[3] ?? 'bg').toLowerCase(), Number(process.argv[4] ?? 360));
   else if (name === 'subito') await probeSubito();
   else if (name === 'sauto') await probeSauto();
   else {
