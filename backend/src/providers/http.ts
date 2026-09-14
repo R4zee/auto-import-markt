@@ -95,8 +95,8 @@ export async function robustFetch(url: string, init: RequestInit & { timeoutMs?:
   }
 }
 
-export async function getJson<T>(url: string, init: RequestInit & { retries?: number; timeoutMs?: number; maxRetryWaitMs?: number; proxyUrl?: string } = {}): Promise<T> {
-  const { retries = 2, timeoutMs = 20000, maxRetryWaitMs = 15000, proxyUrl, ...rest } = init;
+export async function getJson<T>(url: string, init: RequestInit & { retries?: number; timeoutMs?: number; maxRetryWaitMs?: number; proxyUrl?: string; retryOn403?: boolean } = {}): Promise<T> {
+  const { retries = 2, timeoutMs = 20000, maxRetryWaitMs = 15000, proxyUrl, retryOn403 = false, ...rest } = init;
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -105,7 +105,8 @@ export async function getJson<T>(url: string, init: RequestInit & { retries?: nu
       const body = await res.text().catch(() => '');
       const retryAfter = Number(res.headers.get('retry-after'));
       const err = new HttpError(res.status, url, body, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null);
-      if (res.status === 429 || res.status >= 500) {
+      // retryOn403: WAF-Vorschaltseiten (CloudFront) lehnen mitunter die erste Anfrage ab und lassen die identische zweite durch
+      if (res.status === 429 || res.status >= 500 || (retryOn403 && res.status === 403)) {
         lastErr = err;
         if (attempt < retries) {
           const wait = Math.min(maxRetryWaitMs, err.retryAfterSec ? err.retryAfterSec * 1000 : 500 * 2 ** attempt);

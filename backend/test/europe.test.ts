@@ -85,53 +85,66 @@ describe('OLX mapping (olx.pl)', () => {
 });
 
 describe('Subito.it mapping', () => {
+  // Struktur der Live-Antwort vom 14.09.2026 (features als Array, Marke/Modell/Version im Paket "/car")
   const ad = {
-    urn: 'id:ad:24680:list:612345678', subject: 'Alfa Romeo Giulia 2.2 Turbodiesel 210 CV AT8 Veloce Q4', body: '…',
-    type: { key: 's', value: 'Vendita' }, category: { key: '2', value: 'Auto' },
-    dates: { display: '2026-09-13T09:12:00+0200' },
-    features: {
-      '/price': { uri: '/price', label: 'Prezzo', values: [{ key: '32900', value: '32.900 €' }] },
-      '/register_date': { uri: '/register_date', values: [{ key: '2021', value: '2021' }] },
-      '/mileage_scalar': { uri: '/mileage_scalar', values: [{ key: '61000', value: '61000' }] },
-      '/car_brand': { uri: '/car_brand', values: [{ key: '3', value: 'Alfa Romeo' }] },
-      '/car_model': { uri: '/car_model', values: [{ key: '12', value: 'Giulia' }] },
-      '/car_version': { uri: '/car_version', values: [{ key: 'x', value: '2.2 Turbodiesel 210 CV AT8 Veloce Q4' }] },
-      '/fuel': { uri: '/fuel', values: [{ key: '2', value: 'Diesel' }] },
-      '/gearbox': { uri: '/gearbox', values: [{ key: '2', value: 'Automatico' }] },
-      '/cubic_capacity': { uri: '/cubic_capacity', values: [{ key: '2143', value: '2143' }] },
-    },
-    geo: { region: { value: 'Lombardia' }, city: { value: 'Milano', short_name: 'MI' }, town: { value: 'Sesto San Giovanni' } },
-    images: [{ cdn_base_url: 'https://images.sbito.it/api/v1/sbt-ads-images-pro/images/aa/aa1' }],
-    urls: { default: 'https://www.subito.it/auto/alfa-romeo-giulia-milano-612345678.htm' },
+    urn: 'id:ad:64c6f980-6724-4df7-81da-048be829d961:list:660706120', subject: 'Captur 1000 GPL giugno 22', body: '…',
+    type: { key: 's', value: 'In vendita' }, category: { key: '2', value: 'Auto', friendly_name: 'auto' },
+    dates: { display: '2026-09-14 16:47:45', display_iso8601: '2026-09-14T16:47:45.285+0200' },
+    features: [
+      { type: 'list', uri: '/car_type', label: 'Carrozzeria', values: [{ key: '3', value: 'Station Wagon' }] },
+      { type: 'list', uri: '/gearbox', label: 'Cambio', values: [{ key: '1', value: 'Manuale' }] },
+      { type: 'number', uri: '/price', label: 'Prezzo', values: [{ key: '13400', value: '13400 €' }] },
+      { type: 'list', uri: '/fuel', label: 'Carburante', values: [{ key: '3', value: 'Gpl' }] },
+      { type: 'pack', uri: '/car', label: 'Auto', values: [
+        { key: '000062', value: 'RENAULT', level: 0, label: 'Marca' },
+        { key: '004665', value: 'Captur 2ª serie', group_key: '001565', group_label: 'Captur', level: 1, label: 'Modello' },
+        { key: '139443', value: 'Captur TCe 100 CV GPL FAP Intens', level: 2, label: 'Versione' },
+      ] },
+      { type: 'list', uri: '/mileage', label: 'Km', values: [{ key: '19', value: '90.000 - 94.999' }] },
+      { type: 'number', uri: '/mileage_scalar', label: 'Km', values: [{ key: '90500', value: '90500 Km' }] },
+      { type: 'string', uri: '/power', label: 'Potenza', values: [{ key: '74/101', value: '74 kW / 101 Cv' }] },
+      { type: 'list', uri: '/year', label: 'Anno di immatricolazione', values: [{ key: '2022', value: '2022' }] },
+      { type: 'string', uri: '/register_date', label: 'Immatricolazione', values: [{ key: '06/2022', value: '06/2022' }] },
+    ],
+    geo: { region: { value: 'Toscana' }, city: { value: 'Firenze', short_name: 'FI' }, town: { value: 'Firenze' } },
+    images: [{ uri: 'imgid:3f', base_url: 'https://s.sbito.it/img/3f/3f3d', cdn_base_url: 'https://images.sbito.it/api/v1/sbt-ads-images-pro/images/3f/3f3d' }],
+    urls: { default: 'https://www.subito.it/auto/captur-1000-gpl-giugno-22-firenze-660706120.htm' },
+    advertiser: { user_id: '144784051', name: '', company: false, type: 0 },
   };
 
   it('bildet ein italienisches Inserat als Festpreis in EUR im Markt Südeuropa ab', () => {
     const l = mapSubito(ad, NOW);
     assert.ok(l);
-    assert.equal(l.id, 'subito:612345678');
+    assert.equal(l.id, 'subito:660706120');
     assert.equal(l.market, 'SE');
     assert.equal(l.country, 'it');
-    assert.equal(l.make, 'Alfa Romeo');
-    assert.equal(l.model, 'Giulia');
-    assert.equal(l.year, 2021);
-    assert.equal(l.km, 61000);
-    assert.equal(l.price, 32900);
-    assert.equal(l.fuel, 'Diesel');
-    assert.equal(l.transmission, 'Automatic');
-    assert.equal(l.engineCcm, 2143);
-    assert.equal(l.drive, 'AWD');
-    assert.equal(l.location, 'Sesto San Giovanni');
-    assert.equal(l.photos[0], 'https://images.sbito.it/api/v1/sbt-ads-images-pro/images/aa/aa1?rule=gallery-desktop-2x-jpeg');
-    assert.equal(l.url, 'https://www.subito.it/auto/alfa-romeo-giulia-milano-612345678.htm');
+    assert.equal(l.make, 'Renault');
+    assert.equal(l.model, 'Captur');
+    assert.match(l.trim, /^Captur TCe 100 CV GPL FAP Intens · Station Wagon/);
+    assert.equal(l.year, 2022);
+    assert.equal(l.km, 90500);
+    assert.equal(l.price, 13400);
+    assert.equal(l.currency, 'EUR');
+    assert.equal(l.fuel, 'Petrol');
+    assert.equal(l.transmission, 'Manual');
+    assert.equal(l.engineCcm, null);
+    assert.equal(l.location, 'Firenze');
+    assert.equal(l.photos[0], 'https://images.sbito.it/api/v1/sbt-ads-images-pro/images/3f/3f3d?rule=gallery-desktop-2x-jpeg');
+    assert.equal(l.url, 'https://www.subito.it/auto/captur-1000-gpl-giugno-22-firenze-660706120.htm');
     assert.equal(l.partnerId, 'adriatica');
   });
 
-  it('features als Array und Rückfall auf den Beschreibungstext (Live-Antwort 14.09.2026)', () => {
-    const arr = {
-      ...ad,
-      features: [{ uri: '/price', values: [{ key: '15900', value: '15.900 €' }] }, { uri: '/register_date', values: [{ key: '2017', value: '2017' }] }],
-    };
-    assert.equal(mapSubito(arr, NOW)?.price, 15900);
+  it('Jahr aus register_date "06/2022" ohne /year; Kurzmarken bleiben groß', () => {
+    const noYear = { ...ad, features: ad.features.filter((f) => f.uri !== '/year') };
+    assert.equal(mapSubito(noYear, NOW)?.year, 2022);
+    const bmw = { ...ad, features: ad.features.map((f) => (f.uri === '/car' ? { ...f, values: [{ key: '1', value: 'BMW', level: 0 }, { key: '2', value: 'Serie 3 (G20)', level: 1 }, { key: '3', value: '320d xDrive', level: 2 }] } : f)) };
+    const l = mapSubito(bmw, NOW);
+    assert.equal(l?.make, 'BMW');
+    assert.equal(l?.model, 'Serie 3 (G20)');
+    assert.equal(l?.drive, 'AWD');
+  });
+
+  it('Rückfall auf den Beschreibungstext, wenn Features fehlen', () => {
     const bodyOnly = {
       urn: 'id:ad:34a42066:list:660705243', subject: 'Audi Q2 1.6 TDI Design Unico proprietario', type: { key: 's', value: 'In vendita' }, category: { key: '2', value: 'Auto' },
       body: 'Audi Q2 1.6 TDI Design Diesel, manuale. …\nImmatricolazione: 10/2017, Chilometraggio: 169.000 km\nMotore e trasmissione: Diesel, manuale, 1598 cc, 85 kW/115 PS\nPrezzo: 15.900 €',
@@ -153,8 +166,8 @@ describe('Subito.it mapping', () => {
 
   it('Gesuche und Inserate ohne Preis/Baujahr fallen weg', () => {
     assert.equal(mapSubito({ ...ad, type: { key: 'k', value: 'Cerco' } }, NOW), null);
-    assert.equal(mapSubito({ ...ad, features: { ...ad.features, '/price': { values: [] } } }, NOW), null);
-    assert.equal(subitoId('id:ad:24680:list:612345678'), '612345678');
+    assert.equal(mapSubito({ ...ad, features: ad.features.filter((f) => f.uri !== '/price') }, NOW), null);
+    assert.equal(subitoId('id:ad:64c6f980-6724-4df7-81da-048be829d961:list:660706120'), '660706120');
   });
 });
 

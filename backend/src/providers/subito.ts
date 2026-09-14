@@ -12,16 +12,15 @@ import { makeFromTitle } from './olx.js';
  *   GET https://hades.subito.it/v1/search/items?c=2&t=s&lim=100&start=0&sort=datedesc&qso=false&shp=false&urg=false
  *   c=2 Kategorie Auto, t=s Vendita, optional r=<Region>, q=<Suchbegriff>
  *
- * Antwort { ads: Ad[], count_all, start, limit }. Ad: urn ("id:ad:…:list:<id>"), subject, body, type, category,
- * dates{ display }, features{ "/price": { values[{ key, value }] }, "/register_date", "/mileage_scalar", "/car_brand",
- * "/car_model", "/fuel", "/gearbox", "/cubic_capacity", "/car_version", "/car_type", … }, geo{ region, city, town },
- * images[{ cdn_base_url }] (Bild nur mit Rendition, z. B. ?rule=gallery-desktop-2x-jpeg), urls{ default }, advertiser{ type }.
- *
- * Struktur nach Erfahrungswerten und öffentlichen Scrapern (rorystephenson/subito-search u. a.) – beim ersten Lauf mit
- * `npm run probe -- subito` prüfen. Subito lehnt einfache HTTP-Clients teils mit 403 ab (TLS-Fingerprint); auf dem
- * GitHub-Runner curl verwenden (HTTP_CLIENT=curl), sonst Residential-Proxy (EUROPE_PROXY_URL).
+ * Antwort (Live 14.09.2026, 535.000 Inserate) { ads: Ad[], count_all, start, lines, filters }. Ad: urn ("id:ad:<uuid>:list:<id>"),
+ * subject, body, type{ key "s" }, category{ key "2" }, dates{ display_iso8601 }, features: Array von
+ * { uri, type, label, values[{ key, value, … }] } mit "/price" (key "13400"), "/year" (key "2022"), "/register_date" ("06/2022"),
+ * "/mileage_scalar" (key "90500"), "/fuel" ("Diesel" | "Benzina" | "Gpl" | "Metano" | "Elettrica" | "Ibrida"), "/gearbox"
+ * ("Manuale" | "Automatico"), "/car" (pack: level 0 Marca, 1 Modello mit group_label, 2 Versione), "/car_type", "/power",
+ * "/pollution", "/vehicle_status"; geo{ region, city, town }; images[{ cdn_base_url }] (Bild nur mit Rendition
+ * ?rule=gallery-desktop-2x-jpeg); urls{ default }; advertiser{ company }. Hubraum liefert die Liste nicht.
  */
-export interface SubitoFeatureValue { key?: string | number | null; value?: string | null }
+export interface SubitoFeatureValue { key?: string | number | null; value?: string | null; label?: string; level?: number; group_key?: string; group_label?: string }
 export interface SubitoFeature { uri?: string; label?: string; type?: string; values?: SubitoFeatureValue[] }
 export interface SubitoAd {
   urn?: string; subject?: string; body?: string;
@@ -36,14 +35,36 @@ export interface SubitoAd {
 }
 export interface SubitoResponse { ads?: SubitoAd[]; count_all?: number; start?: number; limit?: number }
 
-export function subitoFeature(ad: SubitoAd, uri: string): { key: string; value: string } {
+function findFeature(ad: SubitoAd, uri: string): SubitoFeature | undefined {
   const fs = ad.features;
   const bare = uri.replace(/^\//, '');
-  let f: SubitoFeature | undefined;
-  if (Array.isArray(fs)) f = fs.find((x) => x.uri === uri || x.uri === bare || x.label?.toLowerCase() === bare);
-  else if (fs) f = fs[uri] ?? fs[bare];
-  const v = f?.values?.[0];
+  if (Array.isArray(fs)) return fs.find((x) => x.uri === uri || x.uri === bare || x.label?.toLowerCase() === bare);
+  return fs ? fs[uri] ?? fs[bare] : undefined;
+}
+
+export function subitoFeature(ad: SubitoAd, uri: string): { key: string; value: string } {
+  const v = findFeature(ad, uri)?.values?.[0];
   return { key: str(v?.key), value: str(v?.value) };
+}
+
+/** "RENAULT" → "Renault", Kurzmarken (BMW, MG, DS) bleiben groß */
+export function subitoCase(s: string): string {
+  const t = s.trim();
+  if (t !== t.toUpperCase() || t.length <= 3) return t;
+  return t.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (m, sep: string, ch: string) => sep + ch.toUpperCase());
+}
+
+/**
+ * Paket "/car" (Live-Antwort 14.09.2026): values[level 0] = Marca, [level 1] = Modello (group_label = Baureihe,
+ * value = Baureihe + Generation, z. B. "Captur 2ª serie"), [level 2] = Versione.
+ */
+export function subitoCar(ad: SubitoAd): { make: string; model: string; version: string } {
+  const vals = findFeature(ad, '/car')?.values ?? [];
+  const at = (level: number) => vals.find((v) => v.level === level) ?? vals[level];
+  const make = subitoCase(str(at(0)?.value));
+  const modelVal = at(1);
+  const model = str(modelVal?.group_label) || str(modelVal?.value).replace(/\s+\d+[ªa°]?\s+serie$/i, '');
+  return { make, model, version: str(at(2)?.value) };
 }
 
 /** Rückfall auf den Beschreibungstext (z. B. "Immatricolazione: 10/2017, Chilometraggio: 169.000 km … 1598 cc") */
@@ -73,17 +94,20 @@ export function mapSubito(ad: SubitoAd, fetchedAt: string): Listing | null {
   const fromBody = subitoFromBody(ad.body);
   const priceFeature = subitoFeature(ad, '/price');
   const price = num(priceFeature.key) ?? num(priceFeature.value.replace(/\./g, '')) ?? fromBody.price;
-  const regFeature = subitoFeature(ad, '/register_date');
-  const yearRaw = num(regFeature.key) ?? num(regFeature.value.match(/(19|20)\d{2}/)?.[0]) ?? fromBody.year;
+  // "/year" = Zulassungsjahr (key "2022"); "/register_date" hat die Form "06/2022"
+  const yearRaw = num(subitoFeature(ad, '/year').key)
+    ?? num(subitoFeature(ad, '/register_date').key.match(/(19|20)\d{2}/)?.[0])
+    ?? fromBody.year;
   const year = yearRaw && yearRaw > 1900 && yearRaw < 2100 ? yearRaw : null;
   if (!externalId || !title || !price || !year) return null;
   if (ad.type?.key && ad.type.key !== 's') return null; // nur Verkauf
 
-  const make = subitoFeature(ad, '/car_brand').value || makeFromTitle(title);
-  const model = subitoFeature(ad, '/car_model').value || title.replace(new RegExp(`^${make.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '').split(/\s+/)[0] || title;
-  const version = subitoFeature(ad, '/car_version').value;
+  const car = subitoCar(ad);
+  const make = car.make || subitoFeature(ad, '/car_brand').value || makeFromTitle(title);
+  const model = car.model || subitoFeature(ad, '/car_model').value || title.replace(new RegExp(`^${make.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '').split(/\s+/)[0] || title;
+  const version = car.version || subitoFeature(ad, '/car_version').value;
   const bodyText = str(ad.body);
-  const fuelText = subitoFeature(ad, '/fuel').value || (bodyText.match(/\b(Diesel|Benzina|Elettrica|Ibrida|GPL|Metano)\b/i)?.[1] ?? '');
+  const fuelText = subitoFeature(ad, '/fuel').value || (bodyText.match(/\b(Diesel|Benzina|Elettrica|Ibrida|GPL|Metano)\b/i)?.[1] ?? ''); // Gpl/Metano → Petrol
   const fuel = /elettric/i.test(fuelText) && !/ibrid/i.test(fuelText) ? 'Electric' : /ibrid/i.test(fuelText) ? 'Hybrid' : /diesel/i.test(fuelText) ? 'Diesel' : normalizeFuel(fuelText);
   const gear = subitoFeature(ad, '/gearbox').value || (bodyText.match(/\b(manuale|automatico|automatica)\b/i)?.[1] ?? '');
   const transmission = /manual/i.test(gear) ? 'Manual' : normalizeTransmission(gear || 'automatico');

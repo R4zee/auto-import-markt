@@ -182,7 +182,8 @@ export class OlxProvider implements MarketProvider {
 
   /** Browser-nahe Header: die OLX-Seiten sitzen hinter CloudFront/WAF und lehnen nackte Clients mit 403 ab */
   http(site?: OlxSite) {
-    return { headers: olxHeaders(site), proxyUrl: config.europe.proxyUrl || undefined, timeoutMs: 30000 };
+    // Probe 14.09.2026: die erste Anfrage je Prozess bekam 403, die identische Wiederholung 200 → 403 wiederholen
+    return { headers: olxHeaders(site), proxyUrl: config.europe.proxyUrl || undefined, timeoutMs: 30000, retryOn403: true, retries: 3 };
   }
 
   /**

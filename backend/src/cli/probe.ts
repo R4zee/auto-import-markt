@@ -20,20 +20,22 @@ const short = (v: unknown, n = 1800) => JSON.stringify(v, null, 1).slice(0, n);
 const proxyUrl = config.europe.proxyUrl || undefined;
 const fetchedAt = new Date().toISOString();
 
-/** Gleiche URL mit verschiedenen Header-Sätzen und Clients anfragen – zeigt, welche Variante der WAF durchlässt. */
-async function tryVariants(url: string, variants: Array<[string, Record<string, string>]>): Promise<void> {
+/** Gleiche URL mit verschiedenen Header-Sätzen und Clients anfragen – zeigt, welche Variante der WAF durchlässt; liefert den ersten Treffer-Body. */
+async function tryVariants(url: string, variants: Array<[string, Record<string, string>]>): Promise<string | null> {
   console.log('  Varianten:');
+  let firstOk: string | null = null;
   for (const [label, headers] of variants) {
     const t0 = Date.now();
     try {
       const res = await robustFetch(url, { headers, timeoutMs: 20000, proxyUrl });
       const body = await res.text();
       console.log(`   ${res.ok ? '✔' : '✖'} ${label.padEnd(28)} HTTP ${res.status} · ${Date.now() - t0} ms · ${body.slice(0, 80).replace(/\s+/g, ' ')}`);
+      if (res.ok && !firstOk) firstOk = body;
     } catch (e) {
       console.log(`   ✖ ${label.padEnd(28)} ${e instanceof Error ? e.message.slice(0, 100) : String(e)}`);
     }
   }
-  if (variants.length < 2) return;
+  if (variants.length < 2) return firstOk;
   const t0 = Date.now();
   try {
     const res = await curlFetch(url, { headers: variants[0]?.[1], timeoutMs: 20000, proxyUrl });
@@ -41,6 +43,18 @@ async function tryVariants(url: string, variants: Array<[string, Record<string, 
     console.log(`   ${res.ok ? '✔' : '✖'} ${'curl (HTTP_CLIENT=curl)'.padEnd(28)} HTTP ${res.status} · ${Date.now() - t0} ms · ${body.slice(0, 80).replace(/\s+/g, ' ')}`);
   } catch (e) {
     console.log(`   ✖ ${'curl (HTTP_CLIENT=curl)'.padEnd(28)} ${e instanceof Error ? e.message.slice(0, 100) : String(e)}`);
+  }
+  return firstOk;
+}
+
+function showOlx(json: { data?: unknown[]; metadata?: unknown }, site: (typeof config.olx.sites)[number]): void {
+  console.log('metadata:', short(json.metadata, 400));
+  const first = (json.data?.[0] ?? {}) as Record<string, unknown>;
+  console.log('data[0].params:', short(first.params, 2500));
+  console.log('data[0] ohne params/description:', short({ ...first, params: undefined, description: undefined, user: undefined }, 1500));
+  for (const o of (json.data ?? []).slice(0, 5)) {
+    const l = mapOlxOffer(o as never, site, fetchedAt);
+    console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.location} · ${l.photos.length} Fotos` : '  ✖ nicht abbildbar (Preis/Baujahr/Titel fehlt?)');
   }
 }
 
@@ -51,30 +65,28 @@ async function probeOlx() {
     if (site.categoryId == null) continue;
     const url = p.offersUrl(site, 0).replace(/limit=\d+/, 'limit=5');
     console.log(url);
+    let json: { data?: unknown[]; metadata?: unknown } | null = null;
     try {
-      const json = await getJson<{ data?: unknown[]; metadata?: unknown }>(url, { ...p.http(site), retries: 0 });
-      console.log('metadata:', short(json.metadata, 400));
-      const first = (json.data?.[0] ?? {}) as Record<string, unknown>;
-      console.log('data[0].params:', short(first.params, 2500));
-      console.log('data[0] ohne params/description:', short({ ...first, params: undefined, description: undefined, user: undefined }, 1500));
-      for (const o of (json.data ?? []).slice(0, 5)) {
-        const l = mapOlxOffer(o as never, site, fetchedAt);
-        console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.location} · ${l.photos.length} Fotos` : '  ✖ nicht abbildbar (Preis/Baujahr/Titel fehlt?)');
-      }
-      // Welche Serverfilter der WAF durchlässt (nur zur Information; Standard ist ohne)
-      const base = p.offersUrl(site, 0, false).replace(/limit=\d+/, 'limit=1');
-      await tryVariants(`${base}&filter_float_price%3Afrom=20000`, [['nur Preisfilter', olxHeaders(site, 'browser')]]);
-      await tryVariants(`${base}&filter_float_year%3Afrom=2012`, [['nur Baujahrfilter', olxHeaders(site, 'browser')]]);
+      // wie im Adapter: 403 bis zu dreimal wiederholen
+      json = await getJson<{ data?: unknown[]; metadata?: unknown }>(url, p.http(site));
+      console.log('  ✔ Liste geladen (Adapter-Header, ggf. nach Wiederholung)');
     } catch (e) {
       console.log('  ✖', e instanceof Error ? e.message.slice(0, 200) : String(e));
-      const plain = p.offersUrl(site, 0, false).replace(/limit=\d+/, 'limit=5');
-      await tryVariants(plain, [
+      const body = await tryVariants(url, [
         ['browser-Header', olxHeaders(site, 'browser')],
         ['nur Accept: json', olxHeaders(site, 'minimal')],
         ['json + User-Agent', olxHeaders(site, 'json')],
         ['ohne Header', {}],
       ]);
-      console.log('  Im Browser testen (liefert die Seite dort JSON?):', plain);
+      if (body) { try { json = JSON.parse(body); console.log('  → Treffer der ersten erfolgreichen Variante:'); } catch { /* kein JSON */ } }
+      else console.log('  Im Browser testen (liefert die Seite dort JSON?):', url);
+    }
+    if (json) {
+      showOlx(json, site);
+      // Welche Serverfilter der WAF durchlässt (nur zur Information; Standard ist ohne)
+      const base = p.offersUrl(site, 0, false).replace(/limit=\d+/, 'limit=1');
+      await tryVariants(`${base}&filter_float_price%3Afrom=20000`, [['nur Preisfilter', olxHeaders(site, 'browser')]]);
+      await tryVariants(`${base}&filter_float_year%3Afrom=2012`, [['nur Baujahrfilter', olxHeaders(site, 'browser')]]);
     }
   }
 }
@@ -98,7 +110,7 @@ async function probeSubito() {
     console.log('ads[0] ohne body/images/features:', short({ ...first, body: undefined, images: undefined, features: undefined }, 1500));
     for (const ad of ads.slice(0, 5)) {
       const l = mapSubito(ad as never, fetchedAt);
-      console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.km} km · ${l.price} ${l.currency} · ${l.location} · ${l.photos.length} Fotos` : '  ✖ nicht abbildbar');
+      console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.fuel}/${l.transmission} · ${l.location} · ${l.photos.length} Fotos` : '  ✖ nicht abbildbar');
     }
   } catch (e) {
     console.log('  ✖', e instanceof Error ? e.message.slice(0, 200) : String(e));
