@@ -100,7 +100,10 @@ export interface OlxSite {
   host: string;
   /** Pkw-Kategorie der jeweiligen OLX-Seite (null = noch nicht ermittelt → Seite bleibt aus) */
   categoryId: number | null;
+  /** Rückfall-Währung, falls das Inserat keine nennt (olx.ro und olx.pt inserieren überwiegend in EUR) */
   currency: string;
+  /** Mindestpreis in der dominierenden Inseratswährung der Seite (PL: PLN, RO: EUR, BG: BGN, PT: EUR) */
+  minPrice: number;
   enabled: boolean;
 }
 
@@ -110,10 +113,10 @@ export interface OlxSite {
  * Kategorie-ID finden: Pkw-Kategorie der Seite im Browser öffnen → Netzwerk-Tab → Aufruf „api/v1/offers/?…category_id=…“.
  */
 const OLX_DEFAULT_SITES: OlxSite[] = [
-  { country: 'pl', host: 'www.olx.pl', categoryId: 84, currency: 'PLN', enabled: true }, // Motoryzacja › Samochody osobowe (Live-Probe 14.09.2026)
-  { country: 'ro', host: 'www.olx.ro', categoryId: 84, currency: 'RON', enabled: true }, // Auto, moto si ambarcatiuni › Autoturisme (Kategorie-Scan 14.09.2026)
-  { country: 'bg', host: 'www.olx.bg', categoryId: 1117, currency: 'BGN', enabled: true }, // Автомобили, каравани, лодки › Автомобили и Джипове (Kategorie-Scan 14.09.2026)
-  { country: 'pt', host: 'www.olx.pt', categoryId: 378, currency: 'EUR', enabled: true }, // Carros, motos e barcos › Carros (Seitenquelltext + Scan 14.09.2026)
+  { country: 'pl', host: 'www.olx.pl', categoryId: 84, currency: 'PLN', minPrice: 20000, enabled: true }, // Motoryzacja › Samochody osobowe (Live-Probe 14.09.2026)
+  { country: 'ro', host: 'www.olx.ro', categoryId: 84, currency: 'EUR', minPrice: 5000, enabled: true }, // Auto, moto si ambarcatiuni › Autoturisme; Preise in EUR (Live-Probe 14.09.2026)
+  { country: 'bg', host: 'www.olx.bg', categoryId: 1117, currency: 'BGN', minPrice: 10000, enabled: true }, // Автомобили, каравани, лодки › Автомобили и Джипове (Kategorie-Scan 14.09.2026)
+  { country: 'pt', host: 'www.olx.pt', categoryId: 378, currency: 'EUR', minPrice: 5000, enabled: true }, // Carros, motos e barcos › Carros; Preise in EUR (Live-Probe 14.09.2026)
 ];
 
 function olxSites(): OlxSite[] {
@@ -131,9 +134,10 @@ function olxSites(): OlxSite[] {
     if (o.host != null) patch.host = String(o.host);
     if (o.categoryId != null) patch.categoryId = Number(o.categoryId);
     if (o.currency != null) patch.currency = String(o.currency).toUpperCase();
+    if (o.minPrice != null) patch.minPrice = Number(o.minPrice);
     if (o.enabled != null) patch.enabled = Boolean(o.enabled);
     if (cur) Object.assign(cur, patch);
-    else sites.push({ country, host: patch.host ?? `www.olx.${country}`, categoryId: patch.categoryId ?? null, currency: patch.currency ?? 'EUR', enabled: patch.enabled ?? true });
+    else sites.push({ country, host: patch.host ?? `www.olx.${country}`, categoryId: patch.categoryId ?? null, currency: patch.currency ?? 'EUR', minPrice: patch.minPrice ?? 5000, enabled: patch.enabled ?? true });
   }
   return sites;
 }
@@ -174,8 +178,8 @@ export const config = {
     /** Seiten je Land und Lauf (OLX sortiert nach Einstelldatum → die neuesten N×pageSize Inserate) */
     pages: num(env.OLX_PAGES, 25),
     pageSize: Math.min(50, num(env.OLX_PAGE_SIZE, 40)),
-    /** Mindestpreis in Landeswährung (0 = aus) und ältestes Baujahr – werden nach dem Abruf geprüft */
-    minPriceLocal: num(env.OLX_MIN_PRICE, 20000),
+    /** Mindestpreis je Seite (siehe OLX_DEFAULT_SITES); OLX_MIN_PRICE überschreibt alle Seiten (0 = aus) */
+    minPriceOverride: env.OLX_MIN_PRICE ? num(env.OLX_MIN_PRICE, 0) : null,
     minYear: num(env.OLX_MIN_YEAR, 2012),
     /** Mindestpreis und Baujahr auch als URL-Parameter senden (Probe 14.09.2026: beide werden durchgelassen, 315k → 195k Treffer) */
     serverFilters: bool(env.OLX_SERVER_FILTERS, true),

@@ -1,4 +1,4 @@
-import { config } from '../config.js';
+import { config, type OlxSite } from '../config.js';
 import { allProviders } from '../providers/index.js';
 import { curlFetch, freshFetch, getJson, robustFetch } from '../providers/http.js';
 import { mapOlxOffer, olxHeaders, OlxProvider } from '../providers/olx.js';
@@ -50,13 +50,19 @@ async function tryVariants(url: string, variants: Array<[string, Record<string, 
   return firstOk;
 }
 
-function showOlx(json: { data?: unknown[]; metadata?: unknown }, site: (typeof config.olx.sites)[number]): void {
+async function showOlx(json: { data?: unknown[]; metadata?: unknown }, site: OlxSite, p: OlxProvider): Promise<void> {
   console.log('metadata:', short(json.metadata, 400));
   const first = (json.data?.[0] ?? {}) as Record<string, unknown>;
   console.log('data[0].params:', short(first.params, 2500));
   console.log('data[0] ohne params/description:', short({ ...first, params: undefined, description: undefined, user: undefined }, 1500));
+  // Marke wie im Adapter über die Unterkategorie (Breadcrumbs) ermitteln
+  const makeByCategory = new Map<number, string>();
+  for (const o of (json.data ?? []).slice(0, 5) as Array<{ category?: { id?: number } }>) {
+    const cid = o.category?.id;
+    if (cid != null && cid !== site.categoryId) await p.makeForCategory(site, cid, makeByCategory);
+  }
   for (const o of (json.data ?? []).slice(0, 5)) {
-    const l = mapOlxOffer(o as never, site, fetchedAt);
+    const l = mapOlxOffer(o as never, site, fetchedAt, makeByCategory);
     if (l) { console.log(`  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.fuel}/${l.transmission}/${l.drive}/${l.steering} · ${l.location} · ${l.photos.length} Fotos`); continue; }
     const ofr = o as { title?: string; status?: string; params?: Array<{ key: string; value?: unknown }> };
     const keys = (ofr.params ?? []).map((x) => x.key);
@@ -102,9 +108,13 @@ async function probeOlx() {
       await run('J frisch + nur TLS 1.3', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, tls: 'tls13' }));
     }
     try {
-      // wie im Adapter: bis zu sechs Versuche mit wechselnden Header-Sätzen
-      json = await p.get<{ data?: unknown[]; metadata?: unknown }>(url, site);
-      console.log('  ✔ Liste über den Adapter-Abruf geladen');
+      // wie im Adapter (Chrome-TLS-Profil, Wiederholung, bei 400 ohne Serverfilter)
+      const state = { filters: config.olx.serverFilters };
+      const warn: string[] = [];
+      json = (await p.fetchOffers(site, 0, state, warn)) as { data?: unknown[]; metadata?: unknown };
+      json = { ...json, data: (json.data ?? []).slice(0, 5) };
+      console.log(`  ✔ Liste über den Adapter-Abruf geladen${state.filters ? '' : ' (ohne Serverfilter)'}`);
+      for (const w of warn) console.log(`  ⚠ ${w}`);
     } catch (e) {
       console.log('  ✖', e instanceof Error ? e.message.slice(0, 200) : String(e));
       const body = await tryVariants(url, [
@@ -117,11 +127,11 @@ async function probeOlx() {
       else console.log('  Im Browser testen (liefert die Seite dort JSON?):', url);
     }
     if (json) {
-      showOlx(json, site);
-      // Welche Serverfilter der WAF durchlässt (nur zur Information; Standard ist ohne)
-      // Serverfilter über den Adapter-Abruf – welche lässt der WAF durch, wie viele Treffer bleiben?
+      await showOlx(json, site, p);
+      // Serverfilter über den Adapter-Abruf – welche akzeptiert die Seite, wie viele Treffer bleiben?
       const base = p.offersUrl(site, 0, false).replace(/limit=\d+/, 'limit=1');
-      for (const [label, extra] of [['ohne Filter', ''], ['nur Preisfilter', '&filter_float_price%3Afrom=20000'], ['nur Baujahrfilter', '&filter_float_year%3Afrom=2012'], ['Preis+Baujahr', '&filter_float_price%3Afrom=20000&filter_float_year%3Afrom=2012']] as const) {
+      const mp = p.minPrice(site);
+      for (const [label, extra] of [['ohne Filter', ''], [`Preis ab ${mp}`, `&filter_float_price%3Afrom=${mp}`], ['Baujahr ab 2012', '&filter_float_year%3Afrom=2012'], ['Preis+Baujahr', `&filter_float_price%3Afrom=${mp}&filter_float_year%3Afrom=2012`]] as const) {
         try {
           const j = await p.get<{ metadata?: { visible_total_count?: number; total_elements?: number } }>(`${base}${extra}`, site);
           console.log(`  Filter ${label.padEnd(20)} ✔ ${j.metadata?.visible_total_count ?? '?'} Treffer`);
@@ -136,8 +146,8 @@ async function probeOlx() {
  * Breadcrumb-Endpunkt ab und zeigt die Namen; die Zeile mit „Autoturisme“ / „Автомобили“ / „Carros“ ist die gesuchte ID.
  * Über den Adapter-Abruf (Sofort-Wiederholung), 400 ms Pause je Kategorie, Abbruch bei fünf Fehlern in Folge.
  */
-function olxSiteFor(country: string) {
-  return config.olx.sites.find((s) => s.country === country) ?? { country, host: `www.olx.${country}`, categoryId: null, currency: 'EUR', enabled: true };
+function olxSiteFor(country: string): OlxSite {
+  return config.olx.sites.find((s) => s.country === country) ?? { country, host: `www.olx.${country}`, categoryId: null, currency: 'EUR', minPrice: 5000, enabled: true };
 }
 
 async function scanOlxCategories(country: string, from: number, to: number) {

@@ -20,7 +20,7 @@ describe('Süd-/Osteuropa: Länderzuordnung', () => {
 });
 
 describe('OLX mapping (olx.pl)', () => {
-  const site = { country: 'pl', host: 'www.olx.pl', categoryId: 84, currency: 'PLN', enabled: true };
+  const site = { country: 'pl', host: 'www.olx.pl', categoryId: 84, currency: 'PLN', minPrice: 20000, enabled: true };
   const offer = {
     id: 912345678, url: 'https://www.olx.pl/d/oferta/bmw-520d-xdrive-CID5-ID1abc.html', title: 'BMW 520d xDrive Luxury Line, salon PL', created_time: '2026-09-13T08:00:00+02:00', business: true, status: 'active',
     params: [
@@ -119,7 +119,7 @@ describe('OLX mapping (olx.pl)', () => {
   });
 
   it('portugiesische Seite → Südeuropa, EUR', () => {
-    const l = mapOlxOffer({ ...offer, params: offer.params.map((p) => (p.key === 'price' ? { ...p, value: { value: 21500, currency: 'EUR' } } : p)) }, { country: 'pt', host: 'www.olx.pt', categoryId: 1, currency: 'EUR', enabled: true }, NOW, new Map([[183, 'BMW']]));
+    const l = mapOlxOffer({ ...offer, params: offer.params.map((p) => (p.key === 'price' ? { ...p, value: { value: 21500, currency: 'EUR' } } : p)) }, { country: 'pt', host: 'www.olx.pt', categoryId: 1, currency: 'EUR', minPrice: 5000, enabled: true }, NOW, new Map([[183, 'BMW']]));
     assert.equal(l?.market, 'SE');
     assert.equal(l?.currency, 'EUR');
     assert.equal(l?.partnerId, 'adriatica');

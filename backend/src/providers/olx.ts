@@ -43,7 +43,7 @@ const KEYS = {
   engine: ['enginesize', 'engine_size', 'pojemnosc', 'capacitate_motor', 'cilindrada', 'engine_capacity', 'motor'],
   body: ['car_body', 'body', 'caroserie', 'tip_caroserie'],
   drive: ['drive', 'naped', 'tractiune', 'tracao'],
-  condition: ['condition', 'stan', 'stare', 'estado'],
+  condition: ['condition', 'stan', 'stare', 'state', 'estado', 'condicao', 'sastoyanie'],
   steering: ['righthanddrive', 'steering', 'kierownica', 'volan', 'volante'],
 };
 
@@ -101,7 +101,8 @@ export function mapOlxOffer(o: OlxOffer, site: OlxSite, fetchedAt: string, makeB
   const externalId = str(o.id);
   const title = str(o.title).trim();
   const priceParam = (o.params ?? []).find((p) => p.key === 'price');
-  const price = num(priceParam?.value?.value) ?? num(priceParam?.value?.label);
+  const priceRaw = num(priceParam?.value?.value) ?? num(priceParam?.value?.label);
+  const price = priceRaw == null ? null : Math.round(priceRaw); // olx.ro liefert umgerechnete Werte wie 37990.01
   const currency = str(priceParam?.value?.currency || site.currency).toUpperCase();
   const year = paramNum(o, KEYS.year);
   const market = marketForCountry(site.country);
@@ -247,12 +248,33 @@ export class OlxProvider implements MarketProvider {
     throw last ?? new Error(`OLX: keine Antwort (${url})`);
   }
 
-  /** Serverfilter Preis und Baujahr (beide bestätigt, Probe 14.09.2026); zusätzlich wird nach dem Abruf geprüft. */
+  minPrice(site: OlxSite): number {
+    return config.olx.minPriceOverride ?? site.minPrice;
+  }
+
+  /**
+   * Serverfilter Preis und Baujahr (PL/RO/PT bestätigt, Probe 14.09.2026); olx.bg antwortet darauf mit 400
+   * „Request validation“ → fetchSite fällt dann auf die ungefilterte Liste zurück. Nach dem Abruf wird ohnehin geprüft.
+   */
   offersUrl(site: OlxSite, offset: number, withFilters = config.olx.serverFilters): string {
     const p = new URLSearchParams({ category_id: String(site.categoryId), offset: String(offset), limit: String(config.olx.pageSize), sort_by: 'created_at:desc' });
-    if (withFilters && config.olx.minPriceLocal > 0) p.set('filter_float_price:from', String(config.olx.minPriceLocal));
+    if (withFilters && this.minPrice(site) > 0) p.set('filter_float_price:from', String(this.minPrice(site)));
     if (withFilters && config.olx.minYear > 0) p.set('filter_float_year:from', String(config.olx.minYear));
     return `https://${site.host}/api/v1/offers/?${p}`;
+  }
+
+  /** Liste laden; bei 400 (Seite kennt die Filterparameter nicht) ohne Serverfilter wiederholen. */
+  async fetchOffers(site: OlxSite, offset: number, state: { filters: boolean }, warnings?: string[]): Promise<OlxOffersResponse> {
+    try {
+      return await this.get<OlxOffersResponse>(this.offersUrl(site, offset, state.filters), site);
+    } catch (e) {
+      if (state.filters && e instanceof HttpError && e.status === 400) {
+        state.filters = false;
+        warnings?.push(`${site.country.toUpperCase()}: Serverfilter nicht akzeptiert (HTTP 400) – ohne Filter, Mindestpreis/-baujahr nach dem Abruf`);
+        return this.get<OlxOffersResponse>(this.offersUrl(site, offset, false), site);
+      }
+      throw e;
+    }
   }
 
   /** Breadcrumb-Antwort tolerant lesen: `data` kann Liste oder Objekt sein – alle label/name-Werte in Reihenfolge. */
@@ -286,9 +308,10 @@ export class OlxProvider implements MarketProvider {
   async fetchSite(site: OlxSite, fetchedAt: string, warnings: string[]): Promise<Listing[]> {
     const listings: Listing[] = [];
     const makeByCategory = new Map<number, string>();
+    const state = { filters: config.olx.serverFilters };
     let offset = 0;
     for (let page = 0; page < config.olx.pages; page++) {
-      const json = await this.get<OlxOffersResponse>(this.offersUrl(site, offset), site);
+      const json = await this.fetchOffers(site, offset, state, warnings);
       const offers = json.data ?? [];
       if (!offers.length) break;
       // Marken je (Unter-)Kategorie einmal nachschlagen – höchstens ein Aufruf je Kategorie und Lauf
@@ -298,7 +321,7 @@ export class OlxProvider implements MarketProvider {
       }
       for (const o of offers) {
         const l = mapOlxOffer(o, site, fetchedAt, makeByCategory);
-        if (l && l.price >= config.olx.minPriceLocal && l.year >= config.olx.minYear) listings.push(l);
+        if (l && l.price >= this.minPrice(site) && l.year >= config.olx.minYear) listings.push(l);
       }
       offset += offers.length;
       if (!json.links?.next?.href || offers.length < config.olx.pageSize) break;
