@@ -134,12 +134,13 @@ describe('Subito.it mapping', () => {
 });
 
 describe('Sauto.cz mapping', () => {
+  // Struktur wie in der Live-Antwort vom 14.09.2026 (Trefferliste ohne engine_volume, Ausstattung in additional_model_name)
   const item = {
-    id: 214567890, name: 'Škoda Octavia 2.0 TDI Style DSG', price: 489000, seo_name: 'skoda-octavia-2-0-tdi',
-    manufacturer_cb: { id: 93, name: 'Škoda', seo_name: 'skoda' }, model_cb: { id: 707, name: 'Octavia', seo_name: 'octavia' },
-    tachometer: 74500, manufacturing_date: '2020-03-01T00:00:00Z', engine_volume: 1968, engine_power: 110,
-    fuel_cb: { name: 'Nafta' }, gearbox_cb: { name: 'Automatická' }, drive_cb: { name: 'Přední' }, condition_cb: { name: 'Ojeté' },
-    locality: { municipality: 'Brno', district: 'Brno-město', region: 'Jihomoravský kraj' },
+    id: 214567890, name: 'Škoda Octavia, 2.0 TDI Style DSG', additional_model_name: '2.0 TDI Style DSG', price: 489000, seo_name: 'skoda-octavia-2-0-tdi', deal_type: 'sale',
+    manufacturer_cb: { value: 93, name: 'Škoda', seo_name: 'skoda' }, model_cb: { value: 707, name: 'Octavia', seo_name: 'octavia' },
+    tachometer: 74500, manufacturing_date: '2020-01-01', in_operation_date: '2020-03-18', images_total_count: 41,
+    fuel_cb: { name: 'Nafta', seo_name: 'nafta', value: 2 }, gearbox_cb: { name: 'Automatická', seo_name: 'automaticka', value: 3 }, drive_cb: { name: 'Přední' },
+    locality: { municipality: '', district: 'Brno-město', region: 'Jihomoravský kraj', municipality_seo_name: '', district_seo_name: 'brno-mesto' },
     images: [{ url: '//d15-a.sdn.cz/d_15/c_img_QK_Iw/abc123.jpeg' }, { url: 'https://d15-a.sdn.cz/d_15/c_img_QK_Iw/def456.jpeg?fl=exf|res,400,300,1' }],
     premise: { name: 'AutoHaus Brno' },
   };
@@ -160,8 +161,10 @@ describe('Sauto.cz mapping', () => {
     assert.equal(l.fuel, 'Diesel');
     assert.equal(l.transmission, 'Automatic');
     assert.equal(l.drive, 'FWD');
-    assert.equal(l.engineCcm, 1968);
-    assert.equal(l.location, 'Brno');
+    assert.equal(l.engineCcm, null);
+    assert.equal(l.engine, '2.0 L');
+    assert.equal(l.photoCount, 41);
+    assert.equal(l.location, 'Brno-město');
     assert.equal(l.url, 'https://www.sauto.cz/osobni/detail/skoda/octavia/214567890');
     assert.equal(l.photos[0], 'https://d15-a.sdn.cz/d_15/c_img_QK_Iw/abc123.jpeg?fl=exf|res,1024,768,1|jpg,85');
     assert.equal(l.photos[1], 'https://d15-a.sdn.cz/d_15/c_img_QK_Iw/def456.jpeg?fl=exf|res,400,300,1');
@@ -175,6 +178,11 @@ describe('Sauto.cz mapping', () => {
     assert.equal(sautoImage(undefined), null);
     assert.equal(mapSauto({ ...item, manufacturing_date: undefined, in_operation_date: 2017 }, NOW)?.year, 2017);
     assert.equal(mapSauto({ ...item, price: 0 }, NOW), null);
+    assert.equal(mapSauto({ ...item, deal_type: 'lease' }, NOW), null);
+    const withCcm = mapSauto({ ...item, engine_volume: 1968, additional_model_name: '' }, NOW);
+    assert.equal(withCcm?.engineCcm, 1968);
+    assert.equal(withCcm?.engine, '2.0 L');
+    assert.equal(mapSauto({ ...item, additional_model_name: '', name: 'Škoda Octavia, 1,2 TSi DSG' }, NOW)?.trim, '1,2 TSi DSG');
   });
 });
 

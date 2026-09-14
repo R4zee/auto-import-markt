@@ -152,6 +152,26 @@ export function mapOlxOffer(o: OlxOffer, site: OlxSite, fetchedAt: string, makeB
   };
 }
 
+const OLX_LANG: Record<string, string> = { pl: 'pl-PL,pl;q=0.9,en;q=0.8', ro: 'ro-RO,ro;q=0.9,en;q=0.8', bg: 'bg-BG,bg;q=0.9,en;q=0.8', pt: 'pt-PT,pt;q=0.9,en;q=0.8' };
+
+/** Header-Satz, wie ihn der Browser auf der OLX-Seite selbst mitschickt (WAF-Freigabe). */
+export function olxHeaders(site?: OlxSite, variant: 'browser' | 'minimal' | 'json' = 'browser'): Record<string, string> {
+  const origin = site ? `https://${site.host}` : 'https://www.olx.pl';
+  if (variant === 'minimal') return { Accept: 'application/json' };
+  if (variant === 'json') return { Accept: 'application/json', 'User-Agent': config.europe.userAgent, 'Accept-Language': OLX_LANG[site?.country ?? 'pl'] ?? 'en' };
+  return {
+    Accept: 'application/json, text/plain, */*',
+    'Accept-Language': OLX_LANG[site?.country ?? 'pl'] ?? 'en',
+    'User-Agent': config.europe.userAgent,
+    Referer: `${origin}/`,
+    Origin: origin,
+    'Sec-Fetch-Site': 'same-origin',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Dest': 'empty',
+    'x-client': 'DESKTOP',
+  };
+}
+
 export class OlxProvider implements MarketProvider {
   readonly id = 'olx';
   readonly label = 'OLX (PL/RO/BG/PT, Frontend-Endpunkt)';
@@ -160,21 +180,22 @@ export class OlxProvider implements MarketProvider {
     return config.olx.sites.some((s) => s.enabled && s.categoryId != null);
   }
 
-  private http() {
-    return { headers: { Accept: 'application/json', 'Accept-Language': 'en', 'User-Agent': config.europe.userAgent }, proxyUrl: config.europe.proxyUrl || undefined, timeoutMs: 30000 };
+  /** Browser-nahe Header: die OLX-Seiten sitzen hinter CloudFront/WAF und lehnen nackte Clients mit 403 ab */
+  http(site?: OlxSite) {
+    return { headers: olxHeaders(site), proxyUrl: config.europe.proxyUrl || undefined, timeoutMs: 30000 };
   }
 
-  offersUrl(site: OlxSite, offset: number): string {
+  offersUrl(site: OlxSite, offset: number, withFilters = true): string {
     const p = new URLSearchParams({ category_id: String(site.categoryId), offset: String(offset), limit: String(config.olx.pageSize), sort_by: 'created_at:desc' });
-    if (config.olx.minPriceLocal > 0) p.set('filter_float_price:from', String(config.olx.minPriceLocal));
-    if (config.olx.minYear > 0) p.set('filter_float_year:from', String(config.olx.minYear));
+    if (withFilters && config.olx.minPriceLocal > 0) p.set('filter_float_price:from', String(config.olx.minPriceLocal));
+    if (withFilters && config.olx.minYear > 0) p.set('filter_float_year:from', String(config.olx.minYear));
     return `https://${site.host}/api/v1/offers/?${p}`;
   }
 
   async makeForCategory(site: OlxSite, categoryId: number, cache: Map<number, string>): Promise<void> {
     if (cache.has(categoryId)) return;
     try {
-      const json = await getJson<{ data?: Array<{ label?: string; name?: string; category_id?: number; id?: number }> }>(`https://${site.host}/api/v1/offers/metadata/breadcrumbs/?category_id=${categoryId}`, { ...this.http(), retries: 0 });
+      const json = await getJson<{ data?: Array<{ label?: string; name?: string; category_id?: number; id?: number }> }>(`https://${site.host}/api/v1/offers/metadata/breadcrumbs/?category_id=${categoryId}`, { ...this.http(site), retries: 0 });
       const crumbs = json.data ?? [];
       const own = crumbs.find((c) => num(c.category_id ?? c.id) === categoryId) ?? crumbs[crumbs.length - 1];
       cache.set(categoryId, str(own?.label ?? own?.name));
@@ -188,7 +209,7 @@ export class OlxProvider implements MarketProvider {
     const makeByCategory = new Map<number, string>();
     let offset = 0;
     for (let page = 0; page < config.olx.pages; page++) {
-      const json = await getJson<OlxOffersResponse>(this.offersUrl(site, offset), this.http());
+      const json = await getJson<OlxOffersResponse>(this.offersUrl(site, offset), this.http(site));
       const offers = json.data ?? [];
       if (!offers.length) break;
       // Marken je (Unter-)Kategorie einmal nachschlagen – höchstens ein Aufruf je Kategorie und Lauf

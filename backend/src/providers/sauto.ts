@@ -19,9 +19,11 @@ import { makeFromTitle } from './olx.js';
  * Größe per ?fl=…), premise{ name } (Händler), condition_cb{ name }, category{ seo_name }.
  * Detail-URL: https://www.sauto.cz/osobni/detail/<manufacturer seo>/<model seo>/<id>
  */
-export interface SautoCb { id?: number; name?: string; seo_name?: string; value?: string }
+export interface SautoCb { id?: number; name?: string; seo_name?: string; value?: string | number }
 export interface SautoItem {
   id: number | string; name?: string; price?: number | string; seo_name?: string;
+  /** Ausstattungszeile, z. B. "1,2 TSi DSG *KLIMATIZACE*" (Live-Antwort 14.09.2026) */
+  additional_model_name?: string; images_total_count?: number; deal_type?: string; price_by_agreement?: boolean;
   manufacturer_cb?: SautoCb; model_cb?: SautoCb; fuel_cb?: SautoCb; gearbox_cb?: SautoCb; drive_cb?: SautoCb; condition_cb?: SautoCb; category?: SautoCb;
   tachometer?: number | string; manufacturing_date?: string | number; in_operation_date?: string | number;
   engine_volume?: number | string; engine_power?: number | string;
@@ -49,6 +51,7 @@ export function mapSauto(it: SautoItem, fetchedAt: string): Listing | null {
   const price = num(it.price);
   const year = sautoYear(it.manufacturing_date) ?? sautoYear(it.in_operation_date);
   if (!externalId || !title || !price || !year) return null;
+  if (it.deal_type && it.deal_type !== 'sale') return null;
   const make = str(it.manufacturer_cb?.name ?? it.manufacturer_cb?.value) || makeFromTitle(title);
   const model = str(it.model_cb?.name ?? it.model_cb?.value) || title.replace(new RegExp(`^${make.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '').split(/\s+/)[0] || title;
   const fuelText = str(it.fuel_cb?.name);
@@ -57,10 +60,13 @@ export function mapSauto(it: SautoItem, fetchedAt: string): Listing | null {
   const transmission = /manu/i.test(gear) ? 'Manual' : normalizeTransmission(gear || 'automat');
   const ccmRaw = num(it.engine_volume);
   const ccm = fuel === 'Electric' ? null : ccmRaw && ccmRaw > 400 && ccmRaw < 9000 ? Math.round(ccmRaw) : null;
+  // Die Trefferliste liefert keinen Hubraum – Hubraumangabe aus der Ausstattungszeile ("1,2 TSi", "2.0 TDI")
+  const extra = str(it.additional_model_name).trim();
+  const litres = extra.match(/\b(\d)[,.](\d)\b/);
   const driveText = str(it.drive_cb?.name);
   const drive = /4x4|awd|všechna|vsechna|4wd/i.test(`${driveText} ${title}`) ? 'AWD' : /předn|predn/i.test(driveText) ? 'FWD' : /zadn/i.test(driveText) ? 'RWD' : encarDrive(title, make);
   const photos = (it.images ?? []).map((i) => sautoImage(i.url)).filter((p): p is string => !!p);
-  const trim = title.replace(new RegExp(`^${make.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '').replace(new RegExp(`^${model.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '').trim();
+  const trim = extra || title.replace(new RegExp(`^${make.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '').replace(new RegExp(`^${model.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '').replace(/^[,\s]+/, '').trim();
   const mSeo = str(it.manufacturer_cb?.seo_name) || make.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const moSeo = str(it.model_cb?.seo_name) || model.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
@@ -78,7 +84,7 @@ export function mapSauto(it: SautoItem, fetchedAt: string): Listing | null {
     model,
     trim: trim.slice(0, 120),
     km: Math.round(num(it.tachometer) ?? 0),
-    engine: fuel === 'Electric' ? 'EV' : ccm ? `${(ccm / 1000).toFixed(1)} L` : '',
+    engine: fuel === 'Electric' ? 'EV' : ccm ? `${(ccm / 1000).toFixed(1)} L` : litres ? `${litres[1]}.${litres[2]} L` : '',
     engineCcm: ccm,
     co2Gkm: null,
     transmission,
@@ -95,7 +101,7 @@ export function mapSauto(it: SautoItem, fetchedAt: string): Listing | null {
     resaleEur: null,
     partnerId: defaultPartnerFor('EE'),
     photos,
-    photoCount: photos.length,
+    photoCount: Math.max(photos.length, num(it.images_total_count) ?? 0),
     damage: [],
     fetchedAt,
     active: true,

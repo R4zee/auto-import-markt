@@ -121,11 +121,10 @@ export class SubitoProvider implements MarketProvider {
     return { headers: { Accept: 'application/json', 'Accept-Language': 'it', 'User-Agent': config.europe.userAgent, Origin: 'https://www.subito.it', Referer: 'https://www.subito.it/' }, proxyUrl: config.europe.proxyUrl || undefined, timeoutMs: 30000 };
   }
 
+  /** Nur belegte Parameter; Mindestpreis/-baujahr werden nach dem Abruf gefiltert (unbekannte Filterparameter lieferten 0 Treffer). */
   searchUrl(start: number, region?: string): string {
-    const p = new URLSearchParams({ c: '2', t: 's', lim: String(config.subito.pageSize), start: String(start), sort: 'datedesc', qso: 'false', shp: 'false', urg: 'false' });
+    const p = new URLSearchParams({ c: String(config.subito.categoryId), t: 's', lim: String(config.subito.pageSize), start: String(start), sort: 'datedesc' });
     if (region) p.set('r', region);
-    if (config.subito.minPriceEur > 0) p.set('ps', String(config.subito.minPriceEur)); // Preis ab (Filterparameter der Website)
-    if (config.subito.minYear > 0) p.set('rs', String(config.subito.minYear)); // Erstzulassung ab
     return `https://hades.subito.it/v1/search/items?${p}`;
   }
 

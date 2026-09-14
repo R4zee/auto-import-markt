@@ -166,7 +166,7 @@ export const config = {
   europe: {
     /** Optionaler Residential-Proxy, falls eine Seite Rechenzentrums-IPs ablehnt (Form wie ENCAR_PROXY_URL) */
     proxyUrl: env.EUROPE_PROXY_URL ?? '',
-    userAgent: env.EUROPE_USER_AGENT ?? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36',
+    userAgent: env.EUROPE_USER_AGENT ?? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
   },
   olx: {
     enabled: bool(env.OLX_ENABLED, false),
@@ -181,6 +181,8 @@ export const config = {
   },
   subito: {
     enabled: bool(env.SUBITO_ENABLED, false),
+    /** Kategorie (c=…): 2 = Auto laut öffentlichen Scrapern – mit `npm run probe -- subito` prüfen */
+    categoryId: num(env.SUBITO_CATEGORY_ID, 2),
     pages: num(env.SUBITO_PAGES, 30),
     pageSize: Math.min(100, num(env.SUBITO_PAGE_SIZE, 100)),
     /** Regionen-IDs (r=…) – leer = ganz Italien */
