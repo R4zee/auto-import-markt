@@ -177,8 +177,10 @@ export const config = {
     /** Mindestpreis in Landeswährung (0 = aus) und ältestes Baujahr – werden nach dem Abruf geprüft */
     minPriceLocal: num(env.OLX_MIN_PRICE, 20000),
     minYear: num(env.OLX_MIN_YEAR, 2012),
-    /** Baujahr zusätzlich als URL-Parameter senden (lässt der WAF durch; der Preisfilter dagegen nicht) */
+    /** Baujahr zusätzlich als URL-Parameter senden */
     serverYearFilter: bool(env.OLX_SERVER_YEAR_FILTER, true),
+    /** Je Anfrage eine frische Verbindung (der WAF wies wiederverwendete Verbindungen ab) */
+    freshConnection: bool(env.OLX_FRESH_CONNECTION, true),
     delayMs: num(env.OLX_DELAY_MS, 400),
   },
   subito: {

@@ -1,6 +1,6 @@
 import { config } from '../config.js';
 import { allProviders } from '../providers/index.js';
-import { curlFetch, getJson, robustFetch } from '../providers/http.js';
+import { curlFetch, freshFetch, getJson, robustFetch } from '../providers/http.js';
 import { mapOlxOffer, olxHeaders, OlxProvider } from '../providers/olx.js';
 import { mapSauto, SautoProvider } from '../providers/sauto.js';
 import { mapSubito, SubitoProvider } from '../providers/subito.js';
@@ -69,17 +69,22 @@ async function probeOlx() {
     const url = p.offersUrl(site, 0).replace(/limit=\d+/, 'limit=5');
     console.log(url);
     let json: { data?: unknown[]; metadata?: unknown } | null = null;
-    // Wiederholungstest: dieselbe Anfrage sechsmal – zeigt, ob der WAF nur die erste(n) Anfrage(n) abweist
-    const seq: string[] = [];
-    for (let i = 0; i < 6; i++) {
-      try {
-        const res = await robustFetch(url, { headers: olxHeaders(site, 'browser'), timeoutMs: 20000, proxyUrl, nodeOnly: true });
-        await res.text();
-        seq.push(String(res.status));
-      } catch (e) { seq.push(e instanceof Error ? e.name : 'ERR'); }
-      await new Promise((r) => setTimeout(r, 300));
-    }
-    console.log(`  Wiederholungstest (6× browser-Header): ${seq.join(' → ')}`);
+    // Verbindungsexperimente: dieselbe Anfrage 5× je Variante – zeigt, ob Verbindungs-Wiederverwendung die 403 auslöst
+    const run = async (label: string, fn: () => Promise<Response>) => {
+      const seq: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        try { const res = await fn(); await res.text(); seq.push(String(res.status)); } catch (e) { seq.push(e instanceof Error ? e.name : 'ERR'); }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      console.log(`  ${label.padEnd(40)} ${seq.join(' → ')}`);
+    };
+    const hdr = olxHeaders(site, 'browser');
+    console.log('  Verbindungsexperimente:');
+    await run('A gemeinsamer Pool (Standard-fetch)', () => robustFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, nodeOnly: true }));
+    await run('B frische Verbindung je Anfrage', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl }));
+    await run('C frische Verbindung + HTTP/2', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, h2: true }));
+    await run('D Pool + Header "Connection: close"', () => robustFetch(url, { headers: { ...hdr, Connection: 'close' }, timeoutMs: 20000, proxyUrl, nodeOnly: true }));
+    await run('E frisch, ohne eigene Header', () => freshFetch(url, { timeoutMs: 20000, proxyUrl }));
     try {
       // wie im Adapter: bis zu sechs Versuche mit wechselnden Header-Sätzen
       json = await p.get<{ data?: unknown[]; metadata?: unknown }>(url, site);
@@ -98,10 +103,15 @@ async function probeOlx() {
     if (json) {
       showOlx(json, site);
       // Welche Serverfilter der WAF durchlässt (nur zur Information; Standard ist ohne)
+      // Serverfilter über frische Verbindungen (je 3 Versuche) – welche lässt der WAF durch?
       const base = p.offersUrl(site, 0, false).replace(/limit=\d+/, 'limit=1');
-      await tryVariants(`${base}&filter_float_price%3Afrom=20000`, [['nur Preisfilter', olxHeaders(site, 'browser')]]);
-      await tryVariants(`${base}&filter_float_price%3Afrom=20000&filter_float_year%3Afrom=2012`, [['Preis+Baujahr', olxHeaders(site, 'browser')]]);
-      await tryVariants(`${base}&filter_float_year%3Afrom=2012`, [['nur Baujahrfilter', olxHeaders(site, 'browser')]]);
+      for (const [label, extra] of [['nur Preisfilter', '&filter_float_price%3Afrom=20000'], ['nur Baujahrfilter', '&filter_float_year%3Afrom=2012'], ['Preis+Baujahr', '&filter_float_price%3Afrom=20000&filter_float_year%3Afrom=2012']] as const) {
+        const seq: string[] = [];
+        for (let i = 0; i < 3; i++) {
+          try { const res = await freshFetch(`${base}${extra}`, { headers: olxHeaders(site, 'browser'), timeoutMs: 20000, proxyUrl }); const body = await res.text(); seq.push(`${res.status}${res.ok ? ` (${(JSON.parse(body).metadata?.visible_total_count ?? '?')} Treffer)` : ''}`); } catch (e) { seq.push(e instanceof Error ? e.name : 'ERR'); }
+        }
+        console.log(`  Filter ${label.padEnd(20)} ${seq.join(' → ')}`);
+      }
     }
   }
 }

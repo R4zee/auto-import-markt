@@ -71,11 +71,24 @@ function paramNum(o: OlxOffer, keys: string[]): number | null {
   return num(v.value) ?? num(Array.isArray(v.key) ? v.key[0] : v.key) ?? num(v.label);
 }
 
-/** Marke aus Titel: längster bekannter Markenname am Anfang, sonst erstes Wort. */
+/** Verkäufer-Floskeln am Titelanfang (pl/ro/bg/pt/it/cz) */
+const TITLE_PREFIX = /^(?:(?:sprzedam|sprzedaż|na sprzedaż|okazja|pilnie|polecam|super|zamiana|vand|vând|vanzare|vânzare|de vânzare|de vanzare|urgent|ocazie|продавам|продава се|спешно|vendo|vende-se|vende se|oportunidade|prodám|prodam|prodej)\b[\s:,\-–!]*)+/iu;
+
+const CANON: Record<string, string> = { VW: 'Volkswagen', Mercedes: 'Mercedes-Benz', Citroen: 'Citroën', Skoda: 'Škoda' };
+
+/** Marke aus Titel: Floskeln abschneiden, dann frühester bekannter Markenname im Titel, sonst erstes Wort. */
 export function makeFromTitle(title: string): string {
-  const t = title.trim();
-  const hit = KNOWN_MAKES.filter((m) => t.toLowerCase().startsWith(m.toLowerCase() + ' ') || t.toLowerCase() === m.toLowerCase()).sort((a, b) => b.length - a.length)[0];
-  if (hit) return hit === 'VW' ? 'Volkswagen' : hit === 'Mercedes' ? 'Mercedes-Benz' : hit === 'Citroen' ? 'Citroën' : hit === 'Skoda' ? 'Škoda' : hit;
+  const t = title.trim().replace(TITLE_PREFIX, '').trim();
+  const lower = t.toLowerCase();
+  let best: { make: string; at: number } | null = null;
+  for (const m of KNOWN_MAKES) {
+    const re = new RegExp(`(^|[^\\p{L}])${m.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}])`, 'iu');
+    const hit = re.exec(lower);
+    if (!hit) continue;
+    const at = hit.index + hit[1].length;
+    if (!best || at < best.at || (at === best.at && m.length > best.make.length)) best = { make: m, at };
+  }
+  if (best) return CANON[best.make] ?? best.make;
   return t.split(/\s+/)[0] ?? '';
 }
 
@@ -134,7 +147,7 @@ export function mapOlxOffer(o: OlxOffer, site: OlxSite, fetchedAt: string, makeB
   // Ausstattungszeile aus dem Titel: Marke und Modell (auch "RAV4" vs. "RAV-4") vorne entfernen, Verkäufer-Floskeln kürzen
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const loose = (s: string) => s.split('').filter((c) => /[\p{L}\p{N}]/u.test(c)).map((c) => `${esc(c)}[\\s\\-\\.]*`).join('');
-  let rest = title.replace(new RegExp(`^${loose(make)}\\s*`, 'iu'), '');
+  let rest = title.trim().replace(TITLE_PREFIX, '').replace(new RegExp(`^${loose(make)}\\s*`, 'iu'), '');
   if (modelRaw) rest = rest.replace(new RegExp(`^${loose(modelRaw)}\\s*`, 'iu'), '');
   rest = rest.replace(/^[,\-–·|!\s]+/, '').replace(/\s*[|!]+\s*/g, ' · ').trim().slice(0, 80);
   const trimParts = [rest, paramText(o, KEYS.body)].filter(Boolean);
@@ -206,9 +219,9 @@ export class OlxProvider implements MarketProvider {
   }
 
   /**
-   * Abruf mit wechselnden Header-Sätzen: Die OLX-Seiten sitzen hinter CloudFront/WAF. Probe 14.09.2026: nackte
-   * Anfragen und curl bekommen 403; mit Browser-Headern kommt dieselbe Anfrage mal 403, mal 200 (die erste je
-   * Prozess regelmäßig 403). Deshalb bis zu `attempts` Versuche, abwechselnd zwei Header-Sätze, kurze Pause dazwischen.
+   * Abruf über eine frische Verbindung je Anfrage: Die OLX-Seiten sitzen hinter CloudFront/WAF. Probe 14.09.2026:
+   * Header-Satz und URL waren egal, aber jede zweite Node-Anfrage bekam 403 – das Muster wiederverwendeter
+   * Keep-Alive-Verbindungen. Zusätzlich bis zu `attempts` Versuche mit wechselnden Header-Sätzen und kurzer Pause.
    */
   async get<T>(url: string, site: OlxSite, attempts = 6): Promise<T> {
     const variants: Array<'browser' | 'json'> = ['browser', 'json'];
@@ -216,7 +229,7 @@ export class OlxProvider implements MarketProvider {
     for (let i = 0; i < attempts; i++) {
       const headers = olxHeaders(site, variants[i % variants.length]);
       try {
-        const res = await robustFetch(url, { headers, timeoutMs: 30000, proxyUrl: config.europe.proxyUrl || undefined, nodeOnly: true });
+        const res = await robustFetch(url, { headers, timeoutMs: 30000, proxyUrl: config.europe.proxyUrl || undefined, nodeOnly: true, fresh: config.olx.freshConnection });
         if (res.ok) return (await res.json()) as T;
         const body = await res.text().catch(() => '');
         last = new HttpError(res.status, url, body.replace(/\s+/g, ' ').slice(0, 120), null);

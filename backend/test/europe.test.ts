@@ -70,6 +70,11 @@ describe('OLX mapping (olx.pl)', () => {
     assert.equal(makeFromTitle('Alfa Romeo Giulia Veloce'), 'Alfa Romeo');
     assert.equal(makeFromTitle('Skoda Octavia'), 'Škoda');
     assert.equal(makeFromTitle('VW Golf'), 'Volkswagen');
+    assert.equal(makeFromTitle('Sprzedam Dodge CHALLENGER 3.6L'), 'Dodge');
+    assert.equal(makeFromTitle('Okazja! Land Rover Discovery Sport'), 'Land Rover');
+    assert.equal(makeFromTitle('Vând Dacia Logan 2019'), 'Dacia');
+    assert.equal(makeFromTitle('Piękny Mini Cooper S'), 'Mini');
+    assert.equal(makeFromTitle('Microcar Coupe'), 'Microcar');
     const damaged = { ...offer, params: offer.params.map((p) => (p.key === 'condition' ? { ...p, value: { key: 'damaged', label: 'Uszkodzony' } } : p)) };
     assert.equal(mapOlxOffer(damaged, site, NOW), null);
     assert.equal(mapOlxOffer({ ...offer, status: 'removed_by_user' }, site, NOW), null);

@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { fetch as undiciFetch, ProxyAgent, type Dispatcher, type RequestInit as UndiciRequestInit } from 'undici';
+import { Agent, fetch as undiciFetch, ProxyAgent, type Dispatcher, type RequestInit as UndiciRequestInit } from 'undici';
 
 const execFileAsync = promisify(execFile);
 
@@ -73,12 +73,35 @@ export class HttpError extends Error {
  * HTTP-Abruf: zuerst das globale fetch; schlägt es ohne Netzwerkursache fehl (auf Vercel ist
  * fetch instrumentiert und lehnt manche URLs ab), Wiederholung mit dem ungepatchten undici-Client.
  */
-export async function robustFetch(url: string, init: RequestInit & { timeoutMs?: number; proxyUrl?: string; nodeOnly?: boolean } = {}): Promise<Response> {
-  const { timeoutMs = 20000, proxyUrl, nodeOnly = false, ...rest } = init;
+/**
+ * Frische TCP/TLS-Verbindung je Anfrage (keine Wiederverwendung): eigener undici-Agent, der nach der Antwort
+ * geschlossen wird. Der OLX-WAF wies im Test jede zweite Anfrage ab – das Muster passt zu wiederverwendeten
+ * Keep-Alive-Verbindungen. `h2` versucht HTTP/2 wie ein Browser.
+ */
+export async function freshFetch(url: string, init: UndiciRequestInit & { timeoutMs?: number; h2?: boolean; proxyUrl?: string } = {}): Promise<Response> {
+  const { timeoutMs = 20000, h2 = false, proxyUrl, ...rest } = init;
+  const agent: Dispatcher = proxyUrl
+    ? new ProxyAgent({ uri: proxyUrl, connectTimeout: 30000, requestTls: { timeout: 30000 } })
+    : new Agent({ connections: 1, pipelining: 0, keepAliveTimeout: 1, allowH2: h2 });
+  try {
+    const res = await undiciFetch(url, { ...rest, dispatcher: agent, signal: AbortSignal.timeout(timeoutMs) });
+    // Body vollständig lesen, bevor die Verbindung geschlossen wird
+    const buf = new Uint8Array(await res.arrayBuffer());
+    const headers = new Headers();
+    res.headers.forEach((v, k) => headers.set(k, v));
+    return new Response(buf, { status: res.status, headers });
+  } finally {
+    await agent.close().catch(() => undefined);
+  }
+}
+
+export async function robustFetch(url: string, init: RequestInit & { timeoutMs?: number; proxyUrl?: string; nodeOnly?: boolean; fresh?: boolean } = {}): Promise<Response> {
+  const { timeoutMs = 20000, proxyUrl, nodeOnly = false, fresh = false, ...rest } = init;
   // nodeOnly: den curl-Umweg (HTTP_CLIENT=curl, für Encar auf dem Runner) auslassen – OLX weist curl mit 403 ab
   if (process.env.HTTP_CLIENT === 'curl' && !nodeOnly) {
     return curlFetch(url, { proxyUrl, timeoutMs, headers: rest.headers as Record<string, string> | undefined });
   }
+  if (fresh) return freshFetch(url, { ...(rest as UndiciRequestInit), timeoutMs, proxyUrl });
   if (proxyUrl) {
     // Über Proxy immer der undici-Client (das globale fetch kennt keinen Dispatcher)
     const res = await undiciFetch(url, { ...(rest as UndiciRequestInit), dispatcher: proxyDispatcher(proxyUrl), signal: AbortSignal.timeout(timeoutMs) });
