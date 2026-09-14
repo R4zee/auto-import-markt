@@ -78,11 +78,27 @@ export class HttpError extends Error {
  * geschlossen wird. Der OLX-WAF wies im Test jede zweite Anfrage ab – das Muster passt zu wiederverwendeten
  * Keep-Alive-Verbindungen. `h2` versucht HTTP/2 wie ein Browser.
  */
-export async function freshFetch(url: string, init: UndiciRequestInit & { timeoutMs?: number; h2?: boolean; proxyUrl?: string } = {}): Promise<Response> {
-  const { timeoutMs = 20000, h2 = false, proxyUrl, ...rest } = init;
+/** Chrome-ähnliche Cipher-Reihenfolge (ändert den TLS-Fingerprint gegenüber Node-Standard) */
+export const CHROME_CIPHERS = [
+  'TLS_AES_128_GCM_SHA256', 'TLS_AES_256_GCM_SHA384', 'TLS_CHACHA20_POLY1305_SHA256',
+  'ECDHE-ECDSA-AES128-GCM-SHA256', 'ECDHE-RSA-AES128-GCM-SHA256', 'ECDHE-ECDSA-AES256-GCM-SHA384', 'ECDHE-RSA-AES256-GCM-SHA384',
+  'ECDHE-ECDSA-CHACHA20-POLY1305', 'ECDHE-RSA-CHACHA20-POLY1305', 'ECDHE-RSA-AES128-SHA', 'ECDHE-RSA-AES256-SHA',
+  'AES128-GCM-SHA256', 'AES256-GCM-SHA384', 'AES128-SHA', 'AES256-SHA',
+].join(':');
+
+export type TlsProfile = 'node' | 'chrome' | 'tls13';
+
+export function tlsConnectOptions(profile: TlsProfile): Record<string, unknown> {
+  if (profile === 'chrome') return { ciphers: CHROME_CIPHERS, ecdhCurve: 'X25519:P-256:P-384', sigalgs: 'ecdsa_secp256r1_sha256:rsa_pss_rsae_sha256:rsa_pkcs1_sha256:ecdsa_secp384r1_sha384:rsa_pss_rsae_sha384:rsa_pkcs1_sha384:rsa_pss_rsae_sha512:rsa_pkcs1_sha512' };
+  if (profile === 'tls13') return { minVersion: 'TLSv1.3', maxVersion: 'TLSv1.3' };
+  return {};
+}
+
+export async function freshFetch(url: string, init: UndiciRequestInit & { timeoutMs?: number; h2?: boolean; proxyUrl?: string; tls?: TlsProfile } = {}): Promise<Response> {
+  const { timeoutMs = 20000, h2 = false, proxyUrl, tls = 'node', ...rest } = init;
   const agent: Dispatcher = proxyUrl
     ? new ProxyAgent({ uri: proxyUrl, connectTimeout: 30000, requestTls: { timeout: 30000 } })
-    : new Agent({ connections: 1, pipelining: 0, keepAliveTimeout: 1, allowH2: h2 });
+    : new Agent({ connections: 1, pipelining: 0, keepAliveTimeout: 1, allowH2: h2, connect: { ...tlsConnectOptions(tls), timeout: timeoutMs } });
   try {
     const res = await undiciFetch(url, { ...rest, dispatcher: agent, signal: AbortSignal.timeout(timeoutMs) });
     // Body vollständig lesen, bevor die Verbindung geschlossen wird

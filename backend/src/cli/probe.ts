@@ -11,6 +11,7 @@ import { mapSubito, SubitoProvider } from '../providers/subito.js';
  * Rechner in einer Minute prüfen, ob Endpunkt, Kategorie-IDs und Feldnamen stimmen.
  *
  *   npm run probe -- olx        (alle konfigurierten OLX-Seiten, je 5 Inserate; bei 403 mehrere Header-Varianten)
+ *   npm run probe -- olx-scan ro [120]   (Kategorienamen 1…120 der Seite olx.ro – Pkw-Kategorie-ID finden)
  *   npm run probe -- subito
  *   npm run probe -- sauto
  *   npm run probe -- <provider> (jeder andere Provider: fetchAll mit Ausgabe der ersten 3 Inserate)
@@ -79,12 +80,22 @@ async function probeOlx() {
       console.log(`  ${label.padEnd(40)} ${seq.join(' → ')}`);
     };
     const hdr = olxHeaders(site, 'browser');
-    console.log('  Verbindungsexperimente:');
-    await run('A gemeinsamer Pool (Standard-fetch)', () => robustFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, nodeOnly: true }));
-    await run('B frische Verbindung je Anfrage', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl }));
-    await run('C frische Verbindung + HTTP/2', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, h2: true }));
-    await run('D Pool + Header "Connection: close"', () => robustFetch(url, { headers: { ...hdr, Connection: 'close' }, timeoutMs: 20000, proxyUrl, nodeOnly: true }));
-    await run('E frisch, ohne eigene Header', () => freshFetch(url, { timeoutMs: 20000, proxyUrl }));
+    console.log('  Verbindungsexperimente (Lauf 5: frisch = immer 403, Pool = 200 nur direkt nach einem 403):');
+    const pair = async (label: string, mk: () => Promise<Response>) => {
+      // Schlag auf Schlag: zwei Anfragen ohne Pause, dann 1 s Pause – dreimal
+      const seq: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 2; j++) { try { const r = await mk(); await r.text(); seq.push(String(r.status)); } catch (e) { seq.push(e instanceof Error ? e.name : 'ERR'); } }
+        seq.push('|');
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      console.log(`  ${label.padEnd(40)} ${seq.join(' ')}`);
+    };
+    await pair('F Pool, Paare ohne Pause', () => robustFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, nodeOnly: true }));
+    await pair('G Pool, Paare, ohne eigene Header', () => robustFetch(url, { timeoutMs: 20000, proxyUrl, nodeOnly: true }));
+    await run('H frisch + Chrome-TLS-Profil', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, tls: 'chrome' }));
+    await run('I frisch + Chrome-TLS + HTTP/2', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, tls: 'chrome', h2: true }));
+    await run('J frisch + nur TLS 1.3', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, tls: 'tls13' }));
     try {
       // wie im Adapter: bis zu sechs Versuche mit wechselnden Header-Sätzen
       json = await p.get<{ data?: unknown[]; metadata?: unknown }>(url, site);
@@ -103,16 +114,41 @@ async function probeOlx() {
     if (json) {
       showOlx(json, site);
       // Welche Serverfilter der WAF durchlässt (nur zur Information; Standard ist ohne)
-      // Serverfilter über frische Verbindungen (je 3 Versuche) – welche lässt der WAF durch?
+      // Serverfilter über den Adapter-Abruf – welche lässt der WAF durch, wie viele Treffer bleiben?
       const base = p.offersUrl(site, 0, false).replace(/limit=\d+/, 'limit=1');
-      for (const [label, extra] of [['nur Preisfilter', '&filter_float_price%3Afrom=20000'], ['nur Baujahrfilter', '&filter_float_year%3Afrom=2012'], ['Preis+Baujahr', '&filter_float_price%3Afrom=20000&filter_float_year%3Afrom=2012']] as const) {
-        const seq: string[] = [];
-        for (let i = 0; i < 3; i++) {
-          try { const res = await freshFetch(`${base}${extra}`, { headers: olxHeaders(site, 'browser'), timeoutMs: 20000, proxyUrl }); const body = await res.text(); seq.push(`${res.status}${res.ok ? ` (${(JSON.parse(body).metadata?.visible_total_count ?? '?')} Treffer)` : ''}`); } catch (e) { seq.push(e instanceof Error ? e.name : 'ERR'); }
-        }
-        console.log(`  Filter ${label.padEnd(20)} ${seq.join(' → ')}`);
+      for (const [label, extra] of [['ohne Filter', ''], ['nur Preisfilter', '&filter_float_price%3Afrom=20000'], ['nur Baujahrfilter', '&filter_float_year%3Afrom=2012'], ['Preis+Baujahr', '&filter_float_price%3Afrom=20000&filter_float_year%3Afrom=2012']] as const) {
+        try {
+          const j = await p.get<{ metadata?: { visible_total_count?: number; total_elements?: number } }>(`${base}${extra}`, site);
+          console.log(`  Filter ${label.padEnd(20)} ✔ ${j.metadata?.visible_total_count ?? '?'} Treffer`);
+        } catch (e) { console.log(`  Filter ${label.padEnd(20)} ✖ ${e instanceof Error ? e.message.slice(0, 60) : String(e)}`); }
       }
     }
+  }
+}
+
+/**
+ * Pkw-Kategorie einer OLX-Seite finden: `npm run probe -- olx-scan ro` fragt die Kategorien 1…N nacheinander über den
+ * Breadcrumb-Endpunkt ab und zeigt die Namen; die Zeile mit „Autoturisme“ / „Автомобили“ / „Carros“ ist die gesuchte ID.
+ * Über den Adapter-Abruf (Sofort-Wiederholung), 400 ms Pause je Kategorie, Abbruch bei fünf Fehlern in Folge.
+ */
+async function scanOlxCategories(country: string, max: number) {
+  const site = config.olx.sites.find((s) => s.country === country) ?? { country, host: `www.olx.${country}`, categoryId: null, currency: 'EUR', enabled: true };
+  const p = new OlxProvider();
+  console.log(`\n=== OLX ${country.toUpperCase()} · ${site.host} · Kategorien 1–${max} über /api/v1/offers/metadata/breadcrumbs/`);
+  let failures = 0;
+  for (let id = 1; id <= max; id++) {
+    try {
+      const json = await p.get<{ data?: Array<{ label?: string; name?: string; category_id?: number; id?: number }> }>(`https://${site.host}/api/v1/offers/metadata/breadcrumbs/?category_id=${id}`, site, 4);
+      failures = 0;
+      const chain = (json.data ?? []).map((c) => c.label ?? c.name ?? '').filter(Boolean).join(' › ');
+      if (chain) console.log(`  ${String(id).padStart(4)}  ${chain}`);
+    } catch (e) {
+      failures++;
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/HTTP 404|HTTP 400/.test(msg)) console.log(`  ${String(id).padStart(4)}  ✖ ${msg.slice(0, 80)}`);
+      if (failures >= 5 && !/HTTP 404|HTTP 400/.test(msg)) { console.log('  Abbruch: fünf Fehler in Folge (WAF?) – später erneut versuchen'); break; }
+    }
+    await new Promise((r) => setTimeout(r, 400));
   }
 }
 
@@ -162,6 +198,7 @@ async function probeSauto() {
 
 try {
   if (name === 'olx') await probeOlx();
+  else if (name === 'olx-scan') await scanOlxCategories((process.argv[3] ?? 'ro').toLowerCase(), Number(process.argv[4] ?? 120));
   else if (name === 'subito') await probeSubito();
   else if (name === 'sauto') await probeSauto();
   else {

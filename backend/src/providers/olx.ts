@@ -147,8 +147,9 @@ export function mapOlxOffer(o: OlxOffer, site: OlxSite, fetchedAt: string, makeB
   // Ausstattungszeile aus dem Titel: Marke und Modell (auch "RAV4" vs. "RAV-4") vorne entfernen, Verkäufer-Floskeln kürzen
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const loose = (s: string) => s.split('').filter((c) => /[\p{L}\p{N}]/u.test(c)).map((c) => `${esc(c)}[\\s\\-\\.]*`).join('');
-  let rest = title.trim().replace(TITLE_PREFIX, '').replace(new RegExp(`^${loose(make)}\\s*`, 'iu'), '');
-  if (modelRaw) rest = rest.replace(new RegExp(`^${loose(modelRaw)}\\s*`, 'iu'), '');
+  // Marke und Modell werden beim ersten Vorkommen entfernt (auch nach Emoji oder Floskel), sonst bliebe "Nissan Qashqai 1.6 …" doppelt
+  let rest = title.trim().replace(TITLE_PREFIX, '').replace(new RegExp(`(^|[^\\p{L}])${loose(make)}\\s*`, 'iu'), '$1');
+  if (modelRaw) rest = rest.replace(new RegExp(`(^|[^\\p{L}\\p{N}])${loose(modelRaw)}(?![\\p{L}\\p{N}])\\s*`, 'iu'), '$1');
   rest = rest.replace(/^[,\-–·|!\s]+/, '').replace(/\s*[|!]+\s*/g, ' · ').trim().slice(0, 80);
   const trimParts = [rest, paramText(o, KEYS.body)].filter(Boolean);
 
@@ -219,9 +220,10 @@ export class OlxProvider implements MarketProvider {
   }
 
   /**
-   * Abruf über eine frische Verbindung je Anfrage: Die OLX-Seiten sitzen hinter CloudFront/WAF. Probe 14.09.2026:
-   * Header-Satz und URL waren egal, aber jede zweite Node-Anfrage bekam 403 – das Muster wiederverwendeter
-   * Keep-Alive-Verbindungen. Zusätzlich bis zu `attempts` Versuche mit wechselnden Header-Sätzen und kurzer Pause.
+   * Abruf über den gemeinsamen Verbindungspool mit sofortiger Wiederholung. Befund der Proben 14.09.2026 (CloudFront-WAF):
+   * frische Verbindungen bekommen durchgehend 403, ebenso Wiederholungen mit Pause; ein 200 kam in jedem Lauf nur für
+   * die Anfrage, die ohne Pause direkt auf einen 403 im selben Pool folgte (vermutlich TLS-Sitzungswiederaufnahme →
+   * anderer Fingerprint). Also: bis zu `attempts` Versuche Schlag auf Schlag, ohne Pause nach 403.
    */
   async get<T>(url: string, site: OlxSite, attempts = 6): Promise<T> {
     const variants: Array<'browser' | 'json'> = ['browser', 'json'];
@@ -234,11 +236,12 @@ export class OlxProvider implements MarketProvider {
         const body = await res.text().catch(() => '');
         last = new HttpError(res.status, url, body.replace(/\s+/g, ' ').slice(0, 120), null);
         if (res.status !== 403 && res.status !== 429 && res.status < 500) throw last;
+        if (res.status === 429 || res.status >= 500) await sleep(1000 + i * 500);
       } catch (e) {
         if (e instanceof HttpError && e.status !== 403 && e.status !== 429 && e.status < 500) throw e;
         last = e instanceof Error ? e : new Error(String(e));
+        await sleep(300);
       }
-      await sleep(300 + i * 200);
     }
     throw last ?? new Error(`OLX: keine Antwort (${url})`);
   }

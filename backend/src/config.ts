@@ -179,8 +179,8 @@ export const config = {
     minYear: num(env.OLX_MIN_YEAR, 2012),
     /** Baujahr zusätzlich als URL-Parameter senden */
     serverYearFilter: bool(env.OLX_SERVER_YEAR_FILTER, true),
-    /** Je Anfrage eine frische Verbindung (der WAF wies wiederverwendete Verbindungen ab) */
-    freshConnection: bool(env.OLX_FRESH_CONNECTION, true),
+    /** Je Anfrage eine frische Verbindung – im Test durchgehend 403, deshalb aus; der Pool mit Sofort-Wiederholung kommt durch */
+    freshConnection: bool(env.OLX_FRESH_CONNECTION, false),
     delayMs: num(env.OLX_DELAY_MS, 400),
   },
   subito: {
