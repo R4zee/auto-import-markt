@@ -32,18 +32,28 @@ export interface OlxOffer {
   status?: string;
 }
 export interface OlxOffersResponse { data?: OlxOffer[]; metadata?: { total_elements?: number; visible_total_count?: number }; links?: { next?: { href?: string } } }
+export type OlxFilterLevel = 'both' | 'price' | 'none';
 
+/**
+ * Parameter-Schlüssel je Land (Live-Proben 14.09.2026):
+ *   PL: model, year, milage, petrol, transmission, enginesize, enginepower, drive, righthanddrive, car_body, condition
+ *   RO: model, year, rulaj_pana, petrol, gearbox, enginesize, engine_power, car_body, state
+ *   PT: modelo, year, quilometros, combustivel, gearbox, engine_power, body_type, condicao
+ *   BG: model, auto_make_year, auto_mileage, auto_engine_type, auto_transmission_type, horsepower, coupe, technical_condition
+ * Zuerst exakter Schlüssel, dann Wortsegment (getrennt durch _ oder -), zuletzt Teilstring ab 5 Zeichen –
+ * sonst fand "an" (RO Baujahr) in "eurostandard" und "make" in "auto_make_year".
+ */
 const KEYS = {
   make: ['make', 'marka', 'marca', 'brand', 'car_brand', 'manufacturer'],
   model: ['model', 'modelo', 'car_model'],
-  year: ['year', 'rok_produkcji', 'an', 'ano', 'godina', 'year_of_production'],
-  km: ['milage', 'mileage', 'przebieg', 'rulaj', 'probeg', 'quilometros', 'kilometros', 'km'],
-  fuel: ['petrol', 'fuel', 'paliwo', 'combustibil', 'gorivo', 'combustivel', 'fuel_type'],
-  transmission: ['transmission', 'skrzynia', 'cutie_de_viteze', 'skorosti', 'caixa', 'gearbox'],
+  year: ['year', 'auto_make_year', 'rok_produkcji', 'an', 'ano', 'godina', 'year_of_production'],
+  km: ['milage', 'mileage', 'auto_mileage', 'przebieg', 'rulaj', 'rulaj_pana', 'probeg', 'quilometros', 'kilometros', 'km'],
+  fuel: ['petrol', 'fuel', 'auto_engine_type', 'engine_type', 'paliwo', 'combustibil', 'gorivo', 'dvigatel', 'combustivel', 'fuel_type'],
+  transmission: ['transmission', 'auto_transmission_type', 'skrzynia', 'cutie_de_viteze', 'skorosti', 'caixa', 'gearbox'],
   engine: ['enginesize', 'engine_size', 'pojemnosc', 'capacitate_motor', 'cilindrada', 'engine_capacity', 'motor'],
-  body: ['car_body', 'body', 'caroserie', 'tip_caroserie'],
+  body: ['car_body', 'body_type', 'body', 'caroserie', 'tip_caroserie', 'coupe'],
   drive: ['drive', 'naped', 'tractiune', 'tracao'],
-  condition: ['condition', 'stan', 'stare', 'state', 'estado', 'condicao', 'sastoyanie'],
+  condition: ['condition', 'technical_condition', 'stan', 'stare', 'state', 'estado', 'condicao', 'sastoyanie'],
   steering: ['righthanddrive', 'steering', 'kierownica', 'volan', 'volante'],
 };
 
@@ -51,7 +61,11 @@ const KNOWN_MAKES = ['Alfa Romeo', 'Aston Martin', 'Audi', 'Bentley', 'BMW', 'Ca
 
 function param(o: OlxOffer, keys: string[]): OlxParam | undefined {
   const ps = o.params ?? [];
-  return ps.find((p) => keys.includes(p.key.toLowerCase())) ?? ps.find((p) => keys.some((k) => p.key.toLowerCase().includes(k)));
+  const exact = ps.find((p) => keys.includes(p.key.toLowerCase()));
+  if (exact) return exact;
+  const bySegment = ps.find((p) => { const segs = p.key.toLowerCase().split(/[_-]+/); return keys.some((k) => segs.includes(k)); });
+  if (bySegment) return bySegment;
+  return ps.find((p) => keys.some((k) => k.length >= 5 && p.key.toLowerCase().includes(k)));
 }
 function paramText(o: OlxOffer, keys: string[]): string {
   const p = param(o, keys);
@@ -116,8 +130,9 @@ export function mapOlxOffer(o: OlxOffer, site: OlxSite, fetchedAt: string, makeB
     || (!condKey && /uszkodzon|damaged|avariat|повреден|acidentad|salvage/.test(condLabel) && !/^(nie|not|ne|non|não|nao|не)/.test(condLabel));
   if (damaged) return null;
 
+  // Marke: Unterkategorie (Breadcrumb) vor Parameter vor Titel – auf allen vier Seiten ist die Marke eine Unterkategorie
   const categoryId = num(o.category?.id);
-  let make = paramText(o, KEYS.make) || (categoryId != null ? makeByCategory.get(categoryId) : '') || makeFromTitle(title);
+  let make = (categoryId != null ? makeByCategory.get(categoryId) : '') || paramText(o, KEYS.make) || makeFromTitle(title);
   if (make.toLowerCase() === 'inne' || make.toLowerCase() === 'other' || make.toLowerCase() === 'altele') make = makeFromTitle(title);
   const modelRaw = paramText(o, KEYS.model);
   const model = modelRaw && !/^(inn[ey]|other|altele|outro)$/i.test(modelRaw) ? modelRaw : title.replace(new RegExp(`^${make.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '').split(/[\s,·|/-]+/)[0] || title;
@@ -160,7 +175,7 @@ export function mapOlxOffer(o: OlxOffer, site: OlxSite, fetchedAt: string, makeB
     externalId,
     market,
     country: site.country,
-    location: str(o.location?.city?.name) || str(o.location?.region?.name),
+    location: (str(o.location?.city?.name) || str(o.location?.region?.name)).replace(/^(гр\.|с\.|обл\.|Област)\s*/i, '').trim(),
     offerType: 'fixed',
     url: str(o.url) || null,
     year,
@@ -253,27 +268,30 @@ export class OlxProvider implements MarketProvider {
   }
 
   /**
-   * Serverfilter Preis und Baujahr (PL/RO/PT bestätigt, Probe 14.09.2026); olx.bg antwortet darauf mit 400
-   * „Request validation“ → fetchSite fällt dann auf die ungefilterte Liste zurück. Nach dem Abruf wird ohnehin geprüft.
+   * Serverfilter: Preis und Baujahr (PL/RO/PT bestätigt, Probe 14.09.2026). olx.bg kennt den Baujahrfilter nicht
+   * (HTTP 400 „Request validation“), den Preisfilter schon → fetchOffers stuft ab: beide → nur Preis → keiner.
+   * Nach dem Abruf wird ohnehin geprüft.
    */
-  offersUrl(site: OlxSite, offset: number, withFilters = config.olx.serverFilters): string {
+  offersUrl(site: OlxSite, offset: number, filters: OlxFilterLevel = config.olx.serverFilters ? 'both' : 'none'): string {
     const p = new URLSearchParams({ category_id: String(site.categoryId), offset: String(offset), limit: String(config.olx.pageSize), sort_by: 'created_at:desc' });
-    if (withFilters && this.minPrice(site) > 0) p.set('filter_float_price:from', String(this.minPrice(site)));
-    if (withFilters && config.olx.minYear > 0) p.set('filter_float_year:from', String(config.olx.minYear));
+    if (filters !== 'none' && this.minPrice(site) > 0) p.set('filter_float_price:from', String(this.minPrice(site)));
+    if (filters === 'both' && config.olx.minYear > 0) p.set('filter_float_year:from', String(config.olx.minYear));
     return `https://${site.host}/api/v1/offers/?${p}`;
   }
 
-  /** Liste laden; bei 400 (Seite kennt die Filterparameter nicht) ohne Serverfilter wiederholen. */
-  async fetchOffers(site: OlxSite, offset: number, state: { filters: boolean }, warnings?: string[]): Promise<OlxOffersResponse> {
-    try {
-      return await this.get<OlxOffersResponse>(this.offersUrl(site, offset, state.filters), site);
-    } catch (e) {
-      if (state.filters && e instanceof HttpError && e.status === 400) {
-        state.filters = false;
-        warnings?.push(`${site.country.toUpperCase()}: Serverfilter nicht akzeptiert (HTTP 400) – ohne Filter, Mindestpreis/-baujahr nach dem Abruf`);
-        return this.get<OlxOffersResponse>(this.offersUrl(site, offset, false), site);
+  /** Liste laden; bei 400 (Seite kennt einen Filterparameter nicht) mit weniger Serverfiltern wiederholen. */
+  async fetchOffers(site: OlxSite, offset: number, state: { filters: OlxFilterLevel }, warnings?: string[]): Promise<OlxOffersResponse> {
+    for (;;) {
+      try {
+        return await this.get<OlxOffersResponse>(this.offersUrl(site, offset, state.filters), site);
+      } catch (e) {
+        if (state.filters !== 'none' && e instanceof HttpError && e.status === 400) {
+          state.filters = state.filters === 'both' ? 'price' : 'none';
+          warnings?.push(`${site.country.toUpperCase()}: Serverfilter nicht akzeptiert (HTTP 400) → ${state.filters === 'price' ? 'nur Preisfilter' : 'ohne Serverfilter'}, Rest nach dem Abruf`);
+          continue;
+        }
+        throw e;
       }
-      throw e;
     }
   }
 
@@ -308,7 +326,7 @@ export class OlxProvider implements MarketProvider {
   async fetchSite(site: OlxSite, fetchedAt: string, warnings: string[]): Promise<Listing[]> {
     const listings: Listing[] = [];
     const makeByCategory = new Map<number, string>();
-    const state = { filters: config.olx.serverFilters };
+    const state: { filters: OlxFilterLevel } = { filters: config.olx.serverFilters ? 'both' : 'none' };
     let offset = 0;
     for (let page = 0; page < config.olx.pages; page++) {
       const json = await this.fetchOffers(site, offset, state, warnings);

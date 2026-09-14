@@ -115,7 +115,7 @@ export interface OlxSite {
 const OLX_DEFAULT_SITES: OlxSite[] = [
   { country: 'pl', host: 'www.olx.pl', categoryId: 84, currency: 'PLN', minPrice: 20000, enabled: true }, // Motoryzacja › Samochody osobowe (Live-Probe 14.09.2026)
   { country: 'ro', host: 'www.olx.ro', categoryId: 84, currency: 'EUR', minPrice: 5000, enabled: true }, // Auto, moto si ambarcatiuni › Autoturisme; Preise in EUR (Live-Probe 14.09.2026)
-  { country: 'bg', host: 'www.olx.bg', categoryId: 1117, currency: 'BGN', minPrice: 10000, enabled: true }, // Автомобили, каравани, лодки › Автомобили и Джипове (Kategorie-Scan 14.09.2026)
+  { country: 'bg', host: 'www.olx.bg', categoryId: 1117, currency: 'EUR', minPrice: 5000, enabled: true }, // Автомобили, каравани, лодки › Автомобили и Джипове; Preise in EUR (Live-Probe 14.09.2026)
   { country: 'pt', host: 'www.olx.pt', categoryId: 378, currency: 'EUR', minPrice: 5000, enabled: true }, // Carros, motos e barcos › Carros; Preise in EUR (Live-Probe 14.09.2026)
 ];
 

@@ -1,7 +1,7 @@
 import { config, type OlxSite } from '../config.js';
 import { allProviders } from '../providers/index.js';
 import { curlFetch, freshFetch, getJson, robustFetch } from '../providers/http.js';
-import { mapOlxOffer, olxHeaders, OlxProvider } from '../providers/olx.js';
+import { mapOlxOffer, olxHeaders, OlxProvider, type OlxFilterLevel } from '../providers/olx.js';
 import { mapSauto, SautoProvider } from '../providers/sauto.js';
 import { mapSubito, SubitoProvider } from '../providers/subito.js';
 
@@ -109,11 +109,11 @@ async function probeOlx() {
     }
     try {
       // wie im Adapter (Chrome-TLS-Profil, Wiederholung, bei 400 ohne Serverfilter)
-      const state = { filters: config.olx.serverFilters };
+      const state: { filters: OlxFilterLevel } = { filters: config.olx.serverFilters ? 'both' : 'none' };
       const warn: string[] = [];
       json = (await p.fetchOffers(site, 0, state, warn)) as { data?: unknown[]; metadata?: unknown };
       json = { ...json, data: (json.data ?? []).slice(0, 5) };
-      console.log(`  ✔ Liste über den Adapter-Abruf geladen${state.filters ? '' : ' (ohne Serverfilter)'}`);
+      console.log(`  ✔ Liste über den Adapter-Abruf geladen (Serverfilter: ${state.filters})`);
       for (const w of warn) console.log(`  ⚠ ${w}`);
     } catch (e) {
       console.log('  ✖', e instanceof Error ? e.message.slice(0, 200) : String(e));
@@ -129,7 +129,7 @@ async function probeOlx() {
     if (json) {
       await showOlx(json, site, p);
       // Serverfilter über den Adapter-Abruf – welche akzeptiert die Seite, wie viele Treffer bleiben?
-      const base = p.offersUrl(site, 0, false).replace(/limit=\d+/, 'limit=1');
+      const base = p.offersUrl(site, 0, 'none').replace(/limit=\d+/, 'limit=1');
       const mp = p.minPrice(site);
       for (const [label, extra] of [['ohne Filter', ''], [`Preis ab ${mp}`, `&filter_float_price%3Afrom=${mp}`], ['Baujahr ab 2012', '&filter_float_year%3Afrom=2012'], ['Preis+Baujahr', `&filter_float_price%3Afrom=${mp}&filter_float_year%3Afrom=2012`]] as const) {
         try {

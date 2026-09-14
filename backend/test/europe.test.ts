@@ -288,3 +288,44 @@ describe('Partner-Feed mapping (Süd-/Osteuropa)', () => {
     assert.equal(l?.coc, false);
   });
 });
+
+describe('OLX mapping (olx.bg, Live-Antwort 14.09.2026)', () => {
+  const site = { country: 'bg', host: 'www.olx.bg', categoryId: 1117, currency: 'EUR', minPrice: 5000, enabled: true };
+  const offer = {
+    id: 148476391, url: 'https://www.olx.bg/d/ad/opel-meriva-2011-1-4-turbo-CID360-IDa2Zuw.html', title: 'Opel Meriva 2011, 1.4 turbo', status: 'active',
+    params: [
+      { key: 'coupe', name: 'Купе', type: 'select', value: { key: 'van', label: 'Ван' } },
+      { key: 'eurostandard', name: 'Евростандарт', type: 'select', value: { key: 'euro-5', label: 'Евро 5' } },
+      { key: 'model', name: 'Модел', type: 'select', value: { key: 'meriva', label: 'Meriva' } },
+      { key: 'auto_engine_type', name: 'Двигател', type: 'select', value: { key: 'benzinov', label: 'Бензин' } },
+      { key: 'auto_transmission_type', name: 'Скоростна кутия', type: 'select', value: { key: 'rchna', label: 'Ръчна' } },
+      { key: 'auto_make_year', name: 'Година на производство', type: 'input', value: { key: '2011', label: '2011 г.' } },
+      { key: 'auto_mileage', name: 'Пробег', type: 'input', value: { key: '222500', label: '222500 км.' } },
+      { key: 'price', name: 'Цена', type: 'price', value: { value: 3400, currency: 'EUR', label: '3400 €' } },
+      { key: 'horsepower', name: 'Мощност (к.с)', type: 'input', value: { key: '120', label: '120 ' } },
+      { key: 'technical_condition', name: 'Техническо състояние', type: 'select', value: { key: 'used', label: 'употребяван' } },
+    ],
+    location: { city: { name: 'гр. Варна' }, region: { name: 'Област Варна' } },
+    photos: [{ link: 'https://frankfurt.apollo.olxcdn.com:443/v1/files/1ehlpt3wx2bx2-BG/image;s={width}x{height}' }],
+    category: { id: 1162 },
+  };
+
+  it('liest die bulgarischen Schlüssel (auto_make_year, auto_mileage, auto_engine_type) und lässt sich nicht von eurostandard täuschen', () => {
+    const l = mapOlxOffer(offer, site, NOW, new Map([[1162, 'Opel']]));
+    assert.ok(l);
+    assert.equal(l.make, 'Opel');
+    assert.equal(l.model, 'Meriva');
+    assert.equal(l.year, 2011);
+    assert.equal(l.km, 222500);
+    assert.equal(l.price, 3400);
+    assert.equal(l.currency, 'EUR');
+    assert.equal(l.fuel, 'Petrol');
+    assert.equal(l.transmission, 'Manual');
+    assert.equal(l.location, 'Варна');
+    assert.equal(l.market, 'EE');
+    const ev = mapOlxOffer({ ...offer, title: 'Рено Зое R135', params: offer.params.map((p) => (p.key === 'auto_engine_type' ? { ...p, value: { key: 'elektricheski', label: 'Електрически' } } : p.key === 'auto_transmission_type' ? { ...p, value: { key: 'avtomatichna', label: 'Автоматична' } } : p)) }, site, NOW, new Map([[1162, 'Renault']]));
+    assert.equal(ev?.make, 'Renault');
+    assert.equal(ev?.fuel, 'Electric');
+    assert.equal(ev?.transmission, 'Automatic');
+  });
+});
