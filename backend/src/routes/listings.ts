@@ -5,6 +5,7 @@ import type { ListingQuery } from '../domain/types.js';
 import { listingsRepo, partnersRepo } from '../repositories/listings.js';
 import { decorate, search } from '../services/catalog.js';
 import { getFx } from '../services/fx.js';
+import { publicCache } from '../services/httpCache.js';
 import { referenceEnabled, referencePrices } from '../services/reference.js';
 
 const csv = (v: unknown) => (typeof v === 'string' && v.length ? v.split(',').map((s) => s.trim()).filter(Boolean) : []);
@@ -34,7 +35,6 @@ export async function listingRoutes(app: FastifyInstance): Promise<void> {
     const parsed = querySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_query', issues: parsed.error.issues });
     const p = parsed.data;
-    await getFx();
     const q: ListingQuery = {
       q: p.q,
       offer: p.offer,
@@ -54,24 +54,28 @@ export async function listingRoutes(app: FastifyInstance): Promise<void> {
       page: p.page,
       pageSize: p.pageSize,
     };
-    return search(q);
+    // Kurse parallel zur Datenbankabfrage laden (die Kalkulation braucht sie erst beim Dekorieren)
+    const [, result] = await Promise.all([getFx(), search(q)]);
+    publicCache(reply);
+    return result;
   });
 
   /** Mehrere Listings auf einmal (Merkliste / Vergleich) – vor der :id-Route registrieren */
-  app.get<{ Querystring: { ids?: string; dest?: string } }>('/api/listings/batch', async (req) => {
-    await getFx();
+  app.get<{ Querystring: { ids?: string; dest?: string } }>('/api/listings/batch', async (req, reply) => {
     const dest = isDestCode(req.query.dest) ? req.query.dest : 'DE';
     const ids = csv(req.query.ids).slice(0, 100);
-    const partners = Object.fromEntries((await partnersRepo.all()).map((p) => [p.id, p]));
-    return { items: (await listingsRepo.byIds(ids)).map((l) => decorate(l, dest)), partners };
+    const [, partnerList, items] = await Promise.all([getFx(), partnersRepo.all(), listingsRepo.byIds(ids)]);
+    const partners = Object.fromEntries(partnerList.map((p) => [p.id, p]));
+    publicCache(reply);
+    return { items: items.map((l) => decorate(l, dest)), partners };
   });
 
   app.get<{ Params: { id: string }; Querystring: { dest?: string } }>('/api/listings/:id', async (req, reply) => {
-    const l = await listingsRepo.byId(req.params.id);
+    const [, l] = await Promise.all([getFx(), listingsRepo.byId(req.params.id)]);
     if (!l) return reply.code(404).send({ error: 'not_found' });
-    await getFx();
     const dest = isDestCode(req.query.dest) ? req.query.dest : 'DE';
     const partner = await partnersRepo.byId(l.partnerId);
+    publicCache(reply);
     return { listing: decorate(l, dest), partner, referenceAvailable: referenceEnabled() };
   });
 
@@ -85,5 +89,8 @@ export async function listingRoutes(app: FastifyInstance): Promise<void> {
     return ref;
   });
 
-  app.get('/api/partners', async () => partnersRepo.all());
+  app.get('/api/partners', async (_req, reply) => {
+    publicCache(reply);
+    return partnersRepo.all();
+  });
 }

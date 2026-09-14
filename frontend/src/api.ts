@@ -49,7 +49,12 @@ export interface SearchParams {
   q?: string; offer?: 'all' | OfferType; markets?: MarketCode[]; make?: string; model?: string; location?: string;
   yearFrom?: number; yearTo?: number; maxKm?: number; fuels?: Fuel[]; transmissions?: Array<'Automatic' | 'Manual'>;
   cocOnly?: boolean; maxLanded?: number; dest: DestCode; sort?: SortKey;
+  /** Seite (1-basiert) – die Trefferliste lädt seitenweise nach */
+  page?: number;
 }
+
+/** Treffer je Seite: kleine Seiten halten Antwort und Function-Zeit klein; weitere Seiten lädt „Mehr laden“. */
+export const PAGE_SIZE = 48;
 
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '';
 
@@ -68,7 +73,8 @@ export const api = {
     set('q', p.q); set('offer', p.offer); set('markets', p.markets); set('make', p.make); set('model', p.model); set('location', p.location);
     set('yearFrom', p.yearFrom); set('yearTo', p.yearTo); set('maxKm', p.maxKm); set('fuels', p.fuels); set('transmissions', p.transmissions);
     set('cocOnly', p.cocOnly ? 'true' : undefined); set('maxLanded', p.maxLanded); set('dest', p.dest); set('sort', p.sort);
-    sp.set('pageSize', '200');
+    set('page', p.page && p.page > 1 ? p.page : undefined);
+    sp.set('pageSize', String(PAGE_SIZE));
     return http<SearchResult>(`/api/listings?${sp}`);
   },
 

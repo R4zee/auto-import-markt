@@ -48,5 +48,9 @@ jobs:
           # Auf dem Runner kommt curl durch den Proxy zuverlässig zu Encar, der Node-Tunnel nicht
           HTTP_CLIENT: 'curl'
           ENCAR_LIMIT_PARTITION: ${{ github.event.inputs.encar_limit_partition }}
+          # Süd-/Osteuropa: mobile.de Search API (leer = Provider aus) und Partner-Feeds (JSON-Array, leer = keine)
+          MOBILEDE_USERNAME: ${{ secrets.MOBILEDE_USERNAME }}
+          MOBILEDE_PASSWORD: ${{ secrets.MOBILEDE_PASSWORD }}
+          PARTNER_FEEDS: ${{ secrets.PARTNER_FEEDS }}
           # weitere Provider-Keys hier ergänzen, z. B. APIBARA_API_KEY: ${{ secrets.APIBARA_API_KEY }}
         run: node --import tsx src/cli/sync.ts

@@ -54,7 +54,7 @@ function rowToListing(r: ListingRow): Listing {
 }
 
 /** Vorberechnete EUR- und Endpreis-Spalten (für SQL-Filter/-Sortierung); Kurse aus dem FX-Cache. */
-function precompute(l: Listing): { priceEur: number | null; landed: Record<DestCode, number | null> } {
+function precompute(l: Pick<Listing, 'market' | 'price' | 'currency' | 'classic' | 'dutyRateOverride' | 'originProof'>): { priceEur: number | null; landed: Record<DestCode, number | null> } {
   const rate = fxSync().rates[l.currency.toUpperCase()];
   const landed = { DE: null, AT: null, NL: null, PL: null } as Record<DestCode, number | null>;
   if (rate == null) return { priceEur: null, landed };
@@ -67,13 +67,18 @@ function precompute(l: Listing): { priceEur: number | null; landed: Record<DestC
   return { priceEur: Math.round(l.price * rate * 100) / 100, landed };
 }
 
+/** Suchtext wie in db.ts (SEARCH_TEXT_SQL), hier in JS für den Upsert. */
+export function searchText(l: Listing): string {
+  return [l.make, l.model, l.trim, l.location, l.auction?.lot ?? '', l.auction?.house ?? ''].join(' ').toLowerCase();
+}
+
 const UPSERT = `
 INSERT INTO listings (
   id, source, external_id, market, country, location, offer_type, url, year, make, model, trim, km, engine,
   engine_ccm, co2_gkm, transmission, drive, fuel, price, currency, steering, auction_json, coc, classic,
   duty_rate_override, origin_proof, resale_eur, partner_id, photos_json, photo_count, damage_json, fetched_at, active,
-  price_eur, landed_de, landed_at, landed_nl, landed_pl, auction_ends_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+  price_eur, landed_de, landed_at, landed_nl, landed_pl, auction_ends_at, search_text
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   market = excluded.market, country = excluded.country, location = excluded.location, offer_type = excluded.offer_type,
   url = excluded.url, year = excluded.year, make = excluded.make, model = excluded.model, trim = excluded.trim,
@@ -84,7 +89,8 @@ ON CONFLICT(id) DO UPDATE SET
   resale_eur = excluded.resale_eur, partner_id = excluded.partner_id, photos_json = excluded.photos_json,
   photo_count = excluded.photo_count, damage_json = excluded.damage_json, fetched_at = excluded.fetched_at, active = 1,
   price_eur = excluded.price_eur, landed_de = excluded.landed_de, landed_at = excluded.landed_at,
-  landed_nl = excluded.landed_nl, landed_pl = excluded.landed_pl, auction_ends_at = excluded.auction_ends_at
+  landed_nl = excluded.landed_nl, landed_pl = excluded.landed_pl, auction_ends_at = excluded.auction_ends_at,
+  search_text = excluded.search_text
 `;
 
 function upsertStatement(l: Listing): InStatement {
@@ -96,7 +102,7 @@ function upsertStatement(l: Listing): InStatement {
       l.km, l.engine, l.engineCcm, l.co2Gkm, l.transmission, l.drive, l.fuel, l.price, l.currency, l.steering,
       l.auction ? JSON.stringify(l.auction) : null, l.coc ? 1 : 0, l.classic ? 1 : 0, l.dutyRateOverride,
       l.originProof ? 1 : 0, l.resaleEur, l.partnerId, JSON.stringify(l.photos), l.photoCount, JSON.stringify(l.damage), l.fetchedAt,
-      pre.priceEur, pre.landed.DE, pre.landed.AT, pre.landed.NL, pre.landed.PL, l.auction?.endsAt ?? null,
+      pre.priceEur, pre.landed.DE, pre.landed.AT, pre.landed.NL, pre.landed.PL, l.auction?.endsAt ?? null, searchText(l),
     ],
   };
 }
@@ -104,13 +110,84 @@ function upsertStatement(l: Listing): InStatement {
 const AUTOMATIC_LIKE = ['Automatic', 'PDK', 'Single speed'];
 const LANDED_COL: Record<DestCode, string> = { DE: 'landed_de', AT: 'landed_at', NL: 'landed_nl', PL: 'landed_pl' };
 
+/**
+ * Spalten der Trefferliste: alles außer der vollen Fotoliste – die Karte zeigt nur das erste Foto,
+ * alle Fotos liefert die Detailansicht. Spart je Seite mehrere hundert KB Transfer aus Turso.
+ */
+const LIST_COLUMN_NAMES = ['id', 'source', 'external_id', 'market', 'country', 'location', 'offer_type', 'url', 'year', 'make', 'model', 'trim', 'km', 'engine',
+  'engine_ccm', 'co2_gkm', 'transmission', 'drive', 'fuel', 'price', 'currency', 'steering', 'auction_json', 'coc', 'classic', 'duty_rate_override',
+  'origin_proof', 'resale_eur', 'partner_id', 'photo_count', 'damage_json', 'fetched_at', 'active'];
+function listColumns(alias = ''): string {
+  const p = alias ? `${alias}.` : '';
+  return `${LIST_COLUMN_NAMES.map((c) => p + c).join(', ')}, CASE WHEN json_array_length(${p}photos_json) > 0 THEN json_array(json_extract(${p}photos_json, '$[0]')) ELSE '[]' END AS photos_json`;
+}
+
 export interface SqlSearchResult {
   items: Listing[];
   total: number;
   page: number;
   pageSize: number;
-  marketCounts: Record<string, number>;
-  facets: { makes: string[]; models: string[]; locations: string[] };
+}
+
+/** Vorberechnete Filterlisten (werden nach jedem Sync neu erzeugt, siehe services/facets.ts). */
+export interface FacetData {
+  makes: string[];
+  /** Modelle je Marke (sortiert) */
+  modelsByMake: Record<string, string[]>;
+  /** Modelle über alle Marken (begrenzt) */
+  models: string[];
+  locations: string[];
+  /** Anzahl je Markt: gesamt sowie je Angebotsart */
+  marketCounts: { all: Record<string, number>; auction: Record<string, number>; fixed: Record<string, number> };
+  total: number;
+  computedAt: string;
+}
+
+/**
+ * Bereichsfilter mit unärem Plus: SQLite darf dafür keinen Index wählen. Ohne das Plus nahm der Planer für
+ * `year >= 1985` den (active, year)-Index, lief damit über den kompletten Bestand und las jede Zeile einzeln –
+ * die Ursache für minutenlange Abfragen auf Turso. Gleichheitsfilter (Marke, Modell …) nutzen den abdeckenden Index.
+ */
+function buildWhere(q: ListingQuery, dest: DestCode): { whereSql: string; args: InValue[]; selective: boolean } {
+  const where: string[] = ['active = 1'];
+  const args: InValue[] = [];
+  let selective = false;
+  if (q.offer && q.offer !== 'all') { where.push('offer_type = ?'); args.push(q.offer); }
+  if (q.markets?.length) { where.push(`market IN (${q.markets.map(() => '?').join(',')})`); args.push(...q.markets); }
+  if (q.make) { where.push('make = ?'); args.push(q.make); selective = true; }
+  if (q.model) { where.push('model = ?'); args.push(q.model); selective = true; }
+  if (q.location) { where.push('location = ?'); args.push(q.location); }
+  if (q.yearFrom != null) { where.push('+year >= ?'); args.push(q.yearFrom); }
+  if (q.yearTo != null) { where.push('+year <= ?'); args.push(q.yearTo); }
+  if (q.maxKm != null) { where.push('+km <= ?'); args.push(q.maxKm); }
+  if (q.fuels?.length) { where.push(`fuel IN (${q.fuels.map(() => '?').join(',')})`); args.push(...q.fuels); }
+  if (q.transmissions?.length) {
+    const parts: string[] = [];
+    if (q.transmissions.includes('Automatic')) { parts.push(`transmission IN (${AUTOMATIC_LIKE.map(() => '?').join(',')})`); args.push(...AUTOMATIC_LIKE); }
+    if (q.transmissions.includes('Manual')) parts.push("transmission = 'Manual'");
+    if (parts.length) where.push(`(${parts.join(' OR ')})`);
+  }
+  if (q.cocOnly) where.push('coc = 1');
+  if (q.maxLandedEur != null) { where.push(`+${LANDED_COL[dest]} <= ?`); args.push(q.maxLandedEur); }
+  const text = (q.q ?? '').trim().toLowerCase();
+  if (text) {
+    // search_text liegt im abdeckenden Index → Volltextsuche als Indexscan ohne Zeilenzugriffe
+    where.push('search_text LIKE ?');
+    args.push(`%${text.replace(/[%_]/g, ' ')}%`);
+    selective = true;
+  }
+  return { whereSql: where.join(' AND '), args, selective };
+}
+
+function orderBy(sort: ListingQuery['sort'], dest: DestCode, alias = ''): string {
+  const landedCol = `${alias}${LANDED_COL[dest]}`;
+  return {
+    'landed-asc': `${landedCol} ASC NULLS LAST, ${alias}price_eur ASC`,
+    'landed-desc': `${landedCol} DESC NULLS LAST, ${alias}price_eur DESC`,
+    'year-desc': `${alias}year DESC, ${alias}km ASC`,
+    'km-asc': `${alias}km ASC, ${alias}year DESC`,
+    'ending': `CASE WHEN ${alias}auction_ends_at IS NULL THEN 1 ELSE 0 END, ${alias}auction_ends_at ASC, ${alias}landed_de ASC`,
+  }[sort ?? 'landed-asc'];
 }
 
 export const listingsRepo = {
@@ -160,83 +237,82 @@ export const listingsRepo = {
     return Object.fromEntries(rows.map((r) => [r.source, Number(r.n)]));
   },
 
-  /** Suche/Filter/Sortierung/Paginierung in SQL – skaliert auf sechsstellige Bestände. */
+  /**
+   * Suche/Filter/Sortierung/Paginierung in SQL – zwei Abfragen (Seite + Gesamtzahl), beide indexgestützt.
+   * Filterlisten und Marktzähler kommen nicht mehr aus dieser Abfrage, sondern aus dem Facetten-Cache.
+   */
   async search(q: ListingQuery, dest: DestCode): Promise<SqlSearchResult> {
-    const where: string[] = ['active = 1'];
-    const args: InValue[] = [];
-    if (q.offer && q.offer !== 'all') { where.push('offer_type = ?'); args.push(q.offer); }
-    if (q.markets?.length) { where.push(`market IN (${q.markets.map(() => '?').join(',')})`); args.push(...q.markets); }
-    if (q.make) { where.push('make = ?'); args.push(q.make); }
-    if (q.model) { where.push('model = ?'); args.push(q.model); }
-    if (q.location) { where.push('location = ?'); args.push(q.location); }
-    if (q.yearFrom != null) { where.push('year >= ?'); args.push(q.yearFrom); }
-    if (q.yearTo != null) { where.push('year <= ?'); args.push(q.yearTo); }
-    if (q.maxKm != null) { where.push('km <= ?'); args.push(q.maxKm); }
-    if (q.fuels?.length) { where.push(`fuel IN (${q.fuels.map(() => '?').join(',')})`); args.push(...q.fuels); }
-    if (q.transmissions?.length) {
-      const parts: string[] = [];
-      if (q.transmissions.includes('Automatic')) { parts.push(`transmission IN (${AUTOMATIC_LIKE.map(() => '?').join(',')})`); args.push(...AUTOMATIC_LIKE); }
-      if (q.transmissions.includes('Manual')) parts.push("transmission = 'Manual'");
-      if (parts.length) where.push(`(${parts.join(' OR ')})`);
-    }
-    if (q.cocOnly) where.push('coc = 1');
-    const landedCol = LANDED_COL[dest];
-    if (q.maxLandedEur != null) { where.push(`${landedCol} <= ?`); args.push(q.maxLandedEur); }
-    const text = (q.q ?? '').trim().toLowerCase();
-    if (text) {
-      where.push("LOWER(make || ' ' || model || ' ' || trim || ' ' || location || ' ' || COALESCE(auction_json, '')) LIKE ?");
-      args.push(`%${text.replace(/[%_]/g, ' ')}%`);
-    }
-    const whereSql = where.join(' AND ');
-
-    const orderBy = {
-      'landed-asc': `${landedCol} ASC NULLS LAST, price_eur ASC`,
-      'landed-desc': `${landedCol} DESC NULLS LAST, price_eur DESC`,
-      'year-desc': 'year DESC, km ASC',
-      'km-asc': 'km ASC, year DESC',
-      'ending': 'CASE WHEN auction_ends_at IS NULL THEN 1 ELSE 0 END, auction_ends_at ASC, landed_de ASC',
-    }[q.sort ?? 'landed-asc'];
-
+    const { whereSql, args, selective } = buildWhere(q, dest);
     const page = Math.max(1, q.page ?? 1);
-    const pageSize = Math.min(200, Math.max(1, q.pageSize ?? 60));
-    const [rows, totalRow, marketRows, makeRows, modelRows, locRows] = await Promise.all([
-      query<ListingRow>(`SELECT * FROM listings WHERE ${whereSql} ORDER BY ${orderBy} LIMIT ? OFFSET ?`, [...args, pageSize, (page - 1) * pageSize]),
-      one<{ n: number }>(`SELECT COUNT(*) AS n FROM listings WHERE ${whereSql}`, args),
-      query<{ market: string; n: number }>(
-        `SELECT market, COUNT(*) AS n FROM listings WHERE active = 1${q.offer && q.offer !== 'all' ? ' AND offer_type = ?' : ''} GROUP BY market`,
-        q.offer && q.offer !== 'all' ? [q.offer] : [],
-      ),
-      query<{ make: string }>('SELECT DISTINCT make FROM listings WHERE active = 1 ORDER BY make'),
-      q.make
-        ? query<{ model: string }>('SELECT DISTINCT model FROM listings WHERE active = 1 AND make = ? ORDER BY model', [q.make])
-        : query<{ model: string }>('SELECT DISTINCT model FROM listings WHERE active = 1 ORDER BY model LIMIT 400'),
-      query<{ location: string }>("SELECT DISTINCT location FROM listings WHERE active = 1 AND location <> '' ORDER BY location LIMIT 300"),
-    ]);
+    const pageSize = Math.min(200, Math.max(1, q.pageSize ?? 48));
+    const limitArgs: InValue[] = [pageSize, (page - 1) * pageSize];
 
+    if (selective) {
+      // Marken-/Modell-/Textfilter: Treffer komplett im abdeckenden Index ermitteln (Seek auf make/model bzw. Indexscan
+      // für den Text), Gesamtzahl im selben Durchlauf per Fensterfunktion, danach nur die Zeilen der Seite lesen.
+      const rows = await query<ListingRow & { total: number }>(
+        `WITH hits AS (SELECT rowid AS rid, COUNT(*) OVER () AS total FROM listings WHERE ${whereSql} ORDER BY ${orderBy(q.sort, dest)} LIMIT ? OFFSET ?)
+         SELECT ${listColumns('l')}, hits.total FROM hits JOIN listings l ON l.rowid = hits.rid ORDER BY ${orderBy(q.sort, dest, 'l.')}`,
+        [...args, ...limitArgs],
+      );
+      // Seite hinter dem Ende: Gesamtzahl separat (kommt praktisch nur bei veralteten Links vor)
+      const total = rows.length ? Number(rows[0].total) : Number((await one<{ n: number }>(`SELECT COUNT(*) AS n FROM listings WHERE ${whereSql}`, args))?.n ?? 0);
+      return { items: rows.map(rowToListing), total, page, pageSize };
+    }
+
+    // Ohne selektiven Filter: geordneter Lauf über den Sortier-Index mit frühem Abbruch, Zählung über den abdeckenden Index
+    const [rows, totalRow] = await Promise.all([
+      query<ListingRow>(`SELECT ${listColumns()} FROM listings WHERE ${whereSql} ORDER BY ${orderBy(q.sort, dest)} LIMIT ? OFFSET ?`, [...args, ...limitArgs]),
+      one<{ n: number }>(`SELECT COUNT(*) AS n FROM listings WHERE ${whereSql}`, args),
+    ]);
+    return { items: rows.map(rowToListing), total: Number(totalRow?.n ?? 0), page, pageSize };
+  },
+
+  /** Filterlisten und Marktzähler über den abdeckenden Index berechnen (nach jedem Sync, nicht je Anfrage). */
+  async computeFacets(): Promise<FacetData> {
+    const [makeModelRows, locRows, marketRows] = await Promise.all([
+      query<{ make: string; model: string }>('SELECT DISTINCT make, model FROM listings WHERE active = 1 ORDER BY make, model'),
+      query<{ location: string }>("SELECT DISTINCT location FROM listings WHERE active = 1 AND location <> '' ORDER BY location LIMIT 300"),
+      query<{ market: string; offer_type: string; n: number }>('SELECT market, offer_type, COUNT(*) AS n FROM listings WHERE active = 1 GROUP BY market, offer_type'),
+    ]);
+    const modelsByMake: Record<string, string[]> = {};
+    for (const r of makeModelRows) (modelsByMake[r.make] ??= []).push(r.model);
+    const marketCounts: FacetData['marketCounts'] = { all: {}, auction: {}, fixed: {} };
+    let total = 0;
+    for (const r of marketRows) {
+      const n = Number(r.n);
+      total += n;
+      marketCounts.all[r.market] = (marketCounts.all[r.market] ?? 0) + n;
+      const byOffer = r.offer_type === 'auction' ? marketCounts.auction : marketCounts.fixed;
+      byOffer[r.market] = (byOffer[r.market] ?? 0) + n;
+    }
     return {
-      items: rows.map(rowToListing),
-      total: Number(totalRow?.n ?? 0),
-      page,
-      pageSize,
-      marketCounts: Object.fromEntries(marketRows.map((r) => [r.market, Number(r.n)])),
-      facets: {
-        makes: makeRows.map((r) => r.make),
-        models: modelRows.map((r) => r.model),
-        locations: locRows.map((r) => r.location),
-      },
+      makes: Object.keys(modelsByMake),
+      modelsByMake,
+      models: Array.from(new Set(makeModelRows.map((r) => r.model))).sort((a, b) => a.localeCompare(b)).slice(0, 400),
+      locations: locRows.map((r) => r.location),
+      marketCounts,
+      total,
+      computedAt: new Date().toISOString(),
     };
   },
 
   /** Vorberechnete EUR/Endpreis-Spalten mit aktuellen Kursen neu berechnen (z. B. nach Kursänderung). */
   async recomputeDerived(source?: string): Promise<number> {
-    const rows = await query<ListingRow>(`SELECT * FROM listings WHERE active = 1${source ? ' AND source = ?' : ''}`, source ? [source] : []);
+    // nur die Spalten lesen, die die Kalkulation braucht – nicht Fotos/Schäden
+    const rows = await query<{ id: string; market: string; price: number; currency: string; classic: number; duty_rate_override: number | null; origin_proof: number }>(
+      `SELECT id, market, price, currency, classic, duty_rate_override, origin_proof FROM listings WHERE active = 1${source ? ' AND source = ?' : ''}`,
+      source ? [source] : [],
+    );
     let n = 0;
     for (let i = 0; i < rows.length; i += 300) {
       const stmts = rows.slice(i, i + 300).map((r) => {
-        const l = rowToListing(r);
-        const pre = precompute(l);
+        const pre = precompute({
+          market: r.market as Listing['market'], price: Number(r.price), currency: r.currency, classic: !!r.classic,
+          dutyRateOverride: r.duty_rate_override == null ? null : Number(r.duty_rate_override), originProof: !!r.origin_proof,
+        });
         n++;
-        return { sql: 'UPDATE listings SET price_eur = ?, landed_de = ?, landed_at = ?, landed_nl = ?, landed_pl = ? WHERE id = ?', args: [pre.priceEur, pre.landed.DE, pre.landed.AT, pre.landed.NL, pre.landed.PL, l.id] };
+        return { sql: 'UPDATE listings SET price_eur = ?, landed_de = ?, landed_at = ?, landed_nl = ?, landed_pl = ? WHERE id = ?', args: [pre.priceEur, pre.landed.DE, pre.landed.AT, pre.landed.NL, pre.landed.PL, r.id] };
       });
       await db().batch(stmts, 'write');
     }

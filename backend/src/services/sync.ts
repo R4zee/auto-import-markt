@@ -3,6 +3,7 @@ import { activeProviders, isKnownSource } from '../providers/index.js';
 import type { MarketProvider } from '../providers/types.js';
 import { listingsRepo, partnersRepo } from '../repositories/listings.js';
 import { SEED_PARTNERS } from '../seed/partners.js';
+import { refreshFacets } from './facets.js';
 import { fxSync, getFx } from './fx.js';
 
 export interface SyncReport {
@@ -86,6 +87,10 @@ export async function syncAll(): Promise<SyncReport[]> {
   const t0 = Date.now();
   const recomputed = await recomputeDerivedIfFxChanged();
   if (recomputed > 0) reports.push({ provider: 'fx-recompute', status: 'ok', upserted: recomputed, deactivated: 0, warnings: ['Endpreise mit neuem Kursstand neu berechnet'], durationMs: Date.now() - t0 });
+  // Filterlisten/Marktzähler einmal je Lauf vorberechnen – die Suche liest sie dann aus `meta`
+  const t1 = Date.now();
+  const facets = await refreshFacets();
+  reports.push({ provider: 'facets', status: 'ok', upserted: facets.makes.length, deactivated: 0, warnings: [`${facets.total} aktive Inserate, ${facets.makes.length} Marken, ${facets.locations.length} Standorte`], durationMs: Date.now() - t1 });
   return reports;
 }
 

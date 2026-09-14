@@ -88,6 +88,20 @@ export const FEES = {
   lcvDutyRate: 0.22,
 } as const;
 
+/** Länder (ISO-3166-Alpha-2, klein) der europäischen Herkunftsmärkte: Süd- bzw. Osteuropa. */
+export const MARKET_COUNTRIES: Record<'SE' | 'EE', string[]> = {
+  SE: ['it', 'es', 'pt', 'gr', 'hr', 'si', 'mt', 'cy'],
+  EE: ['pl', 'cz', 'sk', 'hu', 'ro', 'bg', 'lt', 'lv', 'ee'],
+};
+
+/** Ordnet ein Verkäuferland dem Herkunftsmarkt zu (nur Süd-/Osteuropa; andere Länder → null). */
+export function marketForCountry(country: string | null | undefined): 'SE' | 'EE' | null {
+  const c = (country ?? '').trim().toLowerCase();
+  if (MARKET_COUNTRIES.SE.includes(c)) return 'SE';
+  if (MARKET_COUNTRIES.EE.includes(c)) return 'EE';
+  return null;
+}
+
 export const MARKET_CODES = Object.keys(MARKETS) as MarketCode[];
 export const DEST_CODES = Object.keys(DESTINATIONS) as DestCode[];
 

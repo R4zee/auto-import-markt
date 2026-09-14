@@ -6,6 +6,7 @@ import { describeNetworkError, robustFetch } from '../providers/http.js';
 import { allProviders } from '../providers/index.js';
 import { listingsRepo } from '../repositories/listings.js';
 import { invalidateListingCache } from '../services/catalog.js';
+import { refreshFacets } from '../services/facets.js';
 import { deactivateOrphans, lastRuns, syncAll, syncProvider } from '../services/sync.js';
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
@@ -27,6 +28,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const p = allProviders().find((x) => x.id === req.query.provider);
       if (!p) return reply.code(404).send({ error: 'unknown_provider' });
       reports = [await syncProvider(p)];
+      await refreshFacets();
     } else {
       reports = await syncAll();
     }
@@ -37,9 +39,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   /** Bestände von Quellen ohne (aktiven) Provider deaktivieren, z. B. nach dem Entfernen eines Anbieters */
   app.post('/api/admin/cleanup', async () => {
     const deactivated = await deactivateOrphans();
+    await refreshFacets();
     invalidateListingCache();
     return { deactivated, remaining: await listingsRepo.countBySource() };
   });
+
+  /** Filterlisten/Marktzähler neu berechnen (passiert automatisch am Ende jedes Sync-Laufs) */
+  app.post('/api/admin/facets', async () => refreshFacets());
 
   /** Netzwerkdiagnose aus der Function heraus: erreicht Vercel den Zielhost? */
   app.get<{ Querystring: { url?: string } }>('/api/admin/diag', async (req) => {

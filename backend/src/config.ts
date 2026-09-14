@@ -45,6 +45,55 @@ function databaseUrl(): string {
 /** true, wenn auf Vercel keine Turso-/DATABASE_URL gesetzt ist (Daten gehen bei jedem Kaltstart verloren) */
 export const databaseMissing = isServerless && !(env.TURSO_DATABASE_URL || env.DATABASE_URL);
 
+export interface PartnerFeedConfig {
+  /** Quellen-Schlüssel (a–z, 0–9, Bindestrich), z. B. "feed-carpathia" */
+  id: string;
+  label: string;
+  url: string;
+  /** "Header-Name: Wert", z. B. "Authorization: Bearer …" */
+  authHeader: string;
+  /** Feldzuordnung als JSON-String (siehe providers/feed.ts) */
+  mapping: string;
+  /** Vorgaben, falls der Feed sie nicht liefert */
+  market: string;
+  country: string;
+  partnerId: string;
+}
+
+/**
+ * PARTNER_FEEDS: JSON-Array von Feeds, z. B.
+ * [{"id":"carpathia","label":"Carpathia (RO)","url":"https://…/stock.json","country":"ro",
+ *   "mapping":{"items":"cars","id":"id","year":"year","make":"brand","model":"model","km":"mileage","price":"price_eur","photos":"images","url":"link"}}]
+ * `mapping` darf Objekt oder String sein. Der bisherige Einzel-Feed (JP_FEED_URL/JP_FEED_MAPPING) wird als "jpfeed" angehängt.
+ */
+function partnerFeeds(): PartnerFeedConfig[] {
+  const out: PartnerFeedConfig[] = [];
+  const raw = (env.PARTNER_FEEDS ?? '').trim();
+  if (raw) {
+    let arr: unknown;
+    try { arr = JSON.parse(raw); } catch (e) { throw new Error(`PARTNER_FEEDS ist kein gültiges JSON: ${e instanceof Error ? e.message : String(e)}`); }
+    if (!Array.isArray(arr)) throw new Error('PARTNER_FEEDS muss ein JSON-Array sein');
+    for (const f of arr as Array<Record<string, unknown>>) {
+      const id = String(f.id ?? '').toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
+      if (!id) throw new Error('PARTNER_FEEDS: jeder Feed braucht eine id');
+      out.push({
+        id: id.startsWith('feed-') ? id : `feed-${id}`,
+        label: String(f.label ?? `Partner-Feed ${id}`),
+        url: String(f.url ?? ''),
+        authHeader: String(f.authHeader ?? ''),
+        mapping: typeof f.mapping === 'string' ? f.mapping : f.mapping ? JSON.stringify(f.mapping) : '',
+        market: String(f.market ?? ''),
+        country: String(f.country ?? '').toLowerCase(),
+        partnerId: String(f.partnerId ?? ''),
+      });
+    }
+  }
+  if (env.JP_FEED_URL || env.JP_FEED_MAPPING) {
+    out.push({ id: 'jpfeed', label: 'Partner-Feed Japan', url: env.JP_FEED_URL ?? '', authHeader: env.JP_FEED_AUTH_HEADER ?? '', mapping: env.JP_FEED_MAPPING ?? '', market: 'JP', country: 'jp', partnerId: '' });
+  }
+  return out;
+}
+
 export const config = {
   port: num(env.PORT, 4000),
   host: env.HOST ?? '0.0.0.0',
@@ -56,6 +105,8 @@ export const config = {
     authToken: env.TURSO_AUTH_TOKEN || env.DATABASE_AUTH_TOKEN || undefined,
   },
   syncIntervalMin: num(env.SYNC_INTERVAL_MIN, 0),
+  /** CDN-Cache-Dauer für öffentliche Lese-Antworten in Sekunden (0 = aus). Standard 10 Minuten. */
+  apiCacheSeconds: num(env.API_CACHE_SECONDS, 600),
   enableMockProvider: bool(env.ENABLE_MOCK_PROVIDER, true),
   marketcheck: {
     apiKey: env.MARKETCHECK_API_KEY ?? '',
@@ -66,10 +117,19 @@ export const config = {
     clientSecret: env.EBAY_CLIENT_SECRET ?? '',
     marketplaceId: env.EBAY_MARKETPLACE_ID ?? 'EBAY_US',
   },
-  jpFeed: {
-    url: env.JP_FEED_URL ?? '',
-    authHeader: env.JP_FEED_AUTH_HEADER ?? '',
-    mapping: env.JP_FEED_MAPPING ?? '',
+  partnerFeeds: partnerFeeds(),
+  /** mobile.de Search API (API-Account über den mobile.de-Kundensupport; HTTP Basic) */
+  mobilede: {
+    baseUrl: env.MOBILEDE_BASE_URL ?? 'https://services.mobile.de',
+    username: env.MOBILEDE_USERNAME ?? '',
+    password: env.MOBILEDE_PASSWORD ?? '',
+    /** Verkäuferländer (ISO-2); leer = alle Länder aus MARKET_COUNTRIES (Süd- und Osteuropa) */
+    countries: list(env.MOBILEDE_COUNTRIES).map((c) => c.toLowerCase()),
+    pages: num(env.MOBILEDE_PAGES, 20),
+    pageSize: num(env.MOBILEDE_PAGE_SIZE, 100),
+    minPriceEur: num(env.MOBILEDE_MIN_PRICE_EUR, 5000),
+    minYear: num(env.MOBILEDE_MIN_YEAR, 2012),
+    delayMs: num(env.MOBILEDE_DELAY_MS, 250),
   },
   encar: {
     enabled: bool(env.ENCAR_ENABLED, false),

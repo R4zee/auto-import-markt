@@ -107,9 +107,21 @@ Gebrauchtwagen oft nicht liefern → Standard 10 % **[G]**.
 
 ## 4. Europa (Süd-/Osteuropa und Nachbarmärkte)
 
+**Stand 14.09.2026 – umgesetzt:** Adapter `mobilede` (mobile.de Search API, je Verkäuferland IT/ES/PT/GR/HR/SI/MT/CY →
+Markt Südeuropa, PL/CZ/SK/HU/RO/BG/LT/LV/EE → Osteuropa) und Partner-Feeds über `PARTNER_FEEDS` (ein Feed je
+Händler/Importeur, Markt aus dem Land). Beide laufen im GitHub-Actions-Sync, sobald die Zugangsdaten als Secrets
+hinterlegt sind. Die Länderlisten stehen in `backend/src/domain/markets.ts` (`MARKET_COUNTRIES`).
+
+Die großen Landesportale (Otomoto/Autovit/Standvirtual = OLX-Gruppe, Hasznaltauto, mobile.bg, Njuškalo, Autoplius,
+Subito, coches.net) haben **keine Lese-APIs** – ihre Händler-APIs dienen nur dem Einstellen eigener Anzeigen, die
+Nutzungsbedingungen untersagen das Auslesen. Der gangbare Weg bleibt: (1) mobile.de-API-Account (viele
+Händler aus IT/ES/PL/CZ/HU/RO inserieren dort mit Europa-Reichweite), (2) direkte Händler-/Importeur-Feeds
+(`PARTNER_FEEDS`), (3) AutoScout24-Partnerprogramm anfragen (bisher nur Schreib-API), (4) Aggregatoren wie
+Carapis nur als Übergang mit rechtlicher Prüfung (im Test veraltet/gedrosselt, siehe anbindung.md).
+
 | Portal | Offizielles API? | Für Aggregatoren nutzbar? | Bewertung |
 |---|---|---|---|
-| **mobile.de** (services.mobile.de) | Search-API / Ad-Integration, HTTP Basic, max. 2.000 Anzeigen je Abfrage | API-Account nur über Kundensupport (+49 30 81097500); nicht für Preisintelligenz gedacht | **B** [B] |
+| **mobile.de** (services.mobile.de) | Search-API / Ad-Integration, HTTP Basic, max. 2.000 Anzeigen je Abfrage | API-Account nur über Kundensupport (+49 30 81097500); nicht für Preisintelligenz gedacht | **B** [B] – **Adapter implementiert** (`providers/mobilede.ts`, Länderfilter; Feldnamen beim ersten Live-Lauf prüfen) |
 | **AutoScout24** (portal.services.as24.tech) | nur Listing-Creation (Schreibseite) | nein | **B/D** [B] |
 | **Bilinfo Listing API (DK, Bilbasen)** (developer.bilinfo.net) | vollständiger Feed (JSON/XML), wird ausdrücklich an Aggregatoren verkauft | **ja**, Preis auf Anfrage | **B** (stark) [B] |
 | **Autotrader Connect (UK)** (developers.autotrader.co.uk) | Search API über alle Listings | Partnerfreigabe, > 1.000 £/Mo berichtet | **B** [B/G] |
