@@ -168,7 +168,7 @@ export class SubitoProvider implements MarketProvider {
   }
 
   private http() {
-    return { headers: { Accept: 'application/json', 'Accept-Language': 'it', 'User-Agent': config.europe.userAgent, Origin: 'https://www.subito.it', Referer: 'https://www.subito.it/' }, proxyUrl: config.europe.proxyUrl || undefined, timeoutMs: 30000 };
+    return { headers: { Accept: 'application/json', 'Accept-Language': 'it', 'User-Agent': config.europe.userAgent, Origin: 'https://www.subito.it', Referer: 'https://www.subito.it/' }, proxyUrl: config.europe.proxyUrl || undefined, timeoutMs: 30000, nodeOnly: true };
   }
 
   /** Nur belegte Parameter; Mindestpreis/-baujahr werden nach dem Abruf gefiltert (unbekannte Filterparameter lieferten 0 Treffer). */

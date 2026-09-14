@@ -117,7 +117,7 @@ export class SautoProvider implements MarketProvider {
   }
 
   private http() {
-    return { headers: { Accept: 'application/json', 'Accept-Language': 'cs', 'User-Agent': config.europe.userAgent, Referer: 'https://www.sauto.cz/' }, proxyUrl: config.europe.proxyUrl || undefined, timeoutMs: 30000 };
+    return { headers: { Accept: 'application/json', 'Accept-Language': 'cs', 'User-Agent': config.europe.userAgent, Referer: 'https://www.sauto.cz/' }, proxyUrl: config.europe.proxyUrl || undefined, timeoutMs: 30000, nodeOnly: true };
   }
 
   searchUrl(offset: number, priceFrom: number, priceTo: number | null): string {

@@ -3,7 +3,7 @@ import { marketForCountry } from '../domain/markets.js';
 import type { Listing } from '../domain/types.js';
 import { defaultPartnerFor } from '../seed/partners.js';
 import { encarDrive } from './encar.js';
-import { getJson, num, sleep, str } from './http.js';
+import { HttpError, num, robustFetch, sleep, str } from './http.js';
 import { listingId, normalizeFuel, normalizeTransmission, type MarketProvider, type ProviderResult } from './types.js';
 
 /**
@@ -44,6 +44,7 @@ const KEYS = {
   body: ['car_body', 'body', 'caroserie', 'tip_caroserie'],
   drive: ['drive', 'naped', 'tractiune', 'tracao'],
   condition: ['condition', 'stan', 'stare', 'estado'],
+  steering: ['righthanddrive', 'steering', 'kierownica', 'volan', 'volante'],
 };
 
 const KNOWN_MAKES = ['Alfa Romeo', 'Aston Martin', 'Audi', 'Bentley', 'BMW', 'Cadillac', 'Chevrolet', 'Chrysler', 'Citroën', 'Citroen', 'Cupra', 'Dacia', 'Dodge', 'DS', 'Ferrari', 'Fiat', 'Ford', 'Genesis', 'Honda', 'Hyundai', 'Infiniti', 'Jaguar', 'Jeep', 'Kia', 'Lamborghini', 'Lancia', 'Land Rover', 'Lexus', 'Lincoln', 'Maserati', 'Mazda', 'McLaren', 'Mercedes-Benz', 'Mercedes', 'MG', 'Mini', 'Mitsubishi', 'Nissan', 'Opel', 'Peugeot', 'Porsche', 'Renault', 'Rolls-Royce', 'Saab', 'Seat', 'Škoda', 'Skoda', 'Smart', 'SsangYong', 'Subaru', 'Suzuki', 'Tesla', 'Toyota', 'Volkswagen', 'VW', 'Volvo', 'BYD', 'Polestar', 'Lynk & Co', 'Abarth', 'Daewoo', 'Daihatsu', 'Isuzu', 'Iveco', 'Lada', 'Rover', 'Tata'];
@@ -57,6 +58,11 @@ function paramText(o: OlxOffer, keys: string[]): string {
   const v = p?.value;
   if (!v) return '';
   return str(v.label ?? (Array.isArray(v.key) ? v.key.join(' ') : v.key) ?? v.value ?? '');
+}
+function paramKey(o: OlxOffer, keys: string[]): string {
+  const v = param(o, keys)?.value;
+  if (!v) return '';
+  return str(Array.isArray(v.key) ? v.key[0] : v.key).toLowerCase();
 }
 function paramNum(o: OlxOffer, keys: string[]): number | null {
   const p = param(o, keys);
@@ -101,18 +107,37 @@ export function mapOlxOffer(o: OlxOffer, site: OlxSite, fetchedAt: string, makeB
   if (make.toLowerCase() === 'inne' || make.toLowerCase() === 'other' || make.toLowerCase() === 'altele') make = makeFromTitle(title);
   const modelRaw = paramText(o, KEYS.model);
   const model = modelRaw && !/^(inn[ey]|other|altele|outro)$/i.test(modelRaw) ? modelRaw : title.replace(new RegExp(`^${make.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '').split(/[\s,·|/-]+/)[0] || title;
-  const fuelText = paramText(o, KEYS.fuel);
-  const fuel = /elektr|electric|електр|elétr|eletr/i.test(fuelText) && !/hybr|hibr/i.test(fuelText) ? 'Electric' : /hybr|hibr|хибр/i.test(fuelText) ? 'Hybrid' : /diesel|дизел|gasóleo|gasoleo/i.test(fuelText) ? 'Diesel' : normalizeFuel(fuelText);
-  const transText = paramText(o, KEYS.transmission);
+  // olx.pl (Live 14.09.2026): petrol.key = petrol|diesel|lpg|cng|hybrid|plug-in-hybrid|electric; Beschriftung z. B. "CNG i Hybryda"
+  const fuelKey = paramKey(o, KEYS.fuel);
+  const fuelText = `${fuelKey} ${paramText(o, KEYS.fuel)}`;
+  const fuel = /^electric/.test(fuelKey) || (/elektr|electric|електр|elétr|eletr/i.test(fuelText) && !/hybr|hibr/i.test(fuelText)) ? 'Electric'
+    : /hybr|hibr|хибр|plug/i.test(fuelText) ? 'Hybrid'
+    : /diesel|дизел|gasóleo|gasoleo/i.test(fuelText) ? 'Diesel'
+    : normalizeFuel(fuelText); // petrol, lpg, cng → Petrol
+  const transText = `${paramKey(o, KEYS.transmission)} ${paramText(o, KEYS.transmission)}`;
   const transmission = /manual|manuell|ręczn|reczn|manuală|manuala|ръчн/i.test(transText) ? 'Manual' : normalizeTransmission(transText || 'automatic');
-  const engineRaw = paramText(o, KEYS.engine);
+  const engineRaw = paramKey(o, KEYS.engine) || paramText(o, KEYS.engine);
   const ccmRaw = num(engineRaw.replace(/\s/g, ''));
   const ccm = fuel === 'Electric' ? null : ccmRaw && ccmRaw > 400 && ccmRaw < 9000 ? Math.round(ccmRaw) : null;
-  const driveText = paramText(o, KEYS.drive);
-  const drive = /4x4|awd|4wd|quattro|xdrive|4matic|integral|wszystkie|4 ?koła|4 ?kola/i.test(`${driveText} ${title}`) ? 'AWD' : encarDrive(title, make);
+  // drive.key = front-wheel | rear-wheel | all-wheel (olx.pl "Na przednie koła" / "Na tylne koła" / "4x4 (stały)")
+  const driveKey = paramKey(o, KEYS.drive);
+  const driveText = `${driveKey} ${paramText(o, KEYS.drive)}`;
+  const drive = /all-wheel|4x4|awd|4wd|quattro|xdrive|4matic|integral|wszystkie|4 ?koła|4 ?kola/i.test(`${driveText} ${title}`) ? 'AWD'
+    : /front|przedni|față|fata|предн|dianteir/i.test(driveText) ? 'FWD'
+    : /rear|tyln|spate|задн|traseir/i.test(driveText) ? 'RWD'
+    : encarDrive(title, make);
+  // Lenkung: olx.pl "righthanddrive" – Beschriftung "po lewej" (links) bzw. "po prawej" (rechts)
+  const steeringText = `${paramKey(o, KEYS.steering)} ${paramText(o, KEYS.steering)}`.toLowerCase();
+  const steering: Listing['steering'] = /prawej|right|dreapta|дясно|direita/.test(steeringText) && !/lewej|left|stânga|stanga|ляво|esquerda/.test(steeringText) ? 'RHD' : 'LHD';
   const photos = (o.photos ?? []).map((p) => olxPhoto(p.link)).filter((p): p is string => !!p);
   const km = Math.round(paramNum(o, KEYS.km) ?? 0);
-  const trimParts = [modelRaw ? title.replace(new RegExp(`^${make.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '').replace(new RegExp(`^${modelRaw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '').trim() : '', paramText(o, KEYS.body)].filter(Boolean);
+  // Ausstattungszeile aus dem Titel: Marke und Modell (auch "RAV4" vs. "RAV-4") vorne entfernen, Verkäufer-Floskeln kürzen
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const loose = (s: string) => s.split('').filter((c) => /[\p{L}\p{N}]/u.test(c)).map((c) => `${esc(c)}[\\s\\-\\.]*`).join('');
+  let rest = title.replace(new RegExp(`^${loose(make)}\\s*`, 'iu'), '');
+  if (modelRaw) rest = rest.replace(new RegExp(`^${loose(modelRaw)}\\s*`, 'iu'), '');
+  rest = rest.replace(/^[,\-–·|!\s]+/, '').replace(/\s*[|!]+\s*/g, ' · ').trim().slice(0, 80);
+  const trimParts = [rest, paramText(o, KEYS.body)].filter(Boolean);
 
   return {
     id: listingId(`olx-${site.country}`, externalId),
@@ -136,7 +161,7 @@ export function mapOlxOffer(o: OlxOffer, site: OlxSite, fetchedAt: string, makeB
     fuel,
     price,
     currency,
-    steering: 'LHD',
+    steering, // Rechtslenker verwirft der Sync
     auction: null,
     coc: true, // EU-Fahrzeug im freien Verkehr
     classic: new Date().getFullYear() - year >= 30,
@@ -180,19 +205,37 @@ export class OlxProvider implements MarketProvider {
     return config.olx.sites.some((s) => s.enabled && s.categoryId != null);
   }
 
-  /** Browser-nahe Header: die OLX-Seiten sitzen hinter CloudFront/WAF und lehnen nackte Clients mit 403 ab */
-  http(site?: OlxSite) {
-    // Probe 14.09.2026: die erste Anfrage je Prozess bekam 403, die identische Wiederholung 200 → 403 wiederholen
-    return { headers: olxHeaders(site), proxyUrl: config.europe.proxyUrl || undefined, timeoutMs: 30000, retryOn403: true, retries: 3 };
+  /**
+   * Abruf mit wechselnden Header-Sätzen: Die OLX-Seiten sitzen hinter CloudFront/WAF. Probe 14.09.2026: nackte
+   * Anfragen und curl bekommen 403; mit Browser-Headern kommt dieselbe Anfrage mal 403, mal 200 (die erste je
+   * Prozess regelmäßig 403). Deshalb bis zu `attempts` Versuche, abwechselnd zwei Header-Sätze, kurze Pause dazwischen.
+   */
+  async get<T>(url: string, site: OlxSite, attempts = 6): Promise<T> {
+    const variants: Array<'browser' | 'json'> = ['browser', 'json'];
+    let last: HttpError | Error | null = null;
+    for (let i = 0; i < attempts; i++) {
+      const headers = olxHeaders(site, variants[i % variants.length]);
+      try {
+        const res = await robustFetch(url, { headers, timeoutMs: 30000, proxyUrl: config.europe.proxyUrl || undefined, nodeOnly: true });
+        if (res.ok) return (await res.json()) as T;
+        const body = await res.text().catch(() => '');
+        last = new HttpError(res.status, url, body.replace(/\s+/g, ' ').slice(0, 120), null);
+        if (res.status !== 403 && res.status !== 429 && res.status < 500) throw last;
+      } catch (e) {
+        if (e instanceof HttpError && e.status !== 403 && e.status !== 429 && e.status < 500) throw e;
+        last = e instanceof Error ? e : new Error(String(e));
+      }
+      await sleep(300 + i * 200);
+    }
+    throw last ?? new Error(`OLX: keine Antwort (${url})`);
   }
 
   /**
-   * Filterparameter (filter_float_price:from, filter_float_year:from) beantwortet der WAF mit 403 (Probe 14.09.2026),
-   * die ungefilterte Liste mit 200 → standardmäßig ohne Serverfilter, Mindestpreis/-baujahr werden nach dem Abruf geprüft.
+   * Serverfilter: `filter_float_year:from` lässt der WAF durch (200), `filter_float_price:from` nicht (403; Probe
+   * 14.09.2026). Baujahr also serverseitig, Mindestpreis nach dem Abruf.
    */
-  offersUrl(site: OlxSite, offset: number, withFilters = config.olx.serverFilters): string {
+  offersUrl(site: OlxSite, offset: number, withFilters = config.olx.serverYearFilter): string {
     const p = new URLSearchParams({ category_id: String(site.categoryId), offset: String(offset), limit: String(config.olx.pageSize), sort_by: 'created_at:desc' });
-    if (withFilters && config.olx.minPriceLocal > 0) p.set('filter_float_price:from', String(config.olx.minPriceLocal));
     if (withFilters && config.olx.minYear > 0) p.set('filter_float_year:from', String(config.olx.minYear));
     return `https://${site.host}/api/v1/offers/?${p}`;
   }
@@ -200,7 +243,7 @@ export class OlxProvider implements MarketProvider {
   async makeForCategory(site: OlxSite, categoryId: number, cache: Map<number, string>): Promise<void> {
     if (cache.has(categoryId)) return;
     try {
-      const json = await getJson<{ data?: Array<{ label?: string; name?: string; category_id?: number; id?: number }> }>(`https://${site.host}/api/v1/offers/metadata/breadcrumbs/?category_id=${categoryId}`, { ...this.http(site), retries: 0 });
+      const json = await this.get<{ data?: Array<{ label?: string; name?: string; category_id?: number; id?: number }> }>(`https://${site.host}/api/v1/offers/metadata/breadcrumbs/?category_id=${categoryId}`, site, 3);
       const crumbs = json.data ?? [];
       const own = crumbs.find((c) => num(c.category_id ?? c.id) === categoryId) ?? crumbs[crumbs.length - 1];
       cache.set(categoryId, str(own?.label ?? own?.name));
@@ -214,7 +257,7 @@ export class OlxProvider implements MarketProvider {
     const makeByCategory = new Map<number, string>();
     let offset = 0;
     for (let page = 0; page < config.olx.pages; page++) {
-      const json = await getJson<OlxOffersResponse>(this.offersUrl(site, offset), this.http(site));
+      const json = await this.get<OlxOffersResponse>(this.offersUrl(site, offset), site);
       const offers = json.data ?? [];
       if (!offers.length) break;
       // Marken je (Unter-)Kategorie einmal nachschlagen – höchstens ein Aufruf je Kategorie und Lauf

@@ -54,7 +54,10 @@ function showOlx(json: { data?: unknown[]; metadata?: unknown }, site: (typeof c
   console.log('data[0] ohne params/description:', short({ ...first, params: undefined, description: undefined, user: undefined }, 1500));
   for (const o of (json.data ?? []).slice(0, 5)) {
     const l = mapOlxOffer(o as never, site, fetchedAt);
-    console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.location} · ${l.photos.length} Fotos` : '  ✖ nicht abbildbar (Preis/Baujahr/Titel fehlt?)');
+    if (l) { console.log(`  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.fuel}/${l.transmission}/${l.drive}/${l.steering} · ${l.location} · ${l.photos.length} Fotos`); continue; }
+    const ofr = o as { title?: string; status?: string; params?: Array<{ key: string; value?: unknown }> };
+    const keys = (ofr.params ?? []).map((x) => x.key);
+    console.log(`  ✖ nicht abbildbar: "${ofr.title ?? ''}" · status=${ofr.status ?? '?'} · Preis ${keys.includes('price') ? 'da' : 'FEHLT'} · Baujahr ${keys.includes('year') ? 'da' : 'FEHLT'} · Zustand ${JSON.stringify((ofr.params ?? []).find((x) => x.key === 'condition')?.value ?? null)}`);
   }
 }
 
@@ -66,10 +69,21 @@ async function probeOlx() {
     const url = p.offersUrl(site, 0).replace(/limit=\d+/, 'limit=5');
     console.log(url);
     let json: { data?: unknown[]; metadata?: unknown } | null = null;
+    // Wiederholungstest: dieselbe Anfrage sechsmal – zeigt, ob der WAF nur die erste(n) Anfrage(n) abweist
+    const seq: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      try {
+        const res = await robustFetch(url, { headers: olxHeaders(site, 'browser'), timeoutMs: 20000, proxyUrl, nodeOnly: true });
+        await res.text();
+        seq.push(String(res.status));
+      } catch (e) { seq.push(e instanceof Error ? e.name : 'ERR'); }
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    console.log(`  Wiederholungstest (6× browser-Header): ${seq.join(' → ')}`);
     try {
-      // wie im Adapter: 403 bis zu dreimal wiederholen
-      json = await getJson<{ data?: unknown[]; metadata?: unknown }>(url, p.http(site));
-      console.log('  ✔ Liste geladen (Adapter-Header, ggf. nach Wiederholung)');
+      // wie im Adapter: bis zu sechs Versuche mit wechselnden Header-Sätzen
+      json = await p.get<{ data?: unknown[]; metadata?: unknown }>(url, site);
+      console.log('  ✔ Liste über den Adapter-Abruf geladen');
     } catch (e) {
       console.log('  ✖', e instanceof Error ? e.message.slice(0, 200) : String(e));
       const body = await tryVariants(url, [
@@ -86,6 +100,7 @@ async function probeOlx() {
       // Welche Serverfilter der WAF durchlässt (nur zur Information; Standard ist ohne)
       const base = p.offersUrl(site, 0, false).replace(/limit=\d+/, 'limit=1');
       await tryVariants(`${base}&filter_float_price%3Afrom=20000`, [['nur Preisfilter', olxHeaders(site, 'browser')]]);
+      await tryVariants(`${base}&filter_float_price%3Afrom=20000&filter_float_year%3Afrom=2012`, [['Preis+Baujahr', olxHeaders(site, 'browser')]]);
       await tryVariants(`${base}&filter_float_year%3Afrom=2012`, [['nur Baujahrfilter', olxHeaders(site, 'browser')]]);
     }
   }

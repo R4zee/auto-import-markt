@@ -73,9 +73,10 @@ export class HttpError extends Error {
  * HTTP-Abruf: zuerst das globale fetch; schlägt es ohne Netzwerkursache fehl (auf Vercel ist
  * fetch instrumentiert und lehnt manche URLs ab), Wiederholung mit dem ungepatchten undici-Client.
  */
-export async function robustFetch(url: string, init: RequestInit & { timeoutMs?: number; proxyUrl?: string } = {}): Promise<Response> {
-  const { timeoutMs = 20000, proxyUrl, ...rest } = init;
-  if (process.env.HTTP_CLIENT === 'curl') {
+export async function robustFetch(url: string, init: RequestInit & { timeoutMs?: number; proxyUrl?: string; nodeOnly?: boolean } = {}): Promise<Response> {
+  const { timeoutMs = 20000, proxyUrl, nodeOnly = false, ...rest } = init;
+  // nodeOnly: den curl-Umweg (HTTP_CLIENT=curl, für Encar auf dem Runner) auslassen – OLX weist curl mit 403 ab
+  if (process.env.HTTP_CLIENT === 'curl' && !nodeOnly) {
     return curlFetch(url, { proxyUrl, timeoutMs, headers: rest.headers as Record<string, string> | undefined });
   }
   if (proxyUrl) {
@@ -95,12 +96,12 @@ export async function robustFetch(url: string, init: RequestInit & { timeoutMs?:
   }
 }
 
-export async function getJson<T>(url: string, init: RequestInit & { retries?: number; timeoutMs?: number; maxRetryWaitMs?: number; proxyUrl?: string; retryOn403?: boolean } = {}): Promise<T> {
-  const { retries = 2, timeoutMs = 20000, maxRetryWaitMs = 15000, proxyUrl, retryOn403 = false, ...rest } = init;
+export async function getJson<T>(url: string, init: RequestInit & { retries?: number; timeoutMs?: number; maxRetryWaitMs?: number; proxyUrl?: string; retryOn403?: boolean; nodeOnly?: boolean } = {}): Promise<T> {
+  const { retries = 2, timeoutMs = 20000, maxRetryWaitMs = 15000, proxyUrl, retryOn403 = false, nodeOnly = false, ...rest } = init;
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await robustFetch(url, { ...rest, timeoutMs, proxyUrl });
+      const res = await robustFetch(url, { ...rest, timeoutMs, proxyUrl, nodeOnly });
       if (res.ok) return (await res.json()) as T;
       const body = await res.text().catch(() => '');
       const retryAfter = Number(res.headers.get('retry-after'));

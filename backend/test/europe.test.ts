@@ -76,6 +76,43 @@ describe('OLX mapping (olx.pl)', () => {
     assert.equal(olxPhoto(undefined), null);
   });
 
+  it('olx.pl-Schlüssel aus der Live-Antwort 14.09.2026: drive, righthanddrive, petrol=cng, Modell "RAV-4" im Titel "RAV4"', () => {
+    const live = {
+      id: 1059313880, url: 'https://www.olx.pl/d/oferta/toyota-rav4-CID5-ID19GLWK.html', title: 'Toyota RAV4 Comfort + Style, krajowy, faktura vat 23%', status: 'active', business: false,
+      params: [
+        { key: 'price', name: 'Cena', type: 'price', value: { value: 89900, currency: 'PLN', label: '89 900 zł' } },
+        { key: 'model', name: 'Model', type: 'select', value: { key: 'rav-4', label: 'RAV-4' } },
+        { key: 'year', name: 'Rok produkcji', type: 'input', value: { key: '2020', label: '2020 ' } },
+        { key: 'petrol', name: 'Paliwo', type: 'select', value: { key: 'cng', label: 'CNG i Hybryda' } },
+        { key: 'car_body', name: 'Typ nadwozia', type: 'select', value: { key: 'suv', label: 'SUV' } },
+        { key: 'enginesize', name: 'Poj. silnika', type: 'input', value: { key: '2487', label: '2 487 cm³' } },
+        { key: 'condition', name: 'Stan techniczny', type: 'select', value: { key: 'notdamaged', label: 'Nieuszkodzony' } },
+        { key: 'transmission', name: 'Skrzynia biegów', type: 'select', value: { key: 'automatic', label: 'Automatyczna' } },
+        { key: 'enginepower', name: 'Moc silnika', type: 'input', value: { key: '218', label: '218 KM' } },
+        { key: 'milage', name: 'Przebieg', type: 'input', value: { key: '199000', label: '199 000 km' } },
+        { key: 'drive', name: 'Napęd', type: 'select', value: { key: 'front-wheel', label: 'Na przednie koła' } },
+        { key: 'righthanddrive', name: 'Kierownica', type: 'select', value: { key: '1', label: 'po lewej' } },
+      ],
+      location: { city: { name: 'Świętochłowice' }, region: { name: 'Śląskie' } },
+      photos: [{ link: 'https://ireland.apollo.olxcdn.com:443/v1/files/f68txkggv4is1-PL/image;s={width}x{height}' }],
+      category: { id: 1234 },
+    };
+    const l = mapOlxOffer(live, site, NOW);
+    assert.ok(l);
+    assert.equal(l.make, 'Toyota');
+    assert.equal(l.model, 'RAV-4');
+    assert.equal(l.trim, 'Comfort + Style, krajowy, faktura vat 23% · SUV');
+    assert.equal(l.fuel, 'Hybrid');
+    assert.equal(l.drive, 'FWD');
+    assert.equal(l.steering, 'LHD');
+    assert.equal(l.engineCcm, 2487);
+    assert.equal(l.km, 199000);
+    const rhd = { ...live, params: live.params.map((p) => (p.key === 'righthanddrive' ? { ...p, value: { key: '2', label: 'po prawej' } } : p.key === 'drive' ? { ...p, value: { key: 'all-wheel', label: '4x4 (stały)' } } : p)) };
+    const r = mapOlxOffer(rhd, site, NOW);
+    assert.equal(r?.steering, 'RHD');
+    assert.equal(r?.drive, 'AWD');
+  });
+
   it('portugiesische Seite → Südeuropa, EUR', () => {
     const l = mapOlxOffer({ ...offer, params: offer.params.map((p) => (p.key === 'price' ? { ...p, value: { value: 21500, currency: 'EUR' } } : p)) }, { country: 'pt', host: 'www.olx.pt', categoryId: 1, currency: 'EUR', enabled: true }, NOW, new Map([[183, 'BMW']]));
     assert.equal(l?.market, 'SE');
