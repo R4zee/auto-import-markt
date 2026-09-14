@@ -110,8 +110,8 @@ export interface OlxSite {
  * Kategorie-ID finden: Pkw-Kategorie der Seite im Browser öffnen → Netzwerk-Tab → Aufruf „api/v1/offers/?…category_id=…“.
  */
 const OLX_DEFAULT_SITES: OlxSite[] = [
-  { country: 'pl', host: 'www.olx.pl', categoryId: 84, currency: 'PLN', enabled: true }, // Samochody osobowe – beim ersten Lauf bestätigen
-  { country: 'ro', host: 'www.olx.ro', categoryId: null, currency: 'RON', enabled: true },
+  { country: 'pl', host: 'www.olx.pl', categoryId: 84, currency: 'PLN', enabled: true }, // Motoryzacja › Samochody osobowe (Live-Probe 14.09.2026)
+  { country: 'ro', host: 'www.olx.ro', categoryId: 84, currency: 'RON', enabled: true }, // Auto, moto si ambarcatiuni › Autoturisme (Kategorie-Scan 14.09.2026)
   { country: 'bg', host: 'www.olx.bg', categoryId: null, currency: 'BGN', enabled: true },
   { country: 'pt', host: 'www.olx.pt', categoryId: null, currency: 'EUR', enabled: true },
 ];

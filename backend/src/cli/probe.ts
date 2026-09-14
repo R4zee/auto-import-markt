@@ -11,7 +11,8 @@ import { mapSubito, SubitoProvider } from '../providers/subito.js';
  * Rechner in einer Minute prüfen, ob Endpunkt, Kategorie-IDs und Feldnamen stimmen.
  *
  *   npm run probe -- olx        (alle konfigurierten OLX-Seiten, je 5 Inserate; bei 403 mehrere Header-Varianten)
- *   npm run probe -- olx-scan ro [120]   (Kategorienamen 1…120 der Seite olx.ro – Pkw-Kategorie-ID finden)
+ *   npm run probe -- olx-scan ro [bis] | olx-scan bg von bis   (Kategorienamen der Seite – Pkw-Kategorie-ID finden)
+ *   npm run probe -- olx-page bg /avtomobili-i-dzhipove/        (Kategorie-ID aus dem Seitenquelltext der Pkw-Kategorie)
  *   npm run probe -- subito
  *   npm run probe -- sauto
  *   npm run probe -- <provider> (jeder andere Provider: fetchAll mit Ausgabe der ersten 3 Inserate)
@@ -134,26 +135,56 @@ async function probeOlx() {
  * Breadcrumb-Endpunkt ab und zeigt die Namen; die Zeile mit „Autoturisme“ / „Автомобили“ / „Carros“ ist die gesuchte ID.
  * Über den Adapter-Abruf (Sofort-Wiederholung), 400 ms Pause je Kategorie, Abbruch bei fünf Fehlern in Folge.
  */
-async function scanOlxCategories(country: string, max: number) {
-  const site = config.olx.sites.find((s) => s.country === country) ?? { country, host: `www.olx.${country}`, categoryId: null, currency: 'EUR', enabled: true };
+function olxSiteFor(country: string) {
+  return config.olx.sites.find((s) => s.country === country) ?? { country, host: `www.olx.${country}`, categoryId: null, currency: 'EUR', enabled: true };
+}
+
+async function scanOlxCategories(country: string, from: number, to: number) {
+  const site = olxSiteFor(country);
   const p = new OlxProvider();
-  console.log(`\n=== OLX ${country.toUpperCase()} · ${site.host} · Kategorien 1–${max} über /api/v1/offers/metadata/breadcrumbs/`);
+  console.log(`\n=== OLX ${country.toUpperCase()} · ${site.host} · Kategorien ${from}–${to} über /api/v1/offers/metadata/breadcrumbs/ (nur Treffer mit Unterkategorie)`);
   let failures = 0;
-  let shownRaw = false;
-  for (let id = 1; id <= max; id++) {
+  for (let id = from; id <= to; id++) {
     try {
       const json = await p.get<unknown>(`https://${site.host}/api/v1/offers/metadata/breadcrumbs/?category_id=${id}`, site, 4);
       failures = 0;
-      if (!shownRaw) { console.log('  Rohantwort (erste):', short(json, 700)); shownRaw = true; }
-      const chain = OlxProvider.breadcrumbLabels(json).join(' › ');
-      if (chain) console.log(`  ${String(id).padStart(4)}  ${chain}`);
+      const labels = OlxProvider.breadcrumbLabels(json);
+      if (labels.length > 1) console.log(`  ${String(id).padStart(5)}  ${labels.slice(1).join(' › ')}`);
     } catch (e) {
       failures++;
       const msg = e instanceof Error ? e.message : String(e);
       if (!/HTTP 404|HTTP 400/.test(msg)) console.log(`  ${String(id).padStart(4)}  ✖ ${msg.slice(0, 80)}`);
       if (failures >= 5 && !/HTTP 404|HTTP 400/.test(msg)) { console.log('  Abbruch: fünf Fehler in Folge (WAF?) – später erneut versuchen'); break; }
     }
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+
+/**
+ * Kategorie-ID aus der HTML-Seite der Pkw-Kategorie lesen: `npm run probe -- olx-page bg /avtomobili-i-dzhipove/`
+ * Sucht im Seitenquelltext nach category_id / categoryId / "category":{"id":…}, zählt die Kandidaten und prüft die
+ * häufigsten über den Breadcrumb-Endpunkt.
+ */
+async function olxPage(country: string, path: string) {
+  const site = olxSiteFor(country);
+  const p = new OlxProvider();
+  const url = `https://${site.host}${path.startsWith('/') ? path : `/${path}`}`;
+  console.log(`\n=== OLX ${country.toUpperCase()} · Seite ${url}`);
+  const res = await robustFetch(url, { headers: { ...olxHeaders(site, 'browser'), Accept: 'text/html,application/xhtml+xml' }, timeoutMs: 30000, proxyUrl, nodeOnly: true, tls: 'chrome' });
+  const html = await res.text();
+  console.log(`  HTTP ${res.status} · ${(html.length / 1024).toFixed(0)} KB`);
+  if (!res.ok) return;
+  const counts = new Map<number, number>();
+  const patterns = [/category_id(?:%3D|=|\\?["']?\s*:\s*\\?["']?)(\d{1,6})/gi, /categoryId\\?["']?\s*[:=]\s*\\?["']?(\d{1,6})/gi, /\\?["']category\\?["']\s*:\s*\{\s*\\?["']id\\?["']\s*:\s*\\?["']?(\d{1,6})/gi, /cat_l1_id\\?["']?\s*:\s*\\?["'](\d{1,6})/gi, /cat_l2_id\\?["']?\s*:\s*\\?["'](\d{1,6})/gi];
+  for (const re of patterns) for (const m of html.matchAll(re)) counts.set(Number(m[1]), (counts.get(Number(m[1])) ?? 0) + 1);
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  if (!top.length) { console.log('  keine Kategorie-IDs im Quelltext gefunden'); return; }
+  console.log('  Kandidaten (ID × Vorkommen) und Breadcrumb:');
+  for (const [id, n] of top) {
+    try {
+      const json = await p.get<unknown>(`https://${site.host}/api/v1/offers/metadata/breadcrumbs/?category_id=${id}`, site, 4);
+      console.log(`  ${String(id).padStart(5)} ×${String(n).padEnd(4)} ${OlxProvider.breadcrumbLabels(json).slice(1).join(' › ') || '(nur Startseite)'}`);
+    } catch (e) { console.log(`  ${String(id).padStart(5)} ×${String(n).padEnd(4)} ✖ ${e instanceof Error ? e.message.slice(0, 60) : String(e)}`); }
   }
 }
 
@@ -203,7 +234,10 @@ async function probeSauto() {
 
 try {
   if (name === 'olx') await probeOlx();
-  else if (name === 'olx-scan') await scanOlxCategories((process.argv[3] ?? 'ro').toLowerCase(), Number(process.argv[4] ?? 120));
+  else if (name === 'olx-scan') {
+    const a = Number(process.argv[4] ?? 1); const b = Number(process.argv[5] ?? (process.argv[4] ? a : 120));
+    await scanOlxCategories((process.argv[3] ?? 'ro').toLowerCase(), process.argv[5] ? a : 1, b);
+  } else if (name === 'olx-page') await olxPage((process.argv[3] ?? 'bg').toLowerCase(), process.argv[4] ?? '/');
   else if (name === 'subito') await probeSubito();
   else if (name === 'sauto') await probeSauto();
   else {
