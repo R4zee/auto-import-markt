@@ -5,8 +5,10 @@ import { EbayMotorsProvider } from './ebay.js';
 import { EncarProvider } from './encar.js';
 import { feedProviders } from './feed.js';
 import { MarketCheckProvider } from './marketcheck.js';
-import { MobileDeProvider } from './mobilede.js';
 import { MockProvider } from './mock.js';
+import { OlxProvider } from './olx.js';
+import { SautoProvider } from './sauto.js';
+import { SubitoProvider } from './subito.js';
 import type { MarketProvider } from './types.js';
 import { XapiKoreaProvider } from './xapikorea.js';
 
@@ -18,7 +20,10 @@ const ALL: MarketProvider[] = [
   new EbayMotorsProvider(),
   new ApibaraProvider(),
   new AutoApiProvider(),
-  new MobileDeProvider(),
+  // Süd-/Osteuropa: keyless Frontend-Endpunkte (Grauzone wie Encar, je Seite schaltbar)
+  new OlxProvider(),
+  new SubitoProvider(),
+  new SautoProvider(),
   ...feedProviders(),
 ];
 

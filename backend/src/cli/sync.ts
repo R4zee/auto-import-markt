@@ -1,7 +1,9 @@
 import { closeDb, ready } from '../db.js';
 import { getFx } from '../services/fx.js';
-import { syncAll } from '../services/sync.js';
+import { syncAll, syncProvider } from '../services/sync.js';
+import { refreshFacets } from '../services/facets.js';
 import { listingsRepo } from '../repositories/listings.js';
+import { activeProviders } from '../providers/index.js';
 import { config } from '../config.js';
 
 const target = config.database.url.startsWith('file:') ? 'lokale Datei' : config.database.url === ':memory:' ? 'In-Memory' : 'Turso (remote)';
@@ -16,7 +18,19 @@ if (config.encar.enabled) {
 }
 await ready();
 await getFx();
-const reports = await syncAll();
+// SYNC_ONLY=olx,subito – nur diese (aktiven) Provider, ohne Bereinigung; leer = alles
+const only = (process.env.SYNC_ONLY ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+let reports;
+if (only.length) {
+  const chosen = activeProviders().filter((p) => only.includes(p.id));
+  const missing = only.filter((id) => !chosen.some((p) => p.id === id));
+  if (missing.length) console.log(`Nicht aktiv oder unbekannt: ${missing.join(', ')} (aktiv: ${activeProviders().map((p) => p.id).join(', ') || '–'})`);
+  reports = [];
+  for (const p of chosen) reports.push(await syncProvider(p));
+  await refreshFacets();
+} else {
+  reports = await syncAll();
+}
 for (const r of reports) {
   const warn = r.warnings?.length ? `  ⚠ ${r.warnings.join(' | ')}` : '';
   console.log(`${r.status === 'ok' ? '✔' : '✖'} ${r.provider.padEnd(12)} upserted=${r.upserted} deactivated=${r.deactivated} ${r.durationMs}ms ${r.error ?? ''}${warn}`);

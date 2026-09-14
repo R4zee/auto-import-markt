@@ -329,9 +329,21 @@ Weitere Stellschrauben, falls die Rechnung noch zu hoch ist: `memory` in `vercel
 (Function braucht mit SQL-Suche deutlich weniger als vorher), Cron in `vercel.json` entfernen, wenn alle
 Provider über GitHub Actions laufen (der Cron ruft dann nur noch Facetten-/Kursaktualisierung auf).
 
-**Neue Quellen Süd-/Osteuropa** (GitHub → Settings → Secrets → Actions): `MOBILEDE_USERNAME` und
-`MOBILEDE_PASSWORD` (mobile.de-API-Account) sowie optional `PARTNER_FEEDS` (JSON-Array, Format in
-`backend/.env.example`). Ohne diese Secrets bleiben die Provider aus; der Sync-Lauf meldet je Land die Anzahl.
+**Neue kostenlose Quellen Süd-/Osteuropa** (OLX PL/RO/BG/PT, Subito.it, Sauto.cz – Frontend-Endpunkte ohne Key):
+
+1. Vom eigenen Rechner prüfen, ob Endpunkt und Zuordnung stimmen (schreibt nichts):
+   `npm run probe -w backend -- olx`, dann `subito`, dann `sauto`. Die Ausgabe zeigt die Rohantwort und je
+   Inserat eine Zeile `✔ Baujahr Marke Modell · km · Preis`. Steht dort `✖`, Feldnamen in
+   `backend/src/providers/<quelle>.ts` an die Rohantwort anpassen.
+2. Für OLX Rumänien/Bulgarien/Portugal die Pkw-Kategorie-ID ablesen (Kategorie im Browser öffnen → Netzwerk-Tab →
+   Aufruf `api/v1/offers/?…category_id=…`) und in GitHub → Settings → **Variables** → Actions als `OLX_SITES`
+   hinterlegen, z. B. `[{"country":"ro","categoryId":1234},{"country":"bg","categoryId":5678}]`.
+3. Ebenfalls als Variables: `OLX_ENABLED=true`, `SUBITO_ENABLED=true`, `SAUTO_ENABLED=true`. Optional als Secret
+   `EUROPE_PROXY_URL` (Residential-Proxy wie bei Encar), falls eine Seite den GitHub-Runner mit 403 abweist.
+4. Testlauf: Actions → Sync Listings → Run workflow → „Nur diese Provider“ = `olx,subito,sauto`. Der Lauf meldet je
+   Seite die Anzahl; danach läuft alles im 6-Stunden-Rhythmus mit.
+
+Optional weiterhin `PARTNER_FEEDS` (JSON-Array, Format in `backend/.env.example`) für direkte Händler-Feeds.
 
 **Kosten/Volumen:** rund 300 Listen- und 1.500 Detailabrufe je Lauf. Encar liefert gzip-komprimiert,
 Erfahrungswert nach dem ersten Lauf im DataImpulse-Dashboard unter **Usage** prüfen; erwartet werden

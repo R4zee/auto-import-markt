@@ -94,6 +94,50 @@ function partnerFeeds(): PartnerFeedConfig[] {
   return out;
 }
 
+export interface OlxSite {
+  /** ISO-2 klein, wird Teil der Quelle (olx-pl) und bestimmt den Markt */
+  country: string;
+  host: string;
+  /** Pkw-Kategorie der jeweiligen OLX-Seite (null = noch nicht ermittelt → Seite bleibt aus) */
+  categoryId: number | null;
+  currency: string;
+  enabled: boolean;
+}
+
+/**
+ * OLX_SITES: JSON-Array, überschreibt/ergänzt die Vorgaben, z. B.
+ * [{"country":"ro","categoryId":1234},{"country":"pl","enabled":false}]
+ * Kategorie-ID finden: Pkw-Kategorie der Seite im Browser öffnen → Netzwerk-Tab → Aufruf „api/v1/offers/?…category_id=…“.
+ */
+const OLX_DEFAULT_SITES: OlxSite[] = [
+  { country: 'pl', host: 'www.olx.pl', categoryId: 84, currency: 'PLN', enabled: true }, // Samochody osobowe – beim ersten Lauf bestätigen
+  { country: 'ro', host: 'www.olx.ro', categoryId: null, currency: 'RON', enabled: true },
+  { country: 'bg', host: 'www.olx.bg', categoryId: null, currency: 'BGN', enabled: true },
+  { country: 'pt', host: 'www.olx.pt', categoryId: null, currency: 'EUR', enabled: true },
+];
+
+function olxSites(): OlxSite[] {
+  const sites = OLX_DEFAULT_SITES.map((s) => ({ ...s }));
+  const raw = (env.OLX_SITES ?? '').trim();
+  if (!raw) return sites;
+  let arr: unknown;
+  try { arr = JSON.parse(raw); } catch (e) { throw new Error(`OLX_SITES ist kein gültiges JSON: ${e instanceof Error ? e.message : String(e)}`); }
+  if (!Array.isArray(arr)) throw new Error('OLX_SITES muss ein JSON-Array sein');
+  for (const o of arr as Array<Record<string, unknown>>) {
+    const country = String(o.country ?? '').toLowerCase();
+    if (!country) continue;
+    const cur = sites.find((s) => s.country === country);
+    const patch: Partial<OlxSite> = {};
+    if (o.host != null) patch.host = String(o.host);
+    if (o.categoryId != null) patch.categoryId = Number(o.categoryId);
+    if (o.currency != null) patch.currency = String(o.currency).toUpperCase();
+    if (o.enabled != null) patch.enabled = Boolean(o.enabled);
+    if (cur) Object.assign(cur, patch);
+    else sites.push({ country, host: patch.host ?? `www.olx.${country}`, categoryId: patch.categoryId ?? null, currency: patch.currency ?? 'EUR', enabled: patch.enabled ?? true });
+  }
+  return sites;
+}
+
 export const config = {
   port: num(env.PORT, 4000),
   host: env.HOST ?? '0.0.0.0',
@@ -118,18 +162,44 @@ export const config = {
     marketplaceId: env.EBAY_MARKETPLACE_ID ?? 'EBAY_US',
   },
   partnerFeeds: partnerFeeds(),
-  /** mobile.de Search API (API-Account über den mobile.de-Kundensupport; HTTP Basic) */
-  mobilede: {
-    baseUrl: env.MOBILEDE_BASE_URL ?? 'https://services.mobile.de',
-    username: env.MOBILEDE_USERNAME ?? '',
-    password: env.MOBILEDE_PASSWORD ?? '',
-    /** Verkäuferländer (ISO-2); leer = alle Länder aus MARKET_COUNTRIES (Süd- und Osteuropa) */
-    countries: list(env.MOBILEDE_COUNTRIES).map((c) => c.toLowerCase()),
-    pages: num(env.MOBILEDE_PAGES, 20),
-    pageSize: num(env.MOBILEDE_PAGE_SIZE, 100),
-    minPriceEur: num(env.MOBILEDE_MIN_PRICE_EUR, 5000),
-    minYear: num(env.MOBILEDE_MIN_YEAR, 2012),
-    delayMs: num(env.MOBILEDE_DELAY_MS, 250),
+  /** Gemeinsame Einstellungen der europäischen Frontend-Endpunkte (OLX, Subito, Sauto) */
+  europe: {
+    /** Optionaler Residential-Proxy, falls eine Seite Rechenzentrums-IPs ablehnt (Form wie ENCAR_PROXY_URL) */
+    proxyUrl: env.EUROPE_PROXY_URL ?? '',
+    userAgent: env.EUROPE_USER_AGENT ?? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36',
+  },
+  olx: {
+    enabled: bool(env.OLX_ENABLED, false),
+    sites: olxSites().map((s) => ({ ...s, enabled: s.enabled && bool(env.OLX_ENABLED, false) })),
+    /** Seiten je Land und Lauf (OLX sortiert nach Einstelldatum → die neuesten N×pageSize Inserate) */
+    pages: num(env.OLX_PAGES, 25),
+    pageSize: Math.min(50, num(env.OLX_PAGE_SIZE, 40)),
+    /** Mindestpreis in Landeswährung (0 = aus) und ältestes Baujahr */
+    minPriceLocal: num(env.OLX_MIN_PRICE, 20000),
+    minYear: num(env.OLX_MIN_YEAR, 2012),
+    delayMs: num(env.OLX_DELAY_MS, 400),
+  },
+  subito: {
+    enabled: bool(env.SUBITO_ENABLED, false),
+    pages: num(env.SUBITO_PAGES, 30),
+    pageSize: Math.min(100, num(env.SUBITO_PAGE_SIZE, 100)),
+    /** Regionen-IDs (r=…) – leer = ganz Italien */
+    regions: list(env.SUBITO_REGIONS),
+    minPriceEur: num(env.SUBITO_MIN_PRICE_EUR, 5000),
+    minYear: num(env.SUBITO_MIN_YEAR, 2012),
+    imageRule: env.SUBITO_IMAGE_RULE ?? 'gallery-desktop-2x-jpeg',
+    delayMs: num(env.SUBITO_DELAY_MS, 400),
+  },
+  sauto: {
+    enabled: bool(env.SAUTO_ENABLED, false),
+    categoryId: num(env.SAUTO_CATEGORY_ID, 838),
+    pages: num(env.SAUTO_PAGES, 5),
+    pageSize: Math.min(200, num(env.SAUTO_PAGE_SIZE, 200)),
+    /** Preisfenster (CZK) ab Mindestpreis; maxBands begrenzt den Umfang je Lauf */
+    minPriceCzk: num(env.SAUTO_MIN_PRICE_CZK, 150000),
+    maxBands: num(env.SAUTO_MAX_BANDS, 10),
+    minYear: num(env.SAUTO_MIN_YEAR, 2012),
+    delayMs: num(env.SAUTO_DELAY_MS, 400),
   },
   encar: {
     enabled: bool(env.ENCAR_ENABLED, false),

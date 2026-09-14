@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test \"test/**/*.test.ts\"",
     "sync:turso": "node --import tsx --env-file=.env.turso src/cli/sync.ts",
+    "probe": "node --import tsx --env-file-if-exists=.env src/cli/probe.ts",
     "check:xapikorea": "node --import tsx --env-file-if-exists=.env src/cli/check-xapikorea.ts"
   },
   "dependencies": {
