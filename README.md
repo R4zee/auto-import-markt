@@ -91,7 +91,7 @@ Lokal reproduzieren: `backend/test/search.test.ts` prüft Pfade und Facetten; ei
 | `encar` | **Südkorea (Hauptquelle)** – Encar direkt, Vollabgleich (~150.000 Inserate) | `ENCAR_ENABLED=true` + `ENCAR_PROXY_URL` (Residential-Proxy); läuft per GitHub Actions alle 6 h, Teilabfragen < 10.000, Übersetzungs-Cache `encar_grades` |
 | `xapikorea` | Südkorea (Fallback, Encar-Wrapper mit englischen Feldern) | `XAPIKOREA_API_KEY` (Free 500 Req/Monat) |
 | `autoapi` | VAE (Dubizzle, Dubicars) | `AUTOAPI_ACCESS_NAME`, `AUTOAPI_API_KEY` (Zugang via access@auto-api.com) |
-| `olx` (Quellen `olx-pl`, `olx-ro`, `olx-bg`, `olx-pt`) | **Osteuropa/Portugal** – OLX-Frontend-Endpunkt `/api/v1/offers/`, keyless, kostenlos; PL live bestätigt (14.09.2026) | `OLX_ENABLED=true`; Pkw-Kategorie je Seite (`OLX_SITES`, PL = 84) |
+| `olx` (Quellen `olx-pl`, `olx-ro`, `olx-bg`, `olx-pt`) | **Osteuropa/Portugal** – OLX-Frontend-Endpunkt `/api/v1/offers/`, keyless, kostenlos; PL live bestätigt (14.09.2026) | `OLX_ENABLED=true`; Pkw-Kategorien vorbelegt (PL 84, RO 84, BG 1117, PT 378), `OLX_SITES` nur zum Übersteuern |
 | `subito` | **Italien** – Subito.it JSON-Suche `hades.subito.it/v1/search/items` (c=2 Auto), keyless, kostenlos; live bestätigt | `SUBITO_ENABLED=true` |
 | `sauto` | **Tschechien** – Sauto.cz `/api/v1/items/search` (Kategorie 838), keyless, kostenlos; live bestätigt | `SAUTO_ENABLED=true` |
 | `feed-<id>` | beliebig – Partner-/Händler-Feeds (JSON), z. B. rumänischer oder italienischer Importeur | `PARTNER_FEEDS` (JSON-Array mit `id, url, mapping, country`; Markt aus dem Land) |
@@ -117,8 +117,7 @@ Kategorie-IDs und Feldnamen stimmen – der Befehl holt fünf Inserate, zeigt Ro
 npm run probe -w backend -- olx      # bzw. subito | sauto
 ```
 
-Danach in GitHub → Settings → Variables `OLX_ENABLED`/`SUBITO_ENABLED`/`SAUTO_ENABLED` auf `true` (und `OLX_SITES` mit
-den Kategorie-IDs für RO/BG/PT). Ein Testlauf nur dieser Quellen: Actions → Sync Listings → Run workflow → Feld
+Danach in GitHub → Settings → Variables `OLX_ENABLED`/`SUBITO_ENABLED`/`SAUTO_ENABLED` auf `true`. Ein Testlauf nur dieser Quellen: Actions → Sync Listings → Run workflow → Feld
 „Nur diese Provider“ = `olx,subito,sauto` (lokal `SYNC_ONLY=olx npm run sync`).
 
 Tests: `npm test` (55 Tests: Kalkulation, Kfz-Steuer, API, Suche/Facetten, Provider-Mappings inkl. OLX, Subito, Sauto und Partner-Feeds).

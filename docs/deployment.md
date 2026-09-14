@@ -335,10 +335,9 @@ Provider über GitHub Actions laufen (der Cron ruft dann nur noch Facetten-/Kurs
    `npm run probe -w backend -- olx`, dann `subito`, dann `sauto`. Die Ausgabe zeigt die Rohantwort und je
    Inserat eine Zeile `✔ Baujahr Marke Modell · km · Preis`. Steht dort `✖`, Feldnamen in
    `backend/src/providers/<quelle>.ts` an die Rohantwort anpassen.
-2. Für OLX Rumänien/Bulgarien/Portugal die Pkw-Kategorie-ID ablesen (Kategorie im Browser öffnen → Netzwerk-Tab →
-   Aufruf `api/v1/offers/?…category_id=…`) und in GitHub → Settings → **Variables** → Actions als `OLX_SITES`
-   hinterlegen, z. B. `[{"country":"ro","categoryId":1234},{"country":"bg","categoryId":5678}]`.
-3. Ebenfalls als Variables: `OLX_ENABLED=true`, `SUBITO_ENABLED=true`, `SAUTO_ENABLED=true`. Optional als Secret
+2. Die Pkw-Kategorien aller vier OLX-Seiten sind vorbelegt (PL 84, RO 84, BG 1117, PT 378, Live-Proben 14.09.2026);
+   `OLX_SITES` als Variable nur, um eine Seite abzuschalten, z. B. `[{"country":"pt","enabled":false}]`.
+3. Als Variables (GitHub → Settings → Secrets and variables → Actions → Variables): `OLX_ENABLED=true`, `SUBITO_ENABLED=true`, `SAUTO_ENABLED=true`. Optional als Secret
    `EUROPE_PROXY_URL` (Residential-Proxy wie bei Encar), falls eine Seite den GitHub-Runner mit 403 abweist.
 4. Testlauf: Actions → Sync Listings → Run workflow → „Nur diese Provider“ = `olx,subito,sauto`. Der Lauf meldet je
    Seite die Anzahl; danach läuft alles im 6-Stunden-Rhythmus mit.

@@ -106,13 +106,13 @@ export interface OlxSite {
 
 /**
  * OLX_SITES: JSON-Array, überschreibt/ergänzt die Vorgaben, z. B.
- * [{"country":"ro","categoryId":1234},{"country":"pl","enabled":false}]
+ * [{"country":"pl","enabled":false}] – Pkw-Kategorien PL 84, RO 84, BG 1117, PT 378 sind vorbelegt (Live-Proben 14.09.2026)
  * Kategorie-ID finden: Pkw-Kategorie der Seite im Browser öffnen → Netzwerk-Tab → Aufruf „api/v1/offers/?…category_id=…“.
  */
 const OLX_DEFAULT_SITES: OlxSite[] = [
   { country: 'pl', host: 'www.olx.pl', categoryId: 84, currency: 'PLN', enabled: true }, // Motoryzacja › Samochody osobowe (Live-Probe 14.09.2026)
   { country: 'ro', host: 'www.olx.ro', categoryId: 84, currency: 'RON', enabled: true }, // Auto, moto si ambarcatiuni › Autoturisme (Kategorie-Scan 14.09.2026)
-  { country: 'bg', host: 'www.olx.bg', categoryId: null, currency: 'BGN', enabled: true },
+  { country: 'bg', host: 'www.olx.bg', categoryId: 1117, currency: 'BGN', enabled: true }, // Автомобили, каравани, лодки › Автомобили и Джипове (Kategorie-Scan 14.09.2026)
   { country: 'pt', host: 'www.olx.pt', categoryId: 378, currency: 'EUR', enabled: true }, // Carros, motos e barcos › Carros (Seitenquelltext + Scan 14.09.2026)
 ];
 
