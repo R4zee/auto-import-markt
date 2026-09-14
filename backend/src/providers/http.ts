@@ -94,6 +94,21 @@ export function tlsConnectOptions(profile: TlsProfile): Record<string, unknown> 
   return {};
 }
 
+const tlsAgents = new Map<TlsProfile, Dispatcher>();
+
+/**
+ * Wiederverwendbarer Agent mit TLS-Profil (Probe 14.09.2026: der OLX-WAF blockt Nodes Standard-ClientHello, mit
+ * Chrome-Cipher-Reihenfolge oder nur TLS 1.3 kommt jede Anfrage durch). Verbindungen werden normal wiederverwendet.
+ */
+export function tlsProfileDispatcher(profile: TlsProfile): Dispatcher {
+  let agent = tlsAgents.get(profile);
+  if (!agent) {
+    agent = new Agent({ connect: { ...tlsConnectOptions(profile), timeout: 30000 } });
+    tlsAgents.set(profile, agent);
+  }
+  return agent;
+}
+
 export async function freshFetch(url: string, init: UndiciRequestInit & { timeoutMs?: number; h2?: boolean; proxyUrl?: string; tls?: TlsProfile } = {}): Promise<Response> {
   const { timeoutMs = 20000, h2 = false, proxyUrl, tls = 'node', ...rest } = init;
   const agent: Dispatcher = proxyUrl
@@ -111,13 +126,17 @@ export async function freshFetch(url: string, init: UndiciRequestInit & { timeou
   }
 }
 
-export async function robustFetch(url: string, init: RequestInit & { timeoutMs?: number; proxyUrl?: string; nodeOnly?: boolean; fresh?: boolean } = {}): Promise<Response> {
-  const { timeoutMs = 20000, proxyUrl, nodeOnly = false, fresh = false, ...rest } = init;
+export async function robustFetch(url: string, init: RequestInit & { timeoutMs?: number; proxyUrl?: string; nodeOnly?: boolean; fresh?: boolean; tls?: TlsProfile } = {}): Promise<Response> {
+  const { timeoutMs = 20000, proxyUrl, nodeOnly = false, fresh = false, tls, ...rest } = init;
   // nodeOnly: den curl-Umweg (HTTP_CLIENT=curl, für Encar auf dem Runner) auslassen – OLX weist curl mit 403 ab
   if (process.env.HTTP_CLIENT === 'curl' && !nodeOnly) {
     return curlFetch(url, { proxyUrl, timeoutMs, headers: rest.headers as Record<string, string> | undefined });
   }
-  if (fresh) return freshFetch(url, { ...(rest as UndiciRequestInit), timeoutMs, proxyUrl });
+  if (fresh) return freshFetch(url, { ...(rest as UndiciRequestInit), timeoutMs, proxyUrl, tls });
+  if (tls && tls !== 'node' && !proxyUrl) {
+    const res = await undiciFetch(url, { ...(rest as UndiciRequestInit), dispatcher: tlsProfileDispatcher(tls), signal: AbortSignal.timeout(timeoutMs) });
+    return res as unknown as Response;
+  }
   if (proxyUrl) {
     // Über Proxy immer der undici-Client (das globale fetch kennt keinen Dispatcher)
     const res = await undiciFetch(url, { ...(rest as UndiciRequestInit), dispatcher: proxyDispatcher(proxyUrl), signal: AbortSignal.timeout(timeoutMs) });

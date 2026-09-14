@@ -80,7 +80,7 @@ async function probeOlx() {
       console.log(`  ${label.padEnd(40)} ${seq.join(' → ')}`);
     };
     const hdr = olxHeaders(site, 'browser');
-    console.log('  Verbindungsexperimente (Lauf 5: frisch = immer 403, Pool = 200 nur direkt nach einem 403):');
+    console.log('  Verbindungsexperimente (Befund 14.09.2026: WAF blockt Nodes TLS-Fingerprint; Chrome-Profil → 200):');
     const pair = async (label: string, mk: () => Promise<Response>) => {
       // Schlag auf Schlag: zwei Anfragen ohne Pause, dann 1 s Pause – dreimal
       const seq: string[] = [];
@@ -91,11 +91,14 @@ async function probeOlx() {
       }
       console.log(`  ${label.padEnd(40)} ${seq.join(' ')}`);
     };
-    await pair('F Pool, Paare ohne Pause', () => robustFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, nodeOnly: true }));
-    await pair('G Pool, Paare, ohne eigene Header', () => robustFetch(url, { timeoutMs: 20000, proxyUrl, nodeOnly: true }));
-    await run('H frisch + Chrome-TLS-Profil', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, tls: 'chrome' }));
-    await run('I frisch + Chrome-TLS + HTTP/2', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, tls: 'chrome', h2: true }));
-    await run('J frisch + nur TLS 1.3', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, tls: 'tls13' }));
+    await run('K Pool mit Chrome-TLS-Profil (Adapter)', () => robustFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, nodeOnly: true, tls: 'chrome' }));
+    if (process.env.PROBE_ALL_EXPERIMENTS) {
+      await pair('F Pool, Paare ohne Pause', () => robustFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, nodeOnly: true }));
+      await pair('G Pool, Paare, ohne eigene Header', () => robustFetch(url, { timeoutMs: 20000, proxyUrl, nodeOnly: true }));
+      await run('H frisch + Chrome-TLS-Profil', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, tls: 'chrome' }));
+      await run('I frisch + Chrome-TLS + HTTP/2', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, tls: 'chrome', h2: true }));
+      await run('J frisch + nur TLS 1.3', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, tls: 'tls13' }));
+    }
     try {
       // wie im Adapter: bis zu sechs Versuche mit wechselnden Header-Sätzen
       json = await p.get<{ data?: unknown[]; metadata?: unknown }>(url, site);
@@ -136,11 +139,13 @@ async function scanOlxCategories(country: string, max: number) {
   const p = new OlxProvider();
   console.log(`\n=== OLX ${country.toUpperCase()} · ${site.host} · Kategorien 1–${max} über /api/v1/offers/metadata/breadcrumbs/`);
   let failures = 0;
+  let shownRaw = false;
   for (let id = 1; id <= max; id++) {
     try {
-      const json = await p.get<{ data?: Array<{ label?: string; name?: string; category_id?: number; id?: number }> }>(`https://${site.host}/api/v1/offers/metadata/breadcrumbs/?category_id=${id}`, site, 4);
+      const json = await p.get<unknown>(`https://${site.host}/api/v1/offers/metadata/breadcrumbs/?category_id=${id}`, site, 4);
       failures = 0;
-      const chain = (json.data ?? []).map((c) => c.label ?? c.name ?? '').filter(Boolean).join(' › ');
+      if (!shownRaw) { console.log('  Rohantwort (erste):', short(json, 700)); shownRaw = true; }
+      const chain = OlxProvider.breadcrumbLabels(json).join(' › ');
       if (chain) console.log(`  ${String(id).padStart(4)}  ${chain}`);
     } catch (e) {
       failures++;

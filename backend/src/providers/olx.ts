@@ -220,18 +220,19 @@ export class OlxProvider implements MarketProvider {
   }
 
   /**
-   * Abruf über den gemeinsamen Verbindungspool mit sofortiger Wiederholung. Befund der Proben 14.09.2026 (CloudFront-WAF):
-   * frische Verbindungen bekommen durchgehend 403, ebenso Wiederholungen mit Pause; ein 200 kam in jedem Lauf nur für
-   * die Anfrage, die ohne Pause direkt auf einen 403 im selben Pool folgte (vermutlich TLS-Sitzungswiederaufnahme →
-   * anderer Fingerprint). Also: bis zu `attempts` Versuche Schlag auf Schlag, ohne Pause nach 403.
+   * Abruf mit Chrome-ähnlichem TLS-Profil. Befund der Proben 14.09.2026 (CloudFront-WAF): Header, URL und
+   * Verbindungs-Wiederverwendung waren egal – der WAF blockt Nodes Standard-TLS-ClientHello (403 in ~10 ms am Edge).
+   * Mit Chrome-Cipher-Reihenfolge (oder nur TLS 1.3) kam jede von 15 Anfragen durch. Die 200er im Standard-Pool direkt
+   * nach einem 403 waren wiederaufgenommene TLS-Sitzungen (anderer Fingerprint). Zur Sicherheit bis zu `attempts`
+   * Versuche, bei 403 ohne Pause.
    */
-  async get<T>(url: string, site: OlxSite, attempts = 6): Promise<T> {
+  async get<T>(url: string, site: OlxSite, attempts = 4): Promise<T> {
     const variants: Array<'browser' | 'json'> = ['browser', 'json'];
     let last: HttpError | Error | null = null;
     for (let i = 0; i < attempts; i++) {
       const headers = olxHeaders(site, variants[i % variants.length]);
       try {
-        const res = await robustFetch(url, { headers, timeoutMs: 30000, proxyUrl: config.europe.proxyUrl || undefined, nodeOnly: true, fresh: config.olx.freshConnection });
+        const res = await robustFetch(url, { headers, timeoutMs: 30000, proxyUrl: config.europe.proxyUrl || undefined, nodeOnly: true, tls: config.olx.tlsProfile, fresh: config.olx.freshConnection });
         if (res.ok) return (await res.json()) as T;
         const body = await res.text().catch(() => '');
         last = new HttpError(res.status, url, body.replace(/\s+/g, ' ').slice(0, 120), null);
@@ -246,23 +247,37 @@ export class OlxProvider implements MarketProvider {
     throw last ?? new Error(`OLX: keine Antwort (${url})`);
   }
 
-  /**
-   * Serverfilter: `filter_float_year:from` lässt der WAF durch (200), `filter_float_price:from` nicht (403; Probe
-   * 14.09.2026). Baujahr also serverseitig, Mindestpreis nach dem Abruf.
-   */
-  offersUrl(site: OlxSite, offset: number, withFilters = config.olx.serverYearFilter): string {
+  /** Serverfilter Preis und Baujahr (beide bestätigt, Probe 14.09.2026); zusätzlich wird nach dem Abruf geprüft. */
+  offersUrl(site: OlxSite, offset: number, withFilters = config.olx.serverFilters): string {
     const p = new URLSearchParams({ category_id: String(site.categoryId), offset: String(offset), limit: String(config.olx.pageSize), sort_by: 'created_at:desc' });
+    if (withFilters && config.olx.minPriceLocal > 0) p.set('filter_float_price:from', String(config.olx.minPriceLocal));
     if (withFilters && config.olx.minYear > 0) p.set('filter_float_year:from', String(config.olx.minYear));
     return `https://${site.host}/api/v1/offers/?${p}`;
+  }
+
+  /** Breadcrumb-Antwort tolerant lesen: `data` kann Liste oder Objekt sein – alle label/name-Werte in Reihenfolge. */
+  static breadcrumbLabels(json: unknown): string[] {
+    const out: string[] = [];
+    const walk = (v: unknown): void => {
+      if (Array.isArray(v)) { v.forEach(walk); return; }
+      if (v && typeof v === 'object') {
+        const o = v as Record<string, unknown>;
+        const label = o.label ?? o.name ?? o.title;
+        if (typeof label === 'string' && label.trim()) out.push(label.trim());
+        for (const [k, val] of Object.entries(o)) if (k !== 'label' && k !== 'name' && k !== 'title') walk(val);
+      }
+    };
+    walk(json);
+    return out;
   }
 
   async makeForCategory(site: OlxSite, categoryId: number, cache: Map<number, string>): Promise<void> {
     if (cache.has(categoryId)) return;
     try {
-      const json = await this.get<{ data?: Array<{ label?: string; name?: string; category_id?: number; id?: number }> }>(`https://${site.host}/api/v1/offers/metadata/breadcrumbs/?category_id=${categoryId}`, site, 3);
-      const crumbs = json.data ?? [];
-      const own = crumbs.find((c) => num(c.category_id ?? c.id) === categoryId) ?? crumbs[crumbs.length - 1];
-      cache.set(categoryId, str(own?.label ?? own?.name));
+      const json = await this.get<unknown>(`https://${site.host}/api/v1/offers/metadata/breadcrumbs/?category_id=${categoryId}`, site, 3);
+      const labels = OlxProvider.breadcrumbLabels(json);
+      // letztes Glied = die Unterkategorie selbst (Marke), z. B. "Motoryzacja › Samochody osobowe › Dodge"
+      cache.set(categoryId, labels[labels.length - 1] ?? '');
     } catch {
       cache.set(categoryId, '');
     }

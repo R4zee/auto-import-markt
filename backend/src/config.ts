@@ -177,9 +177,11 @@ export const config = {
     /** Mindestpreis in Landeswährung (0 = aus) und ältestes Baujahr – werden nach dem Abruf geprüft */
     minPriceLocal: num(env.OLX_MIN_PRICE, 20000),
     minYear: num(env.OLX_MIN_YEAR, 2012),
-    /** Baujahr zusätzlich als URL-Parameter senden */
-    serverYearFilter: bool(env.OLX_SERVER_YEAR_FILTER, true),
-    /** Je Anfrage eine frische Verbindung – im Test durchgehend 403, deshalb aus; der Pool mit Sofort-Wiederholung kommt durch */
+    /** Mindestpreis und Baujahr auch als URL-Parameter senden (Probe 14.09.2026: beide werden durchgelassen, 315k → 195k Treffer) */
+    serverFilters: bool(env.OLX_SERVER_FILTERS, true),
+    /** TLS-Profil: der CloudFront-WAF blockt Nodes Standard-Fingerprint; "chrome" (Standard) oder "tls13" kommen durch */
+    tlsProfile: (['node', 'chrome', 'tls13'].includes(env.OLX_TLS_PROFILE ?? '') ? env.OLX_TLS_PROFILE : 'chrome') as 'node' | 'chrome' | 'tls13',
+    /** Je Anfrage eine frische Verbindung (mit TLS-Profil nicht nötig) */
     freshConnection: bool(env.OLX_FRESH_CONNECTION, false),
     delayMs: num(env.OLX_DELAY_MS, 400),
   },
