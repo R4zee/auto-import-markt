@@ -237,10 +237,14 @@ Tabelle `domain/generations.ts` für Mercedes, BMW, Porsche, Audi, VW Golf/Passa
 Je Inserat: Laufleistung höchstens +50 % (< 100.000 km) bzw. +30 % (≥ 100.000 km), nach unten offen; Hubraum ±12 %
 und Leistung ±15 % (mindestens 8 kW), sofern beide Seiten den Wert kennen – damit passt die Motorisierung auch ohne
 Baureihen-Code; günstigstes Angebot = Vergleichspreis; Abstand = (Endpreis − Vergleichspreis) / Vergleichspreis.
-mobile.de sucht die Beschreibung unscharf (Live-Probe 15.09.2026: „S350“ traf auch CLS 350, E 350, GLK 350, R 350),
-deshalb prüft der Adapter zusätzlich, dass die Variantenkennung als eigenes Wort im mobile.de-Modellnamen
-(`shortTitle`) oder Titel steht („S 350“/„S350“, „320 d“/„320d“; Endbuchstabe optional, damit „E 220 d“ auch
-„E 220 CDI“ findet). Marken-IDs von mobile.de sind für rund 60 Marken hinterlegt (`REFERENCE_MAKE_IDS` ergänzt).
+mobile.de sucht die Beschreibung unscharf (Live-Probe 15.09.2026: „S350“ traf auch CLS 350, E 350, GLK 350, R 350).
+Deshalb löst der Adapter zuerst die **Modell-/Modellgruppen-ID** auf: Der srp-Endpunkt versteht die SEO-Modellseite
+`suchen.mobile.de/auto/<marke>-<modell>.html` (englische Namen eingedeutscht: S-Class → s-klasse, 3 Series → 3er)
+und liefert in `filters.ms[0]` `make`, `model`, `modelGroup` – Baureihen sind bei mobile.de Modellgruppen
+(S-Klasse = 17200;;16;). Gesucht wird dann mit `ms=<Marke>;<Modell>;<Gruppe>;` statt Freitext (Probe: 14 Treffer,
+alle S-Klasse, statt 51 gemischte); die IDs liegen 30 Tage in `meta`. Zusätzlich muss die Variantenkennung als
+eigenes Wort im mobile.de-Modellnamen (`shortTitle`) oder Titel stehen („S 350“/„S350“, „320 d“/„320d“; Endbuchstabe
+optional, damit „E 220 d“ auch „E 220 CDI“ findet) – so bleiben S 320 und S 420 außen vor. Marken-IDs von mobile.de sind für rund 60 Marken hinterlegt (`REFERENCE_MAKE_IDS` ergänzt).
 Leistung (kW) liefern OLX (`enginepower`/`engine_power`/`horsepower`, PS → kW), Subito (`/power`) und Sauto
 (`engine_power`); Encar nur den Hubraum aus dem Detail.
 
