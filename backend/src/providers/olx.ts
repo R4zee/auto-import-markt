@@ -54,7 +54,7 @@ const KEYS = {
   body: ['car_body', 'body_type', 'body', 'caroserie', 'tip_caroserie', 'coupe'],
   drive: ['drive', 'naped', 'tractiune', 'tracao'],
   condition: ['condition', 'technical_condition', 'stan', 'stare', 'state', 'estado', 'condicao', 'sastoyanie'],
-  steering: ['righthanddrive', 'steering', 'kierownica', 'volan', 'volante'],
+  steering: ['righthanddrive', 'steering', 'steering_wheel', 'kierownica', 'volan', 'volante'],
 };
 
 const KNOWN_MAKES = ['Alfa Romeo', 'Aston Martin', 'Audi', 'Bentley', 'BMW', 'Cadillac', 'Chevrolet', 'Chrysler', 'Citroën', 'Citroen', 'Cupra', 'Dacia', 'Dodge', 'DS', 'Ferrari', 'Fiat', 'Ford', 'Genesis', 'Honda', 'Hyundai', 'Infiniti', 'Jaguar', 'Jeep', 'Kia', 'Lamborghini', 'Lancia', 'Land Rover', 'Lexus', 'Lincoln', 'Maserati', 'Mazda', 'McLaren', 'Mercedes-Benz', 'Mercedes', 'MG', 'Mini', 'Mitsubishi', 'Nissan', 'Opel', 'Peugeot', 'Porsche', 'Renault', 'Rolls-Royce', 'Saab', 'Seat', 'Škoda', 'Skoda', 'Smart', 'SsangYong', 'Subaru', 'Suzuki', 'Tesla', 'Toyota', 'Volkswagen', 'VW', 'Volvo', 'BYD', 'Polestar', 'Lynk & Co', 'Abarth', 'Daewoo', 'Daihatsu', 'Isuzu', 'Iveco', 'Lada', 'Rover', 'Tata'];
@@ -134,8 +134,11 @@ export function mapOlxOffer(o: OlxOffer, site: OlxSite, fetchedAt: string, makeB
   const categoryId = num(o.category?.id);
   let make = (categoryId != null ? makeByCategory.get(categoryId) : '') || paramText(o, KEYS.make) || makeFromTitle(title);
   if (make.toLowerCase() === 'inne' || make.toLowerCase() === 'other' || make.toLowerCase() === 'altele') make = makeFromTitle(title);
-  const modelRaw = paramText(o, KEYS.model);
-  const model = modelRaw && !/^(inn[ey]|other|altele|outro)$/i.test(modelRaw) ? modelRaw : title.replace(new RegExp(`^${make.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '').split(/[\s,·|/-]+/)[0] || title;
+  // Platzhalter-Modelle ("inny" = Pozostałe Land Rover, "other", "altele", "outros", "drugi") → Modell aus dem Titel
+  const modelKey = paramKey(o, KEYS.model);
+  const modelLabel = paramText(o, KEYS.model);
+  const modelRaw = modelLabel && !/^(inn[ey]|other|others|altele|alte|outro|outros|drugi|drugo|inne)$/i.test(modelKey) && !/^(inn[ey]|other|altele|outro)$/i.test(modelLabel) ? modelLabel : '';
+  const model = modelRaw || title.replace(TITLE_PREFIX, '').replace(new RegExp(`^${make.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '').split(/[\s,·|/]+/).filter((w) => !/^\d{4}$/.test(w))[0] || title;
   // olx.pl (Live 14.09.2026): petrol.key = petrol|diesel|lpg|cng|hybrid|plug-in-hybrid|electric; Beschriftung z. B. "CNG i Hybryda"
   const fuelKey = paramKey(o, KEYS.fuel);
   const fuelText = `${fuelKey} ${paramText(o, KEYS.fuel)}`;
@@ -157,7 +160,7 @@ export function mapOlxOffer(o: OlxOffer, site: OlxSite, fetchedAt: string, makeB
     : encarDrive(title, make);
   // Lenkung: olx.pl "righthanddrive" – Beschriftung "po lewej" (links) bzw. "po prawej" (rechts)
   const steeringText = `${paramKey(o, KEYS.steering)} ${paramText(o, KEYS.steering)}`.toLowerCase();
-  const steering: Listing['steering'] = /prawej|right|dreapta|дясно|direita/.test(steeringText) && !/lewej|left|stânga|stanga|ляво|esquerda/.test(steeringText) ? 'RHD' : 'LHD';
+  const steering: Listing['steering'] = /\brhd\b|prawej|right|dreapta|дясно|direita/.test(steeringText) && !/\blhd\b|lewej|left|stânga|stanga|ляво|esquerda/.test(steeringText) ? 'RHD' : 'LHD';
   const photos = (o.photos ?? []).map((p) => olxPhoto(p.link)).filter((p): p is string => !!p);
   const km = Math.round(paramNum(o, KEYS.km) ?? 0);
   // Ausstattungszeile aus dem Titel: Marke und Modell (auch "RAV4" vs. "RAV-4") vorne entfernen, Verkäufer-Floskeln kürzen

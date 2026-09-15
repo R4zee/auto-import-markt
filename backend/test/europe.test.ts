@@ -329,3 +329,28 @@ describe('OLX mapping (olx.bg, Live-Antwort 14.09.2026)', () => {
     assert.equal(ev?.transmission, 'Automatic');
   });
 });
+
+describe('OLX Platzhalter-Modell und Lenkung (Live-Antworten 14.09.2026)', () => {
+  const site = { country: 'pl', host: 'www.olx.pl', categoryId: 84, currency: 'PLN', minPrice: 20000, enabled: true };
+  const base = {
+    id: 956470218, url: 'https://www.olx.pl/d/oferta/x.html', title: 'Land Rover Range Rover 5.0 V8 BOGATA VER LWB Autobiography', status: 'active',
+    params: [
+      { key: 'price', name: 'Cena', type: 'price', value: { value: 188800, currency: 'PLN' } },
+      { key: 'model', name: 'Model', type: 'select', value: { key: 'inny', label: 'Pozostałe Land Rover' } },
+      { key: 'year', name: 'Rok produkcji', type: 'input', value: { key: '2016', label: '2016 ' } },
+      { key: 'milage', name: 'Przebieg', type: 'input', value: { key: '139000', label: '139 000 km' } },
+    ],
+    location: { city: { name: 'Bielsko-Biała' } }, photos: [], category: { id: 5555 },
+  };
+  it('"Pozostałe Land Rover" wird nicht zum Modell; Modell aus dem Titel', () => {
+    const l = mapOlxOffer(base, site, NOW, new Map([[5555, 'Land Rover']]));
+    assert.equal(l?.make, 'Land Rover');
+    assert.equal(l?.model, 'Range');
+  });
+  it('olx.ro steering_wheel lhd/rhd', () => {
+    const ro = { country: 'ro', host: 'www.olx.ro', categoryId: 84, currency: 'EUR', minPrice: 5000, enabled: true };
+    const withSteering = (key: string) => ({ ...base, title: 'Suzuki Vitara 2020', params: [...base.params.filter((p) => p.key !== 'model'), { key: 'model', name: 'Model', type: 'select', value: { key: 'vitara', label: 'Vitara' } }, { key: 'steering_wheel', name: 'Volan', type: 'select', value: { key, label: key === 'lhd' ? 'Partea stanga' : 'Partea dreapta' } }] });
+    assert.equal(mapOlxOffer(withSteering('lhd'), ro, NOW, new Map([[5555, 'Suzuki']]))?.steering, 'LHD');
+    assert.equal(mapOlxOffer(withSteering('rhd'), ro, NOW, new Map([[5555, 'Suzuki']]))?.steering, 'RHD');
+  });
+});
