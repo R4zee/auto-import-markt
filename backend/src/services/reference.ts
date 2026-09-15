@@ -357,6 +357,8 @@ export async function referencePrices(l: Listing, landedEur: number): Promise<Re
 
 export interface RefreshReport {
   candidates: number; fetched: number; fresh: number; failed: number; samples: number;
+  /** Buckets mit mindestens einem passenden Angebot */
+  withSamples: number;
   /** Abbruch wegen Sperre/Fehlern (Job rot) */
   aborted: string | null;
   /** Regulär vor dem Limit beendet, z. B. Zeitbudget erreicht (Job grün) */
@@ -390,7 +392,7 @@ export async function refreshReferenceBuckets(opts: { limit?: number; maxMs?: nu
   const due = [...wanted.entries()]
     .filter(([key]) => { const at = existing.get(key); return !at || new Date(at).getTime() < cutoff; })
     .sort((a, b) => b[1].n - a[1].n);
-  const report: RefreshReport = { candidates: wanted.size, fetched: 0, fresh: wanted.size - due.length, failed: 0, aborted: null, stopped: null, samples: 0 };
+  const report: RefreshReport = { candidates: wanted.size, fetched: 0, fresh: wanted.size - due.length, failed: 0, aborted: null, stopped: null, samples: 0, withSamples: 0 };
   log(`Buckets: ${wanted.size} gesamt · ${report.fresh} aktuell · ${due.length} fällig · Limit ${limit} · Zeitbudget ${Math.round(maxMs / 60000)} min`);
   for (const [key, { q, n }] of due.slice(0, limit)) {
     // Zeitbudget: der nächste geplante Lauf soll nicht hinter diesem warten müssen
@@ -399,7 +401,13 @@ export async function refreshReferenceBuckets(opts: { limit?: number; maxMs?: nu
       const b = await fetchBucket(q);
       report.fetched++;
       report.samples += b.samples.length;
-      log(`  ✔ ${q.make} ${q.description} ${q.fuel ?? ''} ${q.yearFrom}–${q.yearTo}${q.kmTo ? ` ≤${q.kmTo} km` : ''}${b.query.modelId || b.query.modelGroupId ? ` [Modell ${b.query.modelId ?? `Gruppe ${b.query.modelGroupId}`}]` : ''} (${n} Inserate) → ${b.samples.length} passende${b.total != null ? ` von ${b.total}` : ''}, ab ${b.samples[0]?.priceEur ?? '–'} €`);
+      if (b.samples.length) report.withSamples++;
+      // Protokoll kompakt halten: Details nur für die ersten 20 Buckets, danach alle 100 eine Zwischensumme (REFERENCE_VERBOSE=true: alles)
+      if (config.reference.verbose || report.fetched <= 20) {
+        log(`  ✔ ${q.make} ${q.description} ${q.fuel ?? ''} ${q.yearFrom}–${q.yearTo}${q.kmTo ? ` ≤${q.kmTo} km` : ''}${b.query.modelId || b.query.modelGroupId ? ` [Modell ${b.query.modelId ?? `Gruppe ${b.query.modelGroupId}`}]` : ''} (${n} Inserate) → ${b.samples.length} passende${b.total != null ? ` von ${b.total}` : ''}, ab ${b.samples[0]?.priceEur ?? '–'} €`);
+      } else if (report.fetched % 100 === 0) {
+        log(`  … ${report.fetched} Buckets · ${report.withSamples} mit Angeboten · ${report.samples} Angebote · ${Math.round((Date.now() - started) / 60000)} min`);
+      }
     } catch (e) {
       report.failed++;
       const msg = e instanceof Error ? e.message : String(e);

@@ -31,8 +31,8 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    # Sync (Encar 10–20 min) + Vergleichspreise (Zeitbudget, manuell bis ~2 h)
-    timeout-minutes: 180
+    # Sync (Encar 10–70 min mit Wiederholungen) + Vergleichspreise (Zeitbudget, manuell bis ~2 h); Lauf 25 lief mit 180 min ins Limit
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
