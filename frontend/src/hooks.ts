@@ -15,6 +15,26 @@ export function useLocalStorage<T>(key: string, initial: T): [T, (v: T | ((prev:
   return [value, setValue];
 }
 
+/**
+ * Wie useLocalStorage, speichert aber erst bei einer bewussten Wahl. Der Standardwert (z. B. Sprache aus
+ * der Konfiguration) landet nicht im Speicher und kann sich deshalb später noch ändern.
+ */
+export function useStoredChoice<T>(key: string, fallback: T): [T, (v: T) => void] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const raw = window.localStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as T) : fallback;
+    } catch {
+      return fallback;
+    }
+  });
+  const choose = (v: T) => {
+    setValue(v);
+    try { window.localStorage.setItem(key, JSON.stringify(v)); } catch { /* ignore */ }
+  };
+  return [value, choose];
+}
+
 /** Aktuelle Zeit, jede Sekunde aktualisiert (für Auktions-Countdowns). */
 export function useNow(intervalMs = 1000): number {
   const [now, setNow] = useState(() => Date.now());

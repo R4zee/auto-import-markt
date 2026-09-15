@@ -9,9 +9,9 @@ process.env.ENCAR_ENABLED = 'false';
 process.env.VERCEL = '';
 process.env.FX_BASE_URL = 'http://127.0.0.1:1';
 
-const { closeDb, ready } = await import('../src/db.js');
+const { closeDb, query, ready, run } = await import('../src/db.js');
 const { listingsRepo } = await import('../src/repositories/listings.js');
-const { syncProvider } = await import('../src/services/sync.js');
+const { canonicalizeStoredMakes, syncProvider } = await import('../src/services/sync.js');
 const { listingId } = await import('../src/providers/types.js');
 
 import type { Listing } from '../src/domain/types.js';
@@ -77,5 +77,29 @@ describe('Sync: Teilquellen, Duplikate und unveränderte Inserate', async () => 
     const r = await syncProvider(p);
     assert.equal(r.deactivated, 2);
     assert.deepEqual(await listingsRepo.countBySource(), { 'olx-pl': 1 });
+  });
+
+  it('Markennamen werden beim Import vereinheitlicht', async () => {
+    p.result = { complete: true, listings: [listing('olx-pl', '4', { make: 'MERCEDES-BENZ', model: 'E 220' }), listing('olx-ro', '5', { make: 'Mercedes', model: 'C 200' })] };
+    const r = await syncProvider(p);
+    assert.equal(r.upserted, 2);
+    assert.equal(r.deactivated, 1, 'olx-pl:2 fehlt im vollständigen Bestand');
+    const rows = await query<{ make: string; search_text: string }>("SELECT make, search_text FROM listings WHERE active = 1 ORDER BY id");
+    assert.equal(rows.length, 2);
+    assert.deepEqual(rows.map((x) => x.make), ['Mercedes-Benz', 'Mercedes-Benz']);
+    assert.ok(rows.every((x) => x.search_text.startsWith('mercedes-benz ')), JSON.stringify(rows));
+  });
+
+  it('Bestandskorrektur vereinheitlicht bereits gespeicherte Marken samt Suchspalte', async () => {
+    await run("UPDATE listings SET make = 'Mercedes', search_text = 'mercedes e 220  warszawa' WHERE id = ?", [listingId('olx-pl', '4')]);
+    await run("UPDATE listings SET make = 'VW' WHERE id = ?", [listingId('olx-ro', '5')]);
+    const r = await canonicalizeStoredMakes();
+    assert.deepEqual(r, { listings: 2, makes: 2 });
+    const rows = await query<{ id: string; make: string; search_text: string }>('SELECT id, make, search_text FROM listings WHERE active = 1 ORDER BY id');
+    assert.equal(rows[0].make, 'Mercedes-Benz');
+    assert.ok(rows[0].search_text.startsWith('mercedes-benz e 220'), rows[0].search_text);
+    assert.equal(rows[1].make, 'Volkswagen');
+    assert.ok(rows[1].search_text.startsWith('volkswagen c 200'), rows[1].search_text);
+    assert.deepEqual(await canonicalizeStoredMakes(), { listings: 0, makes: 0 }, 'zweiter Lauf ändert nichts');
   });
 });

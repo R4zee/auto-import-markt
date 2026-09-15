@@ -4,15 +4,16 @@ import { CompareBar } from './components/CompareBar';
 import { Header } from './components/Header';
 import { AppContext, type AppCtx } from './context';
 import { displayRates, money as fmtMoney, type DisplayCurrency } from './format';
-import { useHashRoute, useLocalStorage, useNow } from './hooks';
+import { useHashRoute, useLocalStorage, useNow, useStoredChoice } from './hooks';
 import { makeT, type Lang } from './i18n';
 import { CompareView } from './views/CompareView';
 import { DetailView } from './views/DetailView';
 import { DEFAULT_FILTERS, SearchView, type Filters } from './views/SearchView';
 import { WatchlistView } from './views/WatchlistView';
 
-const ENV_LANG = (import.meta.env.VITE_DEFAULT_LANGUAGE as Lang | undefined) ?? 'en';
-const ENV_DEST = (import.meta.env.VITE_DEFAULT_DESTINATION as DestCode | undefined) ?? 'DE';
+// Standardsprache Deutsch; nur 'en' als Umgebungswert schaltet um
+const ENV_LANG: Lang = String(import.meta.env.VITE_DEFAULT_LANGUAGE ?? 'de').toLowerCase() === 'en' ? 'en' : 'de';
+const ENV_DEST = String(import.meta.env.VITE_DEFAULT_DESTINATION ?? 'DE').toUpperCase() as DestCode;
 const ENV_DEALER = String(import.meta.env.VITE_DEALER_MODE ?? 'false') === 'true';
 
 function toggleIn(list: string[], id: string, max?: number): string[] {
@@ -23,8 +24,9 @@ function toggleIn(list: string[], id: string, max?: number): string[] {
 
 export default function App() {
   const [route, navigate] = useHashRoute();
-  const [lang, setLang] = useLocalStorage<Lang>('aim.lang', ENV_LANG);
-  const [dest, setDest] = useLocalStorage<DestCode>('aim.dest', ENV_DEST);
+  // Neue Schlüssel: die alten ('aim.lang', 'aim.dest') wurden auch ohne Nutzerwahl mit dem damaligen Standard (en) beschrieben
+  const [storedLang, setLang] = useStoredChoice<Lang>('aim.ui.lang', ENV_LANG);
+  const [storedDest, setDest] = useStoredChoice<DestCode>('aim.ui.dest', ENV_DEST);
   const [ccy, setCcy] = useLocalStorage<DisplayCurrency>('aim.ccy', 'EUR');
   const [saved, setSaved] = useLocalStorage<string[]>('aim.saved', []);
   const [compare, setCompare] = useLocalStorage<string[]>('aim.compare', []);
@@ -40,6 +42,15 @@ export default function App() {
   }, []);
 
   useEffect(() => { api.config().then(setConfig).catch(() => setConfig(null)); }, []);
+
+  // Nur bekannte Werte verwenden – ein ungültiger gespeicherter/konfigurierter Wert zeigte sonst die erste
+  // Option ohne passende Flagge, bis der Nutzer neu auswählte
+  const lang: Lang = storedLang === 'en' || storedLang === 'de' ? storedLang : 'de';
+  const dest: DestCode = useMemo(() => {
+    const codes = config?.destinations.map((d) => d.code);
+    if (!codes || codes.includes(storedDest)) return storedDest;
+    return codes.includes('DE') ? 'DE' : (codes[0] ?? storedDest);
+  }, [config, storedDest]);
   useEffect(() => { document.documentElement.lang = lang; }, [lang]);
 
   // Merkliste + Vergleich: aktuelle Endpreise für das gewählte Zielland nachladen

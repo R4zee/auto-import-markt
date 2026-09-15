@@ -1,6 +1,7 @@
-import { one, query, run } from '../db.js';
-import { activeProviders, isKnownSource } from '../providers/index.js';
+import { one, query, run, searchTextSql } from '../db.js';
+import { canonicalMake } from '../domain/makes.js';
 import type { Listing } from '../domain/types.js';
+import { activeProviders, isKnownSource } from '../providers/index.js';
 import type { MarketProvider } from '../providers/types.js';
 import { listingsRepo, partnersRepo } from '../repositories/listings.js';
 import { SEED_PARTNERS } from '../seed/partners.js';
@@ -27,9 +28,10 @@ export async function syncProvider(p: MarketProvider): Promise<SyncReport> {
     const result = await p.fetchAll();
     await partnersRepo.upsertMany(SEED_PARTNERS);
     if (result.partners?.length) await partnersRepo.upsertMany(result.partners);
-    // Marktplatzweit nur Linkslenker; doppelte IDs (z. B. beworbene OLX-Anzeigen auf mehreren Seiten) einmal nehmen
+    // Marktplatzweit nur Linkslenker; doppelte IDs (z. B. beworbene OLX-Anzeigen auf mehreren Seiten) einmal nehmen;
+    // Markennamen quellenübergreifend vereinheitlichen (sonst Dubletten im Markenfilter)
     const byId = new Map<string, Listing>();
-    for (const l of result.listings) if (l.steering === 'LHD') byId.set(l.id, l);
+    for (const l of result.listings) if (l.steering === 'LHD') byId.set(l.id, { ...l, make: canonicalMake(l.make) || l.make });
     const lhd = [...byId.values()];
     const duplicates = result.listings.filter((l) => l.steering === 'LHD').length - lhd.length;
     // Nur neue oder geänderte Inserate schreiben (Preis/km) – spart bei großen Beständen den Großteil der Schreibvorgänge.
@@ -83,6 +85,25 @@ export async function recomputeDerivedIfFxChanged(): Promise<number> {
   return n;
 }
 
+/**
+ * Markennamen im Bestand vereinheitlichen (Dubletten wie "MERCEDES-BENZ"/"Mercedes"). Liest nur die
+ * unterschiedlichen Marken (indexgestützt) und schreibt je abweichender Schreibweise ein UPDATE, das auch
+ * die Suchspalte nachzieht. Liefert die Zahl der geänderten Inserate.
+ */
+export async function canonicalizeStoredMakes(): Promise<{ listings: number; makes: number }> {
+  const rows = await query<{ make: string }>('SELECT DISTINCT make FROM listings');
+  let listings = 0;
+  let makes = 0;
+  for (const { make } of rows) {
+    const canon = canonicalMake(make);
+    if (!canon || canon === make) continue;
+    const r = await run(`UPDATE listings SET make = ?, search_text = ${searchTextSql('?')} WHERE make = ?`, [canon, canon, make]);
+    listings += r.rowsAffected;
+    makes++;
+  }
+  return { listings, makes };
+}
+
 export async function syncAll(): Promise<SyncReport[]> {
   const reports: SyncReport[] = [];
   for (const p of activeProviders()) reports.push(await syncProvider(p));
@@ -90,6 +111,9 @@ export async function syncAll(): Promise<SyncReport[]> {
   for (const [source, n] of Object.entries(orphans)) {
     if (n > 0) reports.push({ provider: source, status: 'ok', upserted: 0, deactivated: n, warnings: ['Quelle ohne aktiven Provider – Bestand deaktiviert'], durationMs: 0 });
   }
+  const tm = Date.now();
+  const canon = await canonicalizeStoredMakes();
+  if (canon.listings > 0) reports.push({ provider: 'makes', status: 'ok', upserted: canon.listings, deactivated: 0, warnings: [`${canon.makes} Markenschreibweisen vereinheitlicht`], durationMs: Date.now() - tm });
   const t0 = Date.now();
   const recomputed = await recomputeDerivedIfFxChanged();
   if (recomputed > 0) reports.push({ provider: 'fx-recompute', status: 'ok', upserted: recomputed, deactivated: 0, warnings: ['Endpreise mit neuem Kursstand neu berechnet'], durationMs: Date.now() - t0 });

@@ -194,5 +194,12 @@ async function migrate(): Promise<void> {
   `);
 }
 
-/** SQL-Ausdruck für die Suchspalte (identisch zum Wert, den der Upsert setzt). */
-export const SEARCH_TEXT_SQL = `LOWER(make || ' ' || model || ' ' || trim || ' ' || location || ' ' || COALESCE(json_extract(auction_json, '$.lot'), '') || ' ' || COALESCE(json_extract(auction_json, '$.house'), ''))`;
+/**
+ * SQL-Ausdruck für die Suchspalte (identisch zum Wert, den der Upsert setzt).
+ * `makeExpr` erlaubt einen Platzhalter statt der Spalte, wenn die Marke im selben UPDATE neu gesetzt wird
+ * (SQLite wertet SET-Ausdrücke mit den alten Spaltenwerten aus).
+ */
+export function searchTextSql(makeExpr = 'make'): string {
+  return `LOWER(${makeExpr} || ' ' || model || ' ' || trim || ' ' || location || ' ' || COALESCE(json_extract(auction_json, '$.lot'), '') || ' ' || COALESCE(json_extract(auction_json, '$.house'), ''))`;
+}
+export const SEARCH_TEXT_SQL = searchTextSql();

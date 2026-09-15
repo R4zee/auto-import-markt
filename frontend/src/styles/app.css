@@ -10,6 +10,20 @@ select.input option { background: var(--color-surface); color: var(--color-text)
 .aim-flag-sm { width: 17px; height: 12px; }
 .aim-select-bare { border: 0 !important; background: transparent !important; min-height: 26px !important; padding: 0 2px !important; font-size: 13px !important; width: auto !important; }
 .aim-select-bare option { color: var(--color-text); }
+
+/* Kopfzeilen-Auswahl (Sprache, Zielland, Währung): der ganze Kasten ist klickbar – das native <select>
+   liegt unsichtbar über dem gesamten Kasten, sichtbar bleiben Flagge/Symbol, Text und Pfeil. */
+.aim-picker { position: relative; display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 8px 0 10px; border: 1px solid var(--color-divider); border-radius: var(--radius-md); font-size: 13px; cursor: pointer; white-space: nowrap; }
+.aim-picker:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+.aim-picker:has(select:focus-visible) { border-color: var(--color-accent); outline: 2px solid var(--color-accent); outline-offset: 0; }
+.aim-picker select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; margin: 0; appearance: none; font-size: 16px; }
+.aim-picker select option { background: var(--color-surface); color: var(--color-text); }
+.aim-picker .ph-caret-down { font-size: 12px; color: var(--color-neutral-500); }
+
+/* Segment-Schalter: der Rahmen der aktiven Option folgt den abgerundeten Ecken des Containers,
+   statt an ihnen abgeschnitten zu werden (Container hat overflow: hidden). */
+.seg .seg-opt:first-child { border-top-left-radius: inherit; border-bottom-left-radius: inherit; }
+.seg .seg-opt:last-child { border-top-right-radius: inherit; border-bottom-right-radius: inherit; }
 .tabular { font-variant-numeric: tabular-nums; }
 .aim-btn-plain { background: transparent; border: 0; padding: 0; cursor: pointer; color: inherit; font: inherit; }
 
