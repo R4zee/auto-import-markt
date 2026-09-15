@@ -1,6 +1,6 @@
 import { closeDb, ready } from '../db.js';
 import { getFx } from '../services/fx.js';
-import { canonicalizeStoredMakes, syncAll, syncProvider } from '../services/sync.js';
+import { canonicalizeStoredMakes, syncAll, syncProvider, type SyncReport } from '../services/sync.js';
 import { refreshFacets } from '../services/facets.js';
 import { listingsRepo } from '../repositories/listings.js';
 import { activeProviders } from '../providers/index.js';
@@ -20,7 +20,7 @@ await ready();
 await getFx();
 // SYNC_ONLY=olx,subito – nur diese (aktiven) Provider, ohne Bereinigung; leer = alles
 const only = (process.env.SYNC_ONLY ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-let reports;
+let reports: SyncReport[];
 if (only.length) {
   const chosen = activeProviders().filter((p) => only.includes(p.id));
   const missing = only.filter((id) => !chosen.some((p) => p.id === id));
