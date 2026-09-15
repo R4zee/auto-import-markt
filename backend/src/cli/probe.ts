@@ -287,17 +287,18 @@ async function probeSauto() {
 }
 
 /** Modell-ID von mobile.de über die SEO-Modellseite: `probe mobile-model Mercedes-Benz "S-Class"` */
-async function probeMobileModel(make: string, model: string): Promise<number | null> {
+async function probeMobileModel(make: string, model: string): Promise<{ modelId: number | null; modelGroupId: number | null }> {
   const src = new MobileDeReference();
   console.log(`\n=== mobile.de Modell-ID · ${make} "${model}" → ${mobileSeoUrl(make, model)}`);
   try {
     const r = await src.resolveModel(make, model);
-    console.log(`  ${r.modelId != null ? '✔' : '✖'} make=${r.makeId ?? '–'} model=${r.modelId ?? '–'} modelGroup=${r.modelGroupId ?? '–'} · Bezeichnung "${r.label || '–'}"`);
-    if (r.modelId == null) console.log('  Kein Modell erkannt – Slug prüfen: im Browser suchen.mobile.de → Marke/Modell wählen → Adresse /auto/<marke>-<modell>.html vergleichen');
-    return r.modelId;
+    const ok = r.makeId != null && (r.modelId != null || r.modelGroupId != null);
+    console.log(`  ${ok ? '✔' : '✖'} make=${r.makeId ?? '–'} model=${r.modelId ?? '–'} modelGroup=${r.modelGroupId ?? '–'} · Bezeichnung "${r.label || '–'}"${ok ? ` → Suche mit ms=${r.makeId};${r.modelId ?? ''};${r.modelGroupId ?? ''};` : ''}`);
+    if (!ok) console.log('  Kein Modell erkannt – Slug prüfen: im Browser suchen.mobile.de → Marke/Modell wählen → Adresse /auto/<marke>-<modell>.html vergleichen');
+    return ok ? { modelId: r.modelId, modelGroupId: r.modelGroupId } : { modelId: null, modelGroupId: null };
   } catch (e) {
     console.log('  ✖', e instanceof Error ? e.message.slice(0, 200) : String(e));
-    return null;
+    return { modelId: null, modelGroupId: null };
   }
 }
 
@@ -306,10 +307,11 @@ async function probeMobile(make: string, description: string, year: number, fuel
   // Beschreibung darf einen Baureihen-Code enthalten ("S350 W221") → Bauzeitraum statt Baujahr ±1
   const band = yearBand({ make, model: description, trim: description, year }, config.reference.yearSpan);
   const cleanDesc = band.generation ? description.replace(new RegExp(`\\s*\\b${band.generation}\\b\\s*`, 'i'), ' ').trim() : description;
-  const modelId = model ? await probeMobileModel(make, model) : null;
-  const q: RefQuery = { make, description: cleanDesc, yearFrom: band.from, yearTo: band.to, fuel, generation: band.generation, kmTo: kmBandFor(km), modelId, model: model ?? undefined };
+  const ref = model ? await probeMobileModel(make, model) : { modelId: null, modelGroupId: null };
+  const q: RefQuery = { make, description: cleanDesc, yearFrom: band.from, yearTo: band.to, fuel, generation: band.generation, kmTo: kmBandFor(km), ...ref, model: model ?? undefined };
   const src = new MobileDeReference();
-  console.log(`\n=== mobile.de · ${make} (ID ${mobileMakeId(make) ?? 'UNBEKANNT → REFERENCE_MAKE_IDS'}) · "${cleanDesc}"${modelId ? ` · Modell-ID ${modelId} statt Freitext` : ''} · ${q.yearFrom}–${q.yearTo}${band.generation ? ` (Baureihe ${band.generation})` : ''} · ${fuel ?? 'alle Kraftstoffe'} · ${km} km → Suche bis ${q.kmTo ?? 'unbegrenzt'} km`);
+  const viaId = ref.modelId ? `Modell-ID ${ref.modelId}` : ref.modelGroupId ? `Modellgruppe ${ref.modelGroupId}` : '';
+  console.log(`\n=== mobile.de · ${make} (ID ${mobileMakeId(make) ?? 'UNBEKANNT → REFERENCE_MAKE_IDS'}) · "${cleanDesc}"${viaId ? ` · ${viaId} statt Freitext` : ''} · ${q.yearFrom}–${q.yearTo}${band.generation ? ` (Baureihe ${band.generation})` : ''} · ${fuel ?? 'alle Kraftstoffe'} · ${km} km → Suche bis ${q.kmTo ?? 'unbegrenzt'} km`);
   console.log('Such-URL (Browser):', mobileSearchUrl(q));
   let got: Awaited<ReturnType<typeof src.fetchPage>> | null = null;
   for (const mode of ['query', 'url'] as const) {

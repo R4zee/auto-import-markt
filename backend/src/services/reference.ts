@@ -130,36 +130,43 @@ export function bucketQuery(l: Pick<Listing, 'make' | 'model' | 'trim' | 'year' 
 // --- Modell-IDs von mobile.de (SEO-Modellseite → filters.ms[0].model), Cache in `meta` ------------------------------
 
 const MODEL_TTL_MS = 30 * 86400000;
-const modelMemo = new Map<string, number | null>();
+export interface ModelRef { modelId: number | null; modelGroupId: number | null }
+const NO_MODEL: ModelRef = { modelId: null, modelGroupId: null };
+const modelMemo = new Map<string, ModelRef>();
 
 /**
- * mobile.de-Modell-ID für Marke + Modellname (z. B. "S-Class" → S-Klasse). Ergebnis (auch „unbekannt“) liegt 30 Tage
- * in `meta`, damit je Modell nur eine Anfrage anfällt. Baureihen-Codes im Modellnamen ("S-Class W221") werden entfernt.
+ * mobile.de-Modell- bzw. Modellgruppen-ID für Marke + Modellname (z. B. "S-Class" → Gruppe S-Klasse = 16). Ergebnis
+ * (auch „unbekannt“) liegt 30 Tage in `meta`, damit je Modell nur eine Anfrage anfällt. Baureihen-Codes im
+ * Modellnamen ("S-Class W221") werden entfernt.
  */
-export async function modelIdFor(make: string, model: string): Promise<number | null> {
+export async function modelRefFor(make: string, model: string): Promise<ModelRef> {
   const clean = model.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\b[A-Z]{1,2}\d{2,3}\b/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!clean) return null;
+  if (!clean) return NO_MODEL;
   const key = `mobile_model|${makeKey(make)}|${clean.toLowerCase()}`;
-  if (modelMemo.has(key)) return modelMemo.get(key) ?? null;
+  const memo = modelMemo.get(key);
+  if (memo) return memo;
   const row = await one<{ value: string }>('SELECT value FROM meta WHERE key = ?', [key]);
   if (row) {
     try {
-      const v = JSON.parse(row.value) as { modelId: number | null; at: string };
-      if (Date.now() - new Date(v.at).getTime() < MODEL_TTL_MS) { modelMemo.set(key, v.modelId); return v.modelId; }
+      const v = JSON.parse(row.value) as { modelId?: number | null; modelGroupId?: number | null; at: string };
+      if (Date.now() - new Date(v.at).getTime() < MODEL_TTL_MS) {
+        const ref = { modelId: v.modelId ?? null, modelGroupId: v.modelGroupId ?? null };
+        modelMemo.set(key, ref);
+        return ref;
+      }
     } catch { /* neu auflösen */ }
   }
-  let modelId: number | null = null;
+  let ref: ModelRef = NO_MODEL;
   try {
     const r = await source.resolveModel(make, clean);
     // Nur übernehmen, wenn mobile.de auch die Marke erkannt hat (sonst war es eine generische Seite)
-    modelId = r.makeId != null && r.modelId != null ? r.modelId : null;
+    if (r.makeId != null && (r.modelId != null || r.modelGroupId != null)) ref = { modelId: r.modelId, modelGroupId: r.modelGroupId };
   } catch (e) {
     if (e instanceof HttpError && (e.status === 403 || e.status === 429)) throw e;
-    modelId = null;
   }
-  await run("INSERT INTO meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [key, JSON.stringify({ modelId, at: new Date().toISOString() })]);
-  modelMemo.set(key, modelId);
-  return modelId;
+  await run("INSERT INTO meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [key, JSON.stringify({ ...ref, at: new Date().toISOString() })]);
+  modelMemo.set(key, ref);
+  return ref;
 }
 
 export function bucketKey(q: RefQuery): string {
@@ -313,8 +320,10 @@ export async function attachReferences(items: DecoratedListing[]): Promise<void>
  * Modell (ms=<make>;<model>;;), sonst per Beschreibung; Treffer anderer Modelle (unscharfe Suche) fliegen gleich raus.
  */
 export async function fetchBucket(q: RefQuery): Promise<RefBucket> {
-  const modelId = q.modelId !== undefined ? q.modelId : q.model ? await modelIdFor(q.make, q.model) : null;
-  const query: RefQuery = { ...q, modelId };
+  const ref: ModelRef = q.modelId !== undefined || q.modelGroupId !== undefined
+    ? { modelId: q.modelId ?? null, modelGroupId: q.modelGroupId ?? null }
+    : q.model ? await modelRefFor(q.make, q.model) : NO_MODEL;
+  const query: RefQuery = { ...q, ...ref };
   const r = await source.fetchSamples(query);
   const matching = r.samples.filter((s) => titleMatches(q.description, s));
   const b: RefBucket = { key: bucketKey(q), source: source.id, query, samples: matching.slice(0, 80), total: r.total, url: r.url, fetchedAt: new Date().toISOString() };
@@ -378,7 +387,7 @@ export async function refreshReferenceBuckets(opts: { limit?: number; log?: (lin
       const b = await fetchBucket(q);
       report.fetched++;
       report.samples += b.samples.length;
-      log(`  ✔ ${q.make} ${q.description} ${q.fuel ?? ''} ${q.yearFrom}–${q.yearTo}${q.kmTo ? ` ≤${q.kmTo} km` : ''}${b.query.modelId ? ` [Modell ${b.query.modelId}]` : ''} (${n} Inserate) → ${b.samples.length} passende${b.total != null ? ` von ${b.total}` : ''}, ab ${b.samples[0]?.priceEur ?? '–'} €`);
+      log(`  ✔ ${q.make} ${q.description} ${q.fuel ?? ''} ${q.yearFrom}–${q.yearTo}${q.kmTo ? ` ≤${q.kmTo} km` : ''}${b.query.modelId || b.query.modelGroupId ? ` [Modell ${b.query.modelId ?? `Gruppe ${b.query.modelGroupId}`}]` : ''} (${n} Inserate) → ${b.samples.length} passende${b.total != null ? ` von ${b.total}` : ''}, ab ${b.samples[0]?.priceEur ?? '–'} €`);
     } catch (e) {
       report.failed++;
       const msg = e instanceof Error ? e.message : String(e);

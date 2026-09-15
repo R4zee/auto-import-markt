@@ -168,6 +168,8 @@ describe('mobile.de – URL und Antwort', () => {
     const withBand = mobileSearchParams({ make: 'Mercedes-Benz', description: 'S 350', yearFrom: 2005, yearTo: 2013, fuel: 'Diesel', kmTo: 125_000, modelId: 10 });
     assert.equal(withBand.get('ms'), '17200;10;;', 'Modell-ID statt Freitext');
     assert.equal(withBand.get('ml'), ':125000');
+    const group = mobileSearchParams({ make: 'Mercedes-Benz', description: 'S 350', yearFrom: 2005, yearTo: 2013, fuel: 'Diesel', modelGroupId: 16 });
+    assert.equal(group.get('ms'), '17200;;16;', 'Modellgruppe (S-Klasse = 16, Live-Probe 15.09.2026)');
     assert.ok(mobileApiUrl({ make: 'BMW', description: '320d', yearFrom: 2018, yearTo: 2020, fuel: null }, 1, 'query').startsWith('https://www.mobile.de/consumer/api/search/srp?isSearchRequest=true'));
     assert.ok(mobileApiUrl({ make: 'BMW', description: '320d', yearFrom: 2018, yearTo: 2020, fuel: null }, 2, 'url').includes(encodeURIComponent('pageNumber=2')));
   });
@@ -180,8 +182,9 @@ describe('mobile.de – URL und Antwort', () => {
     assert.equal(mobileSeoUrl('Hyundai', 'Tucson'), 'https://suchen.mobile.de/auto/hyundai-tucson.html');
     assert.equal(mobileSeoUrl('Škoda', 'Octavia'), 'https://suchen.mobile.de/auto/skoda-octavia.html');
     assert.equal(mobileSeoUrl('Land Rover', 'Range Rover Sport'), 'https://suchen.mobile.de/auto/land-rover-range-rover-sport.html');
-    const r = extractResolvedModel({ filters: { ms: [{ make: '17200', model: '10', modelGroup: '', modelDescription: '' }] }, chips: { makeModel: [{ label: 'Mercedes-Benz S-Klasse' }] } }, 'u');
-    assert.deepEqual(r, { makeId: 17200, modelId: 10, modelGroupId: null, label: 'Mercedes-Benz S-Klasse', url: 'u' });
+    // Live-Antwort 15.09.2026 für /auto/mercedes-benz-s-klasse.html: S-Klasse ist eine Modellgruppe
+    const r = extractResolvedModel({ filters: { ms: [{ make: '17200', model: '', modelGroup: '16', modelDescription: '' }] }, chips: { makeModel: [{ label: 'Mercedes-Benz S-Klasse' }] } }, 'u');
+    assert.deepEqual(r, { makeId: 17200, modelId: null, modelGroupId: 16, label: 'Mercedes-Benz S-Klasse', url: 'u' });
     assert.equal(extractResolvedModel({ filters: {} }, 'u').modelId, null);
   });
 

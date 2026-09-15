@@ -35,8 +35,10 @@ export interface RefQuery {
   generation?: string | null;
   /** Obergrenze Laufleistung (Band, z. B. 125000) – als `ml=:<kmTo>` mitgesucht; null = ohne Grenze */
   kmTo?: number | null;
-  /** mobile.de-Modell-ID (Parameter `ms=<make>;<model>;;`), sofern bekannt – sonst Beschreibungssuche */
+  /** mobile.de-Modell-ID (Parameter `ms=<make>;<model>;<modelGroup>;`), sofern bekannt – sonst Beschreibungssuche */
   modelId?: number | null;
+  /** mobile.de-Modellgruppe (z. B. S-Klasse = 16 unter Mercedes-Benz); Baureihen sind bei mobile.de meist Gruppen */
+  modelGroupId?: number | null;
   /** Modellname des Inserats (z. B. "S-Class", "3 Series", "Tucson") – Grundlage für die Modell-ID-Auflösung */
   model?: string;
 }
@@ -107,7 +109,8 @@ export function mobileSearchParams(q: RefQuery, page = 1): URLSearchParams {
   sp.set('vc', 'Car');
   sp.set('cn', 'DE');
   sp.set('dam', '0');
-  sp.set('ms', q.modelId ? `${makeId ?? ''};${q.modelId};;` : `${makeId ?? ''};;;${q.description}`);
+  // ms = Marke;Modell;Modellgruppe;Beschreibung – mit bekannter Modell-/Gruppen-ID entfällt die unscharfe Beschreibungssuche
+  sp.set('ms', q.modelId || q.modelGroupId ? `${makeId ?? ''};${q.modelId ?? ''};${q.modelGroupId ?? ''};` : `${makeId ?? ''};;;${q.description}`);
   sp.set('fr', `${q.yearFrom}:${q.yearTo}`);
   if (q.fuel) sp.set('ft', MOBILE_FUEL[q.fuel]);
   if (q.kmTo) sp.set('ml', `:${q.kmTo}`);
