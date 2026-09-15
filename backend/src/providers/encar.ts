@@ -196,7 +196,9 @@ export class EncarProvider implements MarketProvider {
 
   async fetchList(q: string, offset: number, limit: number): Promise<{ count: number; items: EncarListItem[] }> {
     const url = `https://api.encar.com/search/car/list/premium?count=true&q=${encodeURIComponent(q)}&sr=${encodeURIComponent(`|ModifiedDate|${offset}|${limit}`)}`;
-    const json = await getJson<{ Count: number; SearchResults: EncarListItem[] }>(url, { ...this.http(), timeoutMs: 40000 });
+    // Encar sperrt einzelne Austritts-IPs des Residential-Proxys (HTML-Seite "ERROR", HTTP 403). Der Proxy wechselt die
+    // IP je Verbindung → bis zu drei Wiederholungen mit Pause statt Abbruch des gesamten Laufs (15.09.2026)
+    const json = await getJson<{ Count: number; SearchResults: EncarListItem[] }>(url, { ...this.http(), timeoutMs: 40000, retries: 3, retryOn403: true, maxRetryWaitMs: 8000 });
     return { count: json.Count ?? 0, items: json.SearchResults ?? [] };
   }
 
@@ -205,7 +207,7 @@ export class EncarProvider implements MarketProvider {
   }
 
   /** Zerlegt den Bestand in Teilabfragen unter der 10.000er-Grenze (Baujahr → Preisklasse). */
-  async partitions(warnings: string[]): Promise<Partition[]> {
+  async partitions(warnings: string[], state: { skipped: number } = { skipped: 0 }): Promise<Partition[]> {
     const out: Partition[] = [];
     const thisYear = new Date().getFullYear();
     const makers: Array<string | null> = config.encar.manufacturers.length ? config.encar.manufacturers : [null];
@@ -215,18 +217,24 @@ export class EncarProvider implements MarketProvider {
         for (let year = config.encar.minYear || 2000; year <= thisYear + 1; year++) {
           const base = { carType, manufacturer, year };
           const q = this.buildQuery(base);
-          const { count } = await this.fetchList(q, 0, 1);
-          await sleep(config.encar.delayMs);
-          if (count === 0) continue;
           const label = `${carType}/${manufacturer ?? 'alle'}/${year}`;
-          if (count <= config.encar.partitionMax) { out.push({ label, q, count }); continue; }
-          for (const [from, to] of PRICE_BANDS) {
-            const qb = this.buildQuery({ ...base, priceFrom: from, priceTo: to });
-            const { count: cb } = await this.fetchList(qb, 0, 1);
+          // Ein gesperrter Teilbereich kostet nur diesen Teilbereich, nicht den ganzen Lauf; der Bestand bleibt dort unverändert
+          try {
+            const { count } = await this.fetchList(q, 0, 1);
             await sleep(config.encar.delayMs);
-            if (cb === 0) continue;
-            if (cb > config.encar.partitionMax) warnings.push(`${label}/${from}-${to ?? '∞'}: ${cb} Inserate > ${config.encar.partitionMax}, nur die zuletzt geänderten werden geholt`);
-            out.push({ label: `${label}/${from}-${to ?? '∞'}`, q: qb, count: Math.min(cb, config.encar.partitionMax) });
+            if (count === 0) continue;
+            if (count <= config.encar.partitionMax) { out.push({ label, q, count }); continue; }
+            for (const [from, to] of PRICE_BANDS) {
+              const qb = this.buildQuery({ ...base, priceFrom: from, priceTo: to });
+              const { count: cb } = await this.fetchList(qb, 0, 1);
+              await sleep(config.encar.delayMs);
+              if (cb === 0) continue;
+              if (cb > config.encar.partitionMax) warnings.push(`${label}/${from}-${to ?? '∞'}: ${cb} Inserate > ${config.encar.partitionMax}, nur die zuletzt geänderten werden geholt`);
+              out.push({ label: `${label}/${from}-${to ?? '∞'}`, q: qb, count: Math.min(cb, config.encar.partitionMax) });
+            }
+          } catch (e) {
+            state.skipped++;
+            warnings.push(`${label}: Teilabfragen nicht ermittelt – ${e instanceof Error ? e.message.slice(0, 120) : String(e)}`);
           }
         }
       }
@@ -237,7 +245,11 @@ export class EncarProvider implements MarketProvider {
   async fetchAll(): Promise<ProviderResult> {
     const fetchedAt = new Date().toISOString();
     const warnings: string[] = [];
-    const parts = await this.partitions(warnings);
+    const partState = { skipped: 0 };
+    const parts = await this.partitions(warnings, partState);
+    // Ohne Teilabfragen (alle Zählabfragen gesperrt) abbrechen – sonst gälte ein leerer Lauf als vollständig und
+    // deactivateMissing würde den gesamten Bestand deaktivieren
+    if (!parts.length) throw new Error(`Encar: keine Teilabfragen ermittelt – ${warnings.slice(0, 2).join(' | ') || 'keine Treffer'}`);
     const expected = parts.reduce((a, p) => a + p.count, 0);
 
     // 1) Alle Partitionen seitenweise laden – mehrere Partitionen parallel (jede Anfrage kostet über Proxy ~1 s)
@@ -308,6 +320,7 @@ export class EncarProvider implements MarketProvider {
     warnings.push(`Partitionen ${parts.length} (${failed} fehlgeschlagen), erwartet ${expected}, geladen ${items.size}, neue Ausstattungen gelernt ${learned.length} (offen ${Math.max(0, missing.size - learned.length)}), ohne Übersetzung zurückgestellt ${untranslated}`);
 
     // Nur ein vollständiger Lauf deaktiviert Fahrzeuge, die nicht mehr gelistet sind
-    return { listings, complete: failed === 0, warnings };
+    // Nur ein Lauf ohne fehlende Teilbereiche darf verkaufte Inserate deaktivieren
+    return { listings, complete: failed === 0 && partState.skipped === 0, warnings };
   }
 }
