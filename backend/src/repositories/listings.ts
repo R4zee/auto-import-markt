@@ -190,6 +190,13 @@ function orderBy(sort: ListingQuery['sort'], dest: DestCode, alias = ''): string
   }[sort ?? 'landed-asc'];
 }
 
+/** Quellenbedingung: nur die Quelle selbst oder zusätzlich ihre Teilquellen ("<id>-…"). */
+function sourceClause(source: string, includeSubSources: boolean): { sql: string; args: InValue[] } {
+  return includeSubSources
+    ? { sql: '(source = ? OR source LIKE ?)', args: [source, `${source}-%`] }
+    : { sql: 'source = ?', args: [source] };
+}
+
 export const listingsRepo = {
   async upsertMany(listings: Listing[]): Promise<number> {
     if (!listings.length) return 0;
@@ -200,9 +207,13 @@ export const listingsRepo = {
     return listings.length;
   },
 
-  /** Deaktiviert alle Listings einer Quelle, die nicht in `keepIds` enthalten sind. */
-  async deactivateMissing(source: string, keepIds: string[]): Promise<number> {
-    const rows = await query<{ id: string }>('SELECT id FROM listings WHERE source = ? AND active = 1', [source]);
+  /**
+   * Deaktiviert alle Listings einer Quelle, die nicht in `keepIds` enthalten sind.
+   * `includeSubSources` nimmt auch Teilquellen des Providers mit ("olx" → olx-pl, olx-ro …, "autoapi" → autoapi-dubizzle).
+   */
+  async deactivateMissing(source: string, keepIds: string[], includeSubSources = false): Promise<number> {
+    const src = sourceClause(source, includeSubSources);
+    const rows = await query<{ id: string }>(`SELECT id FROM listings WHERE ${src.sql} AND active = 1`, src.args);
     const keep = new Set(keepIds);
     const stale = rows.map((r) => r.id).filter((id) => !keep.has(id));
     for (let i = 0; i < stale.length; i += 500) {
@@ -212,8 +223,9 @@ export const listingsRepo = {
   },
 
   /** Nur IDs (und Preis/km) einer Quelle – für Abgleiche ohne den ganzen Datensatz zu laden. */
-  async activeIdsBySource(source: string): Promise<Map<string, { price: number; km: number }>> {
-    const rows = await query<{ id: string; price: number; km: number }>('SELECT id, price, km FROM listings WHERE source = ? AND active = 1', [source]);
+  async activeIdsBySource(source: string, includeSubSources = false): Promise<Map<string, { price: number; km: number }>> {
+    const src = sourceClause(source, includeSubSources);
+    const rows = await query<{ id: string; price: number; km: number }>(`SELECT id, price, km FROM listings WHERE ${src.sql} AND active = 1`, src.args);
     return new Map(rows.map((r) => [r.id, { price: Number(r.price), km: Number(r.km) }]));
   },
 

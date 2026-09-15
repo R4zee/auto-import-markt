@@ -328,6 +328,7 @@ export class OlxProvider implements MarketProvider {
 
   async fetchSite(site: OlxSite, fetchedAt: string, warnings: string[]): Promise<Listing[]> {
     const listings: Listing[] = [];
+    const seen = new Set<string>();
     const makeByCategory = new Map<number, string>();
     const state: { filters: OlxFilterLevel } = { filters: config.olx.serverFilters ? 'both' : 'none' };
     let offset = 0;
@@ -342,7 +343,8 @@ export class OlxProvider implements MarketProvider {
       }
       for (const o of offers) {
         const l = mapOlxOffer(o, site, fetchedAt, makeByCategory);
-        if (l && l.price >= this.minPrice(site) && l.year >= config.olx.minYear) listings.push(l);
+        // beworbene Anzeigen erscheinen auf mehreren Seiten erneut → nur einmal aufnehmen
+        if (l && !seen.has(l.id) && l.price >= this.minPrice(site) && l.year >= config.olx.minYear) { seen.add(l.id); listings.push(l); }
       }
       offset += offers.length;
       if (!json.links?.next?.href || offers.length < config.olx.pageSize) break;
