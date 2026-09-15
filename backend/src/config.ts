@@ -184,6 +184,8 @@ export const config = {
     ttlDays: num(env.REFERENCE_TTL_DAYS, 7),
     /** Buckets je Lauf (mobile.de-Anfragen = Buckets × Seiten) */
     maxPerRun: num(env.REFERENCE_MAX_PER_RUN, 1500),
+    /** Zeitbudget je Lauf in Minuten – danach endet der Job regulär, der Rest folgt im nächsten Lauf */
+    maxMinutes: num(env.REFERENCE_MAX_MINUTES, 45),
     pages: num(env.REFERENCE_PAGES, 2),
     delayMs: num(env.REFERENCE_DELAY_MS, 700),
     /** Baujahr ± Jahre im Suchband, wenn keine Baureihe (W221, F30 …) erkannt wird – sonst gilt deren Bauzeitraum */
