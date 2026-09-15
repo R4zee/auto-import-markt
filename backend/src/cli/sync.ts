@@ -1,6 +1,6 @@
 import { closeDb, ready } from '../db.js';
 import { getFx } from '../services/fx.js';
-import { syncAll, syncProvider } from '../services/sync.js';
+import { canonicalizeStoredMakes, syncAll, syncProvider, type SyncReport } from '../services/sync.js';
 import { refreshFacets } from '../services/facets.js';
 import { listingsRepo } from '../repositories/listings.js';
 import { activeProviders } from '../providers/index.js';
@@ -20,13 +20,16 @@ await ready();
 await getFx();
 // SYNC_ONLY=olx,subito – nur diese (aktiven) Provider, ohne Bereinigung; leer = alles
 const only = (process.env.SYNC_ONLY ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-let reports;
+let reports: SyncReport[];
 if (only.length) {
   const chosen = activeProviders().filter((p) => only.includes(p.id));
   const missing = only.filter((id) => !chosen.some((p) => p.id === id));
   if (missing.length) console.log(`Nicht aktiv oder unbekannt: ${missing.join(', ')} (aktiv: ${activeProviders().map((p) => p.id).join(', ') || '–'})`);
   reports = [];
   for (const p of chosen) reports.push(await syncProvider(p));
+  // Markenschreibweisen im Bestand vereinheitlichen (billig: nur DISTINCT-Marken), dann Filterlisten neu aufbauen
+  const canon = await canonicalizeStoredMakes();
+  if (canon.listings > 0) reports.push({ provider: 'makes', status: 'ok', upserted: canon.listings, deactivated: 0, warnings: [`${canon.makes} Markenschreibweisen vereinheitlicht`], durationMs: 0 });
   await refreshFacets();
 } else {
   reports = await syncAll();

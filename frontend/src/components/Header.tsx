@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { DestCode } from '../api';
 import { useApp } from '../context';
 import type { DisplayCurrency } from '../format';
@@ -12,6 +12,31 @@ interface Props {
   onLang: (l: Lang) => void;
   onDest: (d: DestCode) => void;
   onCcy: (c: DisplayCurrency) => void;
+}
+
+interface PickerProps {
+  ariaLabel: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (v: string) => void;
+  icon: ReactNode;
+  /** Text, solange die Optionen noch nicht geladen sind */
+  fallbackLabel?: string;
+}
+
+/** Auswahlkasten der Kopfzeile: sichtbar Symbol + Text + Pfeil, darüber das unsichtbare native <select> über die volle Fläche. */
+function Picker({ ariaLabel, value, options, onChange, icon, fallbackLabel }: PickerProps) {
+  const current = options.find((o) => o.value === value)?.label ?? fallbackLabel ?? value;
+  return (
+    <div className="aim-picker">
+      {icon}
+      <span>{current}</span>
+      <i className="ph ph-caret-down" aria-hidden="true" />
+      <select value={value} onChange={(e) => onChange(e.target.value)} aria-label={ariaLabel}>
+        {options.length ? options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>) : <option value={value}>{current}</option>}
+      </select>
+    </div>
+  );
 }
 
 export function Header({ view, onLang, onDest, onCcy }: Props) {
@@ -43,24 +68,28 @@ export function Header({ view, onLang, onDest, onCcy }: Props) {
         </nav>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)', padding: '4px 6px 4px 9px' }}>
-            <Flag code={lang === 'de' ? 'de' : 'gb'} />
-            <select className="input aim-select-bare" value={lang} onChange={(e) => onLang(e.target.value as Lang)} aria-label="Language">
-              {(Object.keys(DICT) as Lang[]).map((k) => <option key={k} value={k}>{DICT[k].langName}</option>)}
-            </select>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)', padding: '4px 6px 4px 9px' }}>
-            <Flag code={destMeta?.flag ?? dest.toLowerCase()} />
-            <select className="input aim-select-bare" value={dest} onChange={(e) => onDest(e.target.value as DestCode)} aria-label="Destination">
-              {dests.map((d) => <option key={d.code} value={d.code}>{t('c' + d.code)} · {Math.round(d.vatRate * 100)}% {d.taxLabel}</option>)}
-            </select>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)', padding: '4px 6px 4px 10px' }}>
-            <i className="ph ph-currency-eur" style={{ fontSize: 14, color: 'var(--color-accent)' }} />
-            <select className="input aim-select-bare" value={ccy} onChange={(e) => onCcy(e.target.value as DisplayCurrency)} aria-label="Currency">
-              {(['EUR', 'USD', 'GBP', 'CHF'] as DisplayCurrency[]).map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
+          <Picker
+            ariaLabel={lang === 'de' ? 'Sprache' : 'Language'}
+            value={lang}
+            onChange={(v) => onLang(v as Lang)}
+            options={(Object.keys(DICT) as Lang[]).map((k) => ({ value: k, label: DICT[k].langName }))}
+            icon={<Flag code={lang === 'de' ? 'de' : 'gb'} />}
+          />
+          <Picker
+            ariaLabel={lang === 'de' ? 'Zielland' : 'Destination'}
+            value={dest}
+            onChange={(v) => onDest(v as DestCode)}
+            options={dests.map((d) => ({ value: d.code, label: `${t('c' + d.code)} · ${Math.round(d.vatRate * 100)}% ${d.taxLabel}` }))}
+            fallbackLabel={t('c' + dest)}
+            icon={<Flag code={destMeta?.flag ?? dest.toLowerCase()} />}
+          />
+          <Picker
+            ariaLabel={lang === 'de' ? 'Währung' : 'Currency'}
+            value={ccy}
+            onChange={(v) => onCcy(v as DisplayCurrency)}
+            options={(['EUR', 'USD', 'GBP', 'CHF'] as DisplayCurrency[]).map((c) => ({ value: c, label: c }))}
+            icon={<i className="ph ph-currency-eur" style={{ fontSize: 14, color: 'var(--color-accent)' }} />}
+          />
           <button className="btn btn-primary" style={{ height: 34, whiteSpace: 'nowrap' }} onClick={() => setSignIn(true)}>
             <i className="ph ph-user-circle" style={{ fontSize: 15 }} />{t('signIn')}
           </button>

@@ -1,4 +1,5 @@
 import { config, type OlxSite } from '../config.js';
+import { canonicalMake, MAKE_TITLE_CANDIDATES } from '../domain/makes.js';
 import { marketForCountry } from '../domain/markets.js';
 import type { Listing } from '../domain/types.js';
 import { defaultPartnerFor } from '../seed/partners.js';
@@ -57,7 +58,6 @@ const KEYS = {
   steering: ['righthanddrive', 'steering', 'steering_wheel', 'kierownica', 'volan', 'volante'],
 };
 
-const KNOWN_MAKES = ['Alfa Romeo', 'Aston Martin', 'Audi', 'Bentley', 'BMW', 'Cadillac', 'Chevrolet', 'Chrysler', 'Citroën', 'Citroen', 'Cupra', 'Dacia', 'Dodge', 'DS', 'Ferrari', 'Fiat', 'Ford', 'Genesis', 'Honda', 'Hyundai', 'Infiniti', 'Jaguar', 'Jeep', 'Kia', 'Lamborghini', 'Lancia', 'Land Rover', 'Lexus', 'Lincoln', 'Maserati', 'Mazda', 'McLaren', 'Mercedes-Benz', 'Mercedes', 'MG', 'Mini', 'Mitsubishi', 'Nissan', 'Opel', 'Peugeot', 'Porsche', 'Renault', 'Rolls-Royce', 'Saab', 'Seat', 'Škoda', 'Skoda', 'Smart', 'SsangYong', 'Subaru', 'Suzuki', 'Tesla', 'Toyota', 'Volkswagen', 'VW', 'Volvo', 'BYD', 'Polestar', 'Lynk & Co', 'Abarth', 'Daewoo', 'Daihatsu', 'Isuzu', 'Iveco', 'Lada', 'Rover', 'Tata'];
 
 function param(o: OlxOffer, keys: string[]): OlxParam | undefined {
   const ps = o.params ?? [];
@@ -88,22 +88,20 @@ function paramNum(o: OlxOffer, keys: string[]): number | null {
 /** Verkäufer-Floskeln am Titelanfang (pl/ro/bg/pt/it/cz) */
 const TITLE_PREFIX = /^(?:(?:sprzedam|sprzedaż|na sprzedaż|okazja|pilnie|polecam|super|zamiana|vand|vând|vanzare|vânzare|de vânzare|de vanzare|urgent|ocazie|продавам|продава се|спешно|vendo|vende-se|vende se|oportunidade|prodám|prodam|prodej)\b[\s:,\-–!]*)+/iu;
 
-const CANON: Record<string, string> = { VW: 'Volkswagen', Mercedes: 'Mercedes-Benz', Citroen: 'Citroën', Skoda: 'Škoda' };
-
-/** Marke aus Titel: Floskeln abschneiden, dann frühester bekannter Markenname im Titel, sonst erstes Wort. */
+/** Marke aus Titel: Floskeln abschneiden, dann frühester bekannter Markenname im Titel (kanonisiert), sonst erstes Wort. */
 export function makeFromTitle(title: string): string {
   const t = title.trim().replace(TITLE_PREFIX, '').trim();
   const lower = t.toLowerCase();
   let best: { make: string; at: number } | null = null;
-  for (const m of KNOWN_MAKES) {
+  for (const m of MAKE_TITLE_CANDIDATES) {
     const re = new RegExp(`(^|[^\\p{L}])${m.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}])`, 'iu');
     const hit = re.exec(lower);
     if (!hit) continue;
     const at = hit.index + hit[1].length;
     if (!best || at < best.at || (at === best.at && m.length > best.make.length)) best = { make: m, at };
   }
-  if (best) return CANON[best.make] ?? best.make;
-  return t.split(/\s+/)[0] ?? '';
+  if (best) return canonicalMake(best.make);
+  return canonicalMake(t.split(/\s+/)[0] ?? '');
 }
 
 export function olxPhoto(link: string | undefined): string | null {
