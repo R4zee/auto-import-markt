@@ -15,6 +15,14 @@ on:
         description: 'Nur diese Provider (kommagetrennt, z. B. olx,subito,sauto) – leer = alle'
         required: false
         default: ''
+      reference_max_per_run:
+        description: 'Vergleichspreise: Buckets je Lauf (leer = Variable bzw. 1500)'
+        required: false
+        default: ''
+      reference_max_minutes:
+        description: 'Vergleichspreise: Zeitbudget in Minuten (leer = Variable bzw. 45)'
+        required: false
+        default: ''
 
 concurrency:
   group: sync-listings
@@ -23,7 +31,8 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # Sync (Encar 10–20 min) + Vergleichspreise (Zeitbudget, manuell bis ~2 h)
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -79,8 +88,8 @@ jobs:
           REFERENCE_ENABLED: ${{ vars.REFERENCE_ENABLED || 'true' }}
           # url = search.html-Adresse als Parameter (bestätigt); query liefert HTTP 400
           REFERENCE_MOBILE_MODE: ${{ vars.REFERENCE_MOBILE_MODE || 'url' }}
-          REFERENCE_MAX_PER_RUN: ${{ vars.REFERENCE_MAX_PER_RUN || '1500' }}
-          REFERENCE_MAX_MINUTES: ${{ vars.REFERENCE_MAX_MINUTES || '45' }}
+          REFERENCE_MAX_PER_RUN: ${{ github.event.inputs.reference_max_per_run || vars.REFERENCE_MAX_PER_RUN || '1500' }}
+          REFERENCE_MAX_MINUTES: ${{ github.event.inputs.reference_max_minutes || vars.REFERENCE_MAX_MINUTES || '45' }}
           REFERENCE_MAKE_IDS: ${{ vars.REFERENCE_MAKE_IDS }}
           REFERENCE_PROXY_URL: ${{ secrets.REFERENCE_PROXY_URL }}
         run: node --import tsx src/cli/reference.ts
