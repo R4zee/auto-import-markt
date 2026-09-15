@@ -48,7 +48,7 @@ Alternativ über die Claude-Code-Vorschau: `.claude/launch.json` enthält die Ko
 | `GET /api/listings/batch?ids=` | Merkliste/Vergleich |
 | `POST /api/calc/landed-cost` | Freie Kalkulation (Markt, Preis, Währung, Oldtimer, Präferenzursprung, Fahrzeugdaten) |
 | `POST /api/enquiries`, `POST /api/enquiries/bulk` | Anfrage an den Partner-Importeur / Sammelanfrage je Partner |
-| `GET /api/listings/:id/reference?dest=` | Vergleichspreise DE (mobile.de-Web-App-Endpunkt): günstigstes vergleichbares Angebot, Median, Spanne, Laufleistungsfenster, Abstand des Endpreises in Prozent; ohne `REFERENCE_ENABLED` → 204. Die Trefferliste trägt je Inserat `reference` (Mindestpreis + Abstand) aus dem Bucket-Cache `ref_prices` |
+| `GET /api/listings/:id/reference?dest=` | Vergleichspreise DE (mobile.de-Web-App-Endpunkt): günstigstes vergleichbares Angebot, Median, Spanne, Laufleistungsfenster, Abstand des Endpreises in Prozent; mit `REFERENCE_ENABLED=false` → 204. Die Trefferliste trägt je Inserat `reference` (Mindestpreis + Abstand) aus dem Bucket-Cache `ref_prices` |
 | `GET /api/cron/sync` | Vercel-Cron (Header `Authorization: Bearer CRON_SECRET`) |
 | `GET /api/partners` | Partner-Importeure |
 | `POST /api/admin/sync`, `POST /api/admin/cleanup`, `POST /api/admin/facets`, `GET /api/admin/status`, `GET /api/admin/enquiries` | Admin (Header `x-admin-key`); `cleanup` deaktiviert Bestände entfernter Anbieter, `facets` berechnet die Filterlisten neu |

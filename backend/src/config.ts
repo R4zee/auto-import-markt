@@ -177,7 +177,8 @@ export const config = {
    * wie Encar). Buckets werden per GitHub Actions vorgeladen (cli/reference.ts) und beim Ausliefern nur gelesen.
    */
   reference: {
-    enabled: bool(env.REFERENCE_ENABLED, false),
+    /** Standard an (live bestätigt 15.09.2026); REFERENCE_ENABLED=false schaltet Kachelwerte, Detailkarte und Job ab */
+    enabled: bool(env.REFERENCE_ENABLED, true),
     /** 'url' = search.html-Adresse als Parameter `url` an /consumer/api/search/srp (bestätigt 15.09.2026); 'query' = Parameter direkt (liefert 400) */
     mobileMode: (env.REFERENCE_MOBILE_MODE ?? 'url') as 'query' | 'url',
     ttlDays: num(env.REFERENCE_TTL_DAYS, 7),
