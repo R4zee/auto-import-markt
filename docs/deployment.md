@@ -306,6 +306,44 @@ Minuten und übersteigt damit Vercels Function-Limit; er läuft deshalb als **Gi
 - Vercel liest nur noch aus Turso; Suche, Filter und Sortierung laufen in SQL mit vorberechneten
   Endpreisen je Zielland (werden bei Kursänderung im Sync neu berechnet).
 
+## Teil J – Abfragezeit und Vercel-Kosten (Stand 14.09.2026)
+
+Befund: Ein Markenfilter (z. B. BMW) brauchte 1–2 Minuten. Ursache waren nicht die Trefferzeilen, sondern
+vier Begleitabfragen je Suche (Gesamtzahl, Marktzähler, Marken-, Modell- und Standortlisten), die SQLite ohne
+passenden Index als Vollscan über alle 150.000 Zeilen ausführte – für `year >= 1985` wählte der Planer sogar den
+Baujahr-Index und las damit jede Zeile einzeln. Auf Turso zählt und kostet jede gelesene Zeile; bei
+600.000 Zeilen-Reads je Suche war das Monatskontingent nach wenigen Tagen erschöpft, und die Function lief
+minutenlang (Vercel rechnet die aktive Zeit ab).
+
+Maßnahmen (alle in dieser Version, keine Konfiguration nötig):
+
+1. Abdeckender Suchindex + Bereichsfilter mit unärem Plus → jede Suche liest nur Indexeinträge plus 48 Zeilen.
+2. Filterlisten und Marktzähler werden je Sync-Lauf vorberechnet (`meta`-Tabelle), nicht je Anfrage.
+3. 48 Treffer je Seite statt 200, nur das erste Foto je Treffer; „Mehr laden“ im Frontend.
+4. CDN-Cache: Lese-Antworten tragen `Cache-Control: s-maxage=600, stale-while-revalidate=3600`
+   (`API_CACHE_SECONDS`, Standard 10 Minuten). Wiederholte Suchen – auch die Startseite jedes Besuchers –
+   beantwortet das Vercel-CDN ohne Function-Aufruf. Daten sind damit bis zu 10 Minuten nach einem Sync alt;
+   für sofortige Aktualität `API_CACHE_SECONDS=0` setzen (kostet Function-Aufrufe).
+
+Weitere Stellschrauben, falls die Rechnung noch zu hoch ist: `memory` in `vercel.json` von 1024 auf 512 MB
+(Function braucht mit SQL-Suche deutlich weniger als vorher), Cron in `vercel.json` entfernen, wenn alle
+Provider über GitHub Actions laufen (der Cron ruft dann nur noch Facetten-/Kursaktualisierung auf).
+
+**Neue kostenlose Quellen Süd-/Osteuropa** (OLX PL/RO/BG/PT, Subito.it, Sauto.cz – Frontend-Endpunkte ohne Key):
+
+1. Vom eigenen Rechner prüfen, ob Endpunkt und Zuordnung stimmen (schreibt nichts):
+   `npm run probe -w backend -- olx`, dann `subito`, dann `sauto`. Die Ausgabe zeigt die Rohantwort und je
+   Inserat eine Zeile `✔ Baujahr Marke Modell · km · Preis`. Steht dort `✖`, Feldnamen in
+   `backend/src/providers/<quelle>.ts` an die Rohantwort anpassen.
+2. Die Pkw-Kategorien aller vier OLX-Seiten sind vorbelegt (PL 84, RO 84, BG 1117, PT 378, Live-Proben 14.09.2026);
+   `OLX_SITES` als Variable nur, um eine Seite abzuschalten, z. B. `[{"country":"pt","enabled":false}]`.
+3. Als Variables (GitHub → Settings → Secrets and variables → Actions → Variables): `OLX_ENABLED=true`, `SUBITO_ENABLED=true`, `SAUTO_ENABLED=true`. Optional als Secret
+   `EUROPE_PROXY_URL` (Residential-Proxy wie bei Encar), falls eine Seite den GitHub-Runner mit 403 abweist.
+4. Testlauf: Actions → Sync Listings → Run workflow → „Nur diese Provider“ = `olx,subito,sauto`. Der Lauf meldet je
+   Seite die Anzahl; danach läuft alles im 6-Stunden-Rhythmus mit.
+
+Optional weiterhin `PARTNER_FEEDS` (JSON-Array, Format in `backend/.env.example`) für direkte Händler-Feeds.
+
 **Kosten/Volumen:** rund 300 Listen- und 1.500 Detailabrufe je Lauf. Encar liefert gzip-komprimiert,
 Erfahrungswert nach dem ersten Lauf im DataImpulse-Dashboard unter **Usage** prüfen; erwartet werden
 1–6 $ pro Monat bei vier Läufen täglich. Frequenz in `sync.yml` unter `cron` anpassen

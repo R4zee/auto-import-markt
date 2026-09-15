@@ -2,7 +2,7 @@ import type { Listing } from './api';
 
 export type DisplayCurrency = 'EUR' | 'USD' | 'GBP' | 'CHF';
 
-const SYMBOL: Record<string, string> = { JPY: '¥', KRW: '₩', USD: '$', AED: 'AED ', EUR: '€', GBP: '£', CHF: 'CHF ' };
+const SYMBOL: Record<string, string> = { JPY: '¥', KRW: '₩', USD: '$', AED: 'AED ', EUR: '€', GBP: '£', CHF: 'CHF ', PLN: 'zł ', CZK: 'Kč ', RON: 'lei ', BGN: 'лв ', HUF: 'Ft ' };
 
 /** Anzeigekurse (Einheiten je EUR) aus EUR-je-Einheit-Kursen ableiten. */
 export function displayRates(eurPerUnit: Record<string, number>): Record<DisplayCurrency, number> {

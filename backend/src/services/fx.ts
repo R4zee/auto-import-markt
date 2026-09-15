@@ -10,9 +10,15 @@ const FALLBACK: Record<string, number> = {
   AED: 0.25,
   GBP: 1 / 0.845,
   CHF: 1 / 0.94,
+  // Osteuropa (OLX Polen/Rumänien/Bulgarien, Sauto Tschechien)
+  PLN: 0.234,
+  CZK: 0.040,
+  RON: 0.201,
+  BGN: 0.511,
+  HUF: 0.0025,
 };
 
-const TRACKED = ['JPY', 'KRW', 'USD', 'AED', 'GBP', 'CHF'];
+const TRACKED = ['JPY', 'KRW', 'USD', 'AED', 'GBP', 'CHF', 'PLN', 'CZK', 'RON', 'BGN', 'HUF'];
 const TTL_MS = 6 * 60 * 60 * 1000;
 
 interface FxState {

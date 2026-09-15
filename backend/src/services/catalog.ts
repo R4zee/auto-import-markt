@@ -3,6 +3,7 @@ import { DESTINATIONS, MARKETS, MARKET_CODES } from '../domain/markets.js';
 import type { DecoratedListing, DestCode, Listing, ListingQuery } from '../domain/types.js';
 import { calcGermanVehicleTax } from '../domain/vehicleTax.js';
 import { listingsRepo } from '../repositories/listings.js';
+import { getFacets, invalidateFacets } from './facets.js';
 import { eurRate } from './fx.js';
 
 export function decorate(l: Listing, dest: DestCode): DecoratedListing {
@@ -32,23 +33,28 @@ export interface SearchResult {
   facets: { makes: string[]; models: string[]; locations: string[] };
 }
 
-/** Kein Bestands-Cache mehr nötig – Filter/Sortierung laufen in SQL. Bleibt als No-op für Aufrufer. */
+/** Speicher-Cache der Filterlisten verwerfen (nach lokalem Sync; auf Vercel läuft der Sync extern). */
 export function invalidateListingCache(): void {
-  /* SQL-basierte Suche, nichts zu invalidieren */
+  invalidateFacets();
 }
 
 export async function search(q: ListingQuery): Promise<SearchResult> {
   const dest = q.dest ?? 'DE';
-  const res = await listingsRepo.search(q, dest);
+  const [res, facets] = await Promise.all([listingsRepo.search(q, dest), getFacets()]);
+  const byOffer = q.offer === 'auction' ? facets.marketCounts.auction : q.offer === 'fixed' ? facets.marketCounts.fixed : facets.marketCounts.all;
   const marketCounts: Record<string, number> = {};
-  for (const m of MARKET_CODES) marketCounts[m] = res.marketCounts[m] ?? 0;
+  for (const m of MARKET_CODES) marketCounts[m] = byOffer[m] ?? 0;
   return {
     items: res.items.map((l) => decorate(l, dest)),
     total: res.total,
     page: res.page,
     pageSize: res.pageSize,
     marketCounts,
-    facets: res.facets,
+    facets: {
+      makes: facets.makes,
+      models: q.make ? facets.modelsByMake[q.make] ?? [] : facets.models,
+      locations: facets.locations,
+    },
   };
 }
 

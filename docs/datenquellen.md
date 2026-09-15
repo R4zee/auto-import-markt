@@ -107,9 +107,43 @@ Gebrauchtwagen oft nicht liefern → Standard 10 % **[G]**.
 
 ## 4. Europa (Süd-/Osteuropa und Nachbarmärkte)
 
+**Stand 14.09.2026 – Ziel: kostenlose Quellen aus Ost- und Südeuropa.** Keines der Landesportale bietet eine
+offizielle Lese-API; die Händler-APIs (OLX-Gruppe, Hasznaltauto, AutoScout24) dienen nur dem Einstellen eigener
+Anzeigen. Kostenlos anbindbar sind – wie bei Encar – die **JSON-Endpunkte, die die Websites selbst aufrufen**
+(keyless, undokumentiert, Grauzone; von öffentlichen Scraper-Projekten belegt). Umgesetzt und je Seite schaltbar:
+
+| Portal | Land → Markt | Endpunkt (keyless) | Adapter | Stand |
+|---|---|---|---|---|
+| **OLX** olx.pl / olx.ro / olx.bg / olx.pt | PL, RO, BG → EE; PT → SE | `GET https://www.olx.pl/api/v1/offers/?category_id=84&offset=&limit=40&sort_by=created_at:desc[&filter_float_year:from=2012]` → `data[]` mit `params[]` (olx.pl: `price, model, year, petrol, transmission, enginesize, enginepower, milage, drive, righthanddrive, car_body, condition, country_origin, vin`), `photos[].link` (`;s={width}x{height}`), `location.city`, `category.id` (Marke = Unterkategorie → `/api/v1/offers/metadata/breadcrumbs/`) **[B]** (Live-Probe 14.09.2026: 314.735 Pkw, max. 1.000 je Abfrage) | `providers/olx.ts` | **PL bestätigt** (Kategorie 84). CloudFront-WAF blockt Nodes Standard-TLS-Fingerprint (403 in ~10 ms, unabhängig von Headern, URL, Verbindung); mit Chrome-Cipher-Reihenfolge oder nur TLS 1.3 kommt jede Anfrage durch → Adapter nutzt einen Agent mit Chrome-TLS-Profil (`OLX_TLS_PROFILE`). Serverfilter Preis und Baujahr funktionieren (315k → 195k). RO = 84, BG = 1117, PT = 378 bestätigt (Kategorie-Scans 14.09.2026) – alle vier Seiten vorbelegt |
+| **Subito.it** | IT → SE | `GET https://hades.subito.it/v1/search/items?c=2&t=s&lim=100&start=0&sort=datedesc` → `ads[]`, `features[]` als Array `{uri, values[{key,value}]}`: `/price` (key "13400"), `/year`, `/register_date` ("06/2022"), `/mileage_scalar`, `/fuel`, `/gearbox`, `/car` (Paket: Marca/Modello/Versione), `/car_type`, `/power`; `images[].cdn_base_url` (+ `?rule=gallery-desktop-2x-jpeg`), `urls.default`, `geo.town` **[B]** (Live-Probe 14.09.2026: 535.000 Inserate) | `providers/subito.ts` | **bestätigt**, direkt aus Node ohne Proxy erreichbar; unbekannte Filterparameter liefern 0 Treffer → Mindestpreis/-baujahr nach dem Abruf |
+| **Sauto.cz** (Seznam) | CZ → EE | `GET https://www.sauto.cz/api/v1/items/search?category_id=838&limit=200&offset=&price_from=&price_to=&manufacturing_date_from=` → `results[]` (`manufacturer_cb.name`, `model_cb.name`, `additional_model_name`, `tachometer`, `manufacturing_date`, `fuel_cb`, `gearbox_cb`, `locality.district`, `images[].url`, `images_total_count`, `premise.name`, `deal_type`) **[B]** (Live-Probe 14.09.2026: 71.040 Pkw ab 150.000 CZK; max. 1.000 je Abfrage → Preisfenster) | `providers/sauto.ts` | **bestätigt**; Trefferliste ohne Hubraum (aus der Ausstattungszeile gelesen) |
+
+Prüfen: `npm run probe -w backend -- olx|subito|sauto` (Rohantwort und Zuordnung, ohne Schreiben). Alle drei Adapter
+laufen ohne curl-Umweg (`nodeOnly`), weil OLX curl mit 403 abweist; `HTTP_CLIENT=curl` gilt weiterhin nur für Encar.
+Alle drei liefern nur die zuletzt eingestellten Seiten je Lauf (`complete=false`) – verkaufte Fahrzeuge werden
+also nicht deaktiviert; dafür später eine Nachprüfung je Inserat (wie bei Encar) ergänzen.
+
+**Geprüft, nicht anbindbar ohne HTML-Scraping oder Bezahldienst** (Stand 14.09.2026):
+
+| Portal | Land | Befund |
+|---|---|---|
+| Otomoto.pl, Autovit.ro, Standvirtual.pt (OLX-Gruppe, Händlerschwerpunkt) | PL, RO, PT | GraphQL mit *persisted queries* (Hash wechselt mit jedem Deploy) bzw. `__NEXT_DATA__` im HTML; alle öffentlichen Scraper-Projekte brechen regelmäßig („doesn't work since otomoto.pl was updated“). Kandidat für später, falls OLX zu wenig Händlerware liefert |
+| AutoScout24 (.it/.es/.pt/.pl …) | IT, ES, PT, PL | Nur Schreib-API; Listen stecken als JSON im HTML (`__NEXT_DATA__`), Nutzungsbedingungen untersagen Auslesen |
+| Hasznaltauto.hu, JóAutók | HU | HTML, wechselnde URLs; nur Bezahl-Scraper (Apify, Parse.bot) |
+| mobile.bg, cars.bg | BG | HTML |
+| car.gr | GR | HTML, Bezahl-Scraper |
+| Njuškalo.hr, Index Oglasi | HR | HTML mit Bot-Schutz |
+| coches.net, Milanuncios | ES | App-API (`ms-mt--api-web.spain.advgo.net`) nur mit signierten Headern; Bezahl-Scraper |
+| Autoplius.lt, Autogidas.lt, Auto24.ee, SS.lv | LT, EE, LV | HTML |
+| Carapis (Aggregator, 200+ Portale) | alle | 99–299 USD/Monat, im Test 42 Tage alte Daten und HTTP 429 – nicht kostenlos |
+
+Ergänzend bleiben Partner-Feeds über `PARTNER_FEEDS` (ein Feed je Händler/Importeur, Markt aus dem Land) der
+saubere Weg für Händlerbestände aus RO/PL/IT/ES. Die Länderlisten stehen in `backend/src/domain/markets.ts`
+(`MARKET_COUNTRIES`). mobile.de wurde als Quelle verworfen: fast ausschließlich deutsche Anbieter.
+
 | Portal | Offizielles API? | Für Aggregatoren nutzbar? | Bewertung |
 |---|---|---|---|
-| **mobile.de** (services.mobile.de) | Search-API / Ad-Integration, HTTP Basic, max. 2.000 Anzeigen je Abfrage | API-Account nur über Kundensupport (+49 30 81097500); nicht für Preisintelligenz gedacht | **B** [B] |
+| **mobile.de** (services.mobile.de) | Search-API / Ad-Integration, HTTP Basic, max. 2.000 Anzeigen je Abfrage | API-Account nur über Kundensupport (+49 30 81097500); kaum ausländische Angebote → für Süd-/Osteuropa ungeeignet | **B** [B] |
 | **AutoScout24** (portal.services.as24.tech) | nur Listing-Creation (Schreibseite) | nein | **B/D** [B] |
 | **Bilinfo Listing API (DK, Bilbasen)** (developer.bilinfo.net) | vollständiger Feed (JSON/XML), wird ausdrücklich an Aggregatoren verkauft | **ja**, Preis auf Anfrage | **B** (stark) [B] |
 | **Autotrader Connect (UK)** (developers.autotrader.co.uk) | Search API über alle Listings | Partnerfreigabe, > 1.000 £/Mo berichtet | **B** [B/G] |

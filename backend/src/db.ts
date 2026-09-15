@@ -169,10 +169,30 @@ async function migrate(): Promise<void> {
   await ensureColumn(c, 'listings', 'landed_nl', 'REAL');
   await ensureColumn(c, 'listings', 'landed_pl', 'REAL');
   await ensureColumn(c, 'listings', 'auction_ends_at', 'TEXT');
+  // Volltext-Hilfsspalte (klein geschrieben: Marke Modell Ausstattung Standort Losnummer) – wird beim Upsert gesetzt
+  await ensureColumn(c, 'listings', 'search_text', 'TEXT');
+  // Einmaliges Nachfüllen für Bestände von vor dieser Spalte – mit Merker in `meta`, damit nicht jeder Kaltstart
+  // die Tabelle nach NULL-Werten durchsucht (auf Turso zählt jede gelesene Zeile)
+  const backfilled = await c.execute("SELECT value FROM meta WHERE key = 'search_text_backfilled'");
+  if (!backfilled.rows.length) {
+    await c.execute(`UPDATE listings SET search_text = ${SEARCH_TEXT_SQL} WHERE search_text IS NULL`);
+    await c.execute("INSERT INTO meta(key, value) VALUES ('search_text_backfilled', '1') ON CONFLICT(key) DO NOTHING");
+  }
   await c.executeMultiple(`
+    -- Sortier-Indizes: geordneter Lauf mit frühem Abbruch (LIMIT), die Bereichsfilter selbst nutzen sie nicht (siehe repositories/listings.ts)
     CREATE INDEX IF NOT EXISTS idx_listings_active_landed_de ON listings(active, landed_de);
     CREATE INDEX IF NOT EXISTS idx_listings_active_year ON listings(active, year);
     CREATE INDEX IF NOT EXISTS idx_listings_active_km ON listings(active, km);
     CREATE INDEX IF NOT EXISTS idx_listings_active_make ON listings(active, make, model);
+    -- Abdeckender Suchindex: Zählen, Filtern und Sortieren laufen komplett im Index, Zeilen werden nur für die
+    -- ausgelieferte Seite gelesen (150.000 Inserate: Zählung je Marke < 5 ms statt Vollscan über alle Zeilen).
+    -- Bei geänderter Spaltenliste den Namen hochzählen (IF NOT EXISTS ersetzt keine bestehende Definition).
+    CREATE INDEX IF NOT EXISTS idx_listings_search_v1 ON listings(
+      active, make, model, year, km, landed_de, landed_at, landed_nl, landed_pl, price_eur,
+      market, offer_type, fuel, transmission, coc, location, auction_ends_at, search_text
+    );
   `);
 }
+
+/** SQL-Ausdruck für die Suchspalte (identisch zum Wert, den der Upsert setzt). */
+export const SEARCH_TEXT_SQL = `LOWER(make || ' ' || model || ' ' || trim || ' ' || location || ' ' || COALESCE(json_extract(auction_json, '$.lot'), '') || ' ' || COALESCE(json_extract(auction_json, '$.house'), ''))`;

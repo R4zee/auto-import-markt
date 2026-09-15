@@ -5,6 +5,7 @@ import { DEST_CODES, MARKET_CODES } from '../domain/markets.js';
 import { calcGermanVehicleTax } from '../domain/vehicleTax.js';
 import { publicConfig } from '../services/catalog.js';
 import { eurRate, getFx } from '../services/fx.js';
+import { publicCache } from '../services/httpCache.js';
 
 const calcSchema = z.object({
   market: z.enum(MARKET_CODES as [string, ...string[]]),
@@ -25,8 +26,9 @@ const calcSchema = z.object({
 });
 
 export async function calcRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/config', async () => {
+  app.get('/api/config', async (_req, reply) => {
     const fx = await getFx();
+    publicCache(reply);
     return { ...publicConfig(), fx: { rates: fx.rates, asOf: fx.asOf, source: fx.source } };
   });
 

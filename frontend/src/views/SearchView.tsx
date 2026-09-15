@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, type Fuel, type MarketCode, type OfferType, type SearchResult, type SortKey } from '../api';
+import { api, PAGE_SIZE, type Fuel, type MarketCode, type OfferType, type SearchResult, type SortKey } from '../api';
 import { CarCard } from '../components/CarCard';
 import { Flag } from '../components/Flag';
 import { useApp } from '../context';
@@ -11,10 +11,15 @@ export interface Filters {
   maxPrice: number; yearFrom: number; yearTo: number; maxKm: number; fuels: Fuel[]; trans: Array<'Automatic' | 'Manual'>; cocOnly: boolean;
 }
 
+/** Reglergrenzen – stehen die Filter auf der Grenze, werden sie nicht mitgeschickt (kürzere Abfrage, gleiche Cache-URL). */
+export const BOUNDS = { maxPrice: 300000, yearFrom: 1985, yearTo: 2026, maxKm: 300000 } as const;
+
 export const DEFAULT_FILTERS: Filters = {
   offer: 'all', markets: [], query: '', sort: 'landed-asc', make: '', model: '', loc: '',
-  maxPrice: 300000, yearFrom: 1985, yearTo: 2026, maxKm: 300000, fuels: [], trans: [], cocOnly: false,
+  maxPrice: BOUNDS.maxPrice, yearFrom: BOUNDS.yearFrom, yearTo: BOUNDS.yearTo, maxKm: BOUNDS.maxKm, fuels: [], trans: [], cocOnly: false,
 };
+
+const atBound = <K extends keyof typeof BOUNDS>(f: Filters, k: K): number | undefined => (f[k] === BOUNDS[k] ? undefined : f[k]);
 
 const MARKET_ORDER: MarketCode[] = ['JP', 'KR', 'US', 'GCC', 'SE', 'EE'];
 const FUELS: Fuel[] = ['Petrol', 'Diesel', 'Hybrid', 'Electric'];
@@ -26,6 +31,7 @@ export function SearchView({ filters, setFilters }: { filters: Filters; setFilte
   const { t, dest, destName, port, money, config, pro, marketLabel, ccy } = useApp();
   const [result, setResult] = useState<SearchResult | null>(null);
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading');
+  const [more, setMore] = useState<'idle' | 'loading' | 'error'>('idle');
   const [marketsOpen, setMarketsOpen] = useState(false);
   const debouncedQuery = useDebounced(filters.query, 250);
   const [reload, setReload] = useState(0);
@@ -33,20 +39,37 @@ export function SearchView({ filters, setFilters }: { filters: Filters; setFilte
   const f = filters;
   const set = (patch: Partial<Filters>) => setFilters({ ...f, ...patch });
 
+  const params = (page: number) => ({
+    q: debouncedQuery, offer: f.offer, markets: f.markets, make: f.make, model: f.model, location: f.loc,
+    yearFrom: atBound(f, 'yearFrom'), yearTo: atBound(f, 'yearTo'), maxKm: atBound(f, 'maxKm'), fuels: f.fuels, transmissions: f.trans, cocOnly: f.cocOnly,
+    maxLanded: atBound(f, 'maxPrice'), dest, sort: f.sort, page,
+  });
+
   useEffect(() => {
     let cancelled = false;
     setState('loading');
-    api.search({
-      q: debouncedQuery, offer: f.offer, markets: f.markets, make: f.make, model: f.model, location: f.loc,
-      yearFrom: f.yearFrom, yearTo: f.yearTo, maxKm: f.maxKm, fuels: f.fuels, transmissions: f.trans, cocOnly: f.cocOnly,
-      maxLanded: f.maxPrice, dest, sort: f.sort,
-    }).then((r) => { if (!cancelled) { setResult(r); setState('ok'); } })
+    setMore('idle');
+    api.search(params(1))
+      .then((r) => { if (!cancelled) { setResult(r); setState('ok'); } })
       .catch(() => { if (!cancelled) setState('error'); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedQuery, f.offer, f.markets, f.make, f.model, f.loc, f.yearFrom, f.yearTo, f.maxKm, f.fuels, f.trans, f.cocOnly, f.maxPrice, f.sort, dest, reload]);
 
   const cars = result?.items ?? [];
+  const hasMore = !!result && cars.length < result.total && result.items.length > 0;
+
+  /** Nächste Seite anhängen – Filterlisten/Zähler bleiben die der ersten Seite */
+  const loadMore = () => {
+    if (!result || more === 'loading') return;
+    setMore('loading');
+    api.search(params(result.page + 1))
+      .then((r) => {
+        setResult((prev) => (prev ? { ...r, items: [...prev.items, ...r.items.filter((x) => !prev.items.some((y) => y.id === x.id))] } : r));
+        setMore('idle');
+      })
+      .catch(() => setMore('error'));
+  };
   const fxLine = useMemo(() => {
     const r = config?.fx.rates ?? {};
     const jpy = r.JPY ?? 0.0061; const usd = r.USD ?? 0.92;
@@ -212,6 +235,17 @@ export function SearchView({ filters, setFilters }: { filters: Filters; setFilte
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(258px, 1fr))', gap: 16, opacity: state === 'loading' ? 0.6 : 1, transition: 'opacity 120ms' }}>
             {cars.map((c) => <CarCard key={`${c.id}-${ccy}`} car={c} />)}
           </div>
+
+          {state === 'ok' && hasMore && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '28px 0 8px' }}>
+              <div style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>{t('showing', { n: cars.length, total: result!.total })}</div>
+              <button className="btn btn-secondary" style={{ height: 36, fontSize: 13, minWidth: 200 }} onClick={loadMore} disabled={more === 'loading'}>
+                <i className={more === 'loading' ? 'ph ph-spinner' : 'ph ph-arrow-down'} style={{ fontSize: 14 }} />
+                {more === 'loading' ? t('loading') : t('loadMore', { n: Math.min(PAGE_SIZE, result!.total - cars.length) })}
+              </button>
+              {more === 'error' && <div style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>{t('loadError')}</div>}
+            </div>
+          )}
 
           {state === 'error' && (
             <div style={{ padding: '70px 20px', textAlign: 'center', color: 'var(--color-neutral-500)' }}>

@@ -1,8 +1,10 @@
 import { one, query, run } from '../db.js';
 import { activeProviders, isKnownSource } from '../providers/index.js';
+import type { Listing } from '../domain/types.js';
 import type { MarketProvider } from '../providers/types.js';
 import { listingsRepo, partnersRepo } from '../repositories/listings.js';
 import { SEED_PARTNERS } from '../seed/partners.js';
+import { refreshFacets } from './facets.js';
 import { fxSync, getFx } from './fx.js';
 
 export interface SyncReport {
@@ -25,17 +27,22 @@ export async function syncProvider(p: MarketProvider): Promise<SyncReport> {
     const result = await p.fetchAll();
     await partnersRepo.upsertMany(SEED_PARTNERS);
     if (result.partners?.length) await partnersRepo.upsertMany(result.partners);
-    // Marktplatzweit nur Linkslenker
-    const lhd = result.listings.filter((l) => l.steering === 'LHD');
-    // Nur neue oder geänderte Inserate schreiben (Preis/km) – spart bei großen Beständen den Großteil der Schreibvorgänge
-    const existing = await listingsRepo.activeIdsBySource(p.id);
+    // Marktplatzweit nur Linkslenker; doppelte IDs (z. B. beworbene OLX-Anzeigen auf mehreren Seiten) einmal nehmen
+    const byId = new Map<string, Listing>();
+    for (const l of result.listings) if (l.steering === 'LHD') byId.set(l.id, l);
+    const lhd = [...byId.values()];
+    const duplicates = result.listings.filter((l) => l.steering === 'LHD').length - lhd.length;
+    // Nur neue oder geänderte Inserate schreiben (Preis/km) – spart bei großen Beständen den Großteil der Schreibvorgänge.
+    // Teilquellen des Providers zählen mit (olx → olx-pl/-ro/-bg/-pt, autoapi → autoapi-dubizzle …).
+    const existing = await listingsRepo.activeIdsBySource(p.id, true);
     const changed = lhd.filter((l) => {
       const e = existing.get(l.id);
       return !e || e.price !== l.price || e.km !== l.km;
     });
     const upserted = await listingsRepo.upsertMany(changed);
-    const deactivated = result.complete ? await listingsRepo.deactivateMissing(p.id, lhd.map((l) => l.id)) : 0;
+    const deactivated = result.complete ? await listingsRepo.deactivateMissing(p.id, lhd.map((l) => l.id), true) : 0;
     const warnings = [...(result.warnings ?? [])];
+    if (duplicates > 0) warnings.push(`${duplicates} Duplikate zusammengeführt`);
     if (lhd.length !== changed.length) warnings.push(`${lhd.length - changed.length} unverändert übersprungen`);
     if (runId != null) {
       await run('UPDATE sync_runs SET finished_at = ?, status = ?, upserted = ?, deactivated = ?, error = ? WHERE id = ?',
@@ -86,6 +93,10 @@ export async function syncAll(): Promise<SyncReport[]> {
   const t0 = Date.now();
   const recomputed = await recomputeDerivedIfFxChanged();
   if (recomputed > 0) reports.push({ provider: 'fx-recompute', status: 'ok', upserted: recomputed, deactivated: 0, warnings: ['Endpreise mit neuem Kursstand neu berechnet'], durationMs: Date.now() - t0 });
+  // Filterlisten/Marktzähler einmal je Lauf vorberechnen – die Suche liest sie dann aus `meta`
+  const t1 = Date.now();
+  const facets = await refreshFacets();
+  reports.push({ provider: 'facets', status: 'ok', upserted: facets.makes.length, deactivated: 0, warnings: [`${facets.total} aktive Inserate, ${facets.makes.length} Marken, ${facets.locations.length} Standorte`], durationMs: Date.now() - t1 });
   return reports;
 }
 

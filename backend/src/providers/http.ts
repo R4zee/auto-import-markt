@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { fetch as undiciFetch, ProxyAgent, type Dispatcher, type RequestInit as UndiciRequestInit } from 'undici';
+import { Agent, fetch as undiciFetch, ProxyAgent, type Dispatcher, type RequestInit as UndiciRequestInit } from 'undici';
 
 const execFileAsync = promisify(execFile);
 
@@ -73,10 +73,69 @@ export class HttpError extends Error {
  * HTTP-Abruf: zuerst das globale fetch; schlägt es ohne Netzwerkursache fehl (auf Vercel ist
  * fetch instrumentiert und lehnt manche URLs ab), Wiederholung mit dem ungepatchten undici-Client.
  */
-export async function robustFetch(url: string, init: RequestInit & { timeoutMs?: number; proxyUrl?: string } = {}): Promise<Response> {
-  const { timeoutMs = 20000, proxyUrl, ...rest } = init;
-  if (process.env.HTTP_CLIENT === 'curl') {
+/**
+ * Frische TCP/TLS-Verbindung je Anfrage (keine Wiederverwendung): eigener undici-Agent, der nach der Antwort
+ * geschlossen wird. Der OLX-WAF wies im Test jede zweite Anfrage ab – das Muster passt zu wiederverwendeten
+ * Keep-Alive-Verbindungen. `h2` versucht HTTP/2 wie ein Browser.
+ */
+/** Chrome-ähnliche Cipher-Reihenfolge (ändert den TLS-Fingerprint gegenüber Node-Standard) */
+export const CHROME_CIPHERS = [
+  'TLS_AES_128_GCM_SHA256', 'TLS_AES_256_GCM_SHA384', 'TLS_CHACHA20_POLY1305_SHA256',
+  'ECDHE-ECDSA-AES128-GCM-SHA256', 'ECDHE-RSA-AES128-GCM-SHA256', 'ECDHE-ECDSA-AES256-GCM-SHA384', 'ECDHE-RSA-AES256-GCM-SHA384',
+  'ECDHE-ECDSA-CHACHA20-POLY1305', 'ECDHE-RSA-CHACHA20-POLY1305', 'ECDHE-RSA-AES128-SHA', 'ECDHE-RSA-AES256-SHA',
+  'AES128-GCM-SHA256', 'AES256-GCM-SHA384', 'AES128-SHA', 'AES256-SHA',
+].join(':');
+
+export type TlsProfile = 'node' | 'chrome' | 'tls13';
+
+export function tlsConnectOptions(profile: TlsProfile): Record<string, unknown> {
+  if (profile === 'chrome') return { ciphers: CHROME_CIPHERS, ecdhCurve: 'X25519:P-256:P-384', sigalgs: 'ecdsa_secp256r1_sha256:rsa_pss_rsae_sha256:rsa_pkcs1_sha256:ecdsa_secp384r1_sha384:rsa_pss_rsae_sha384:rsa_pkcs1_sha384:rsa_pss_rsae_sha512:rsa_pkcs1_sha512' };
+  if (profile === 'tls13') return { minVersion: 'TLSv1.3', maxVersion: 'TLSv1.3' };
+  return {};
+}
+
+const tlsAgents = new Map<TlsProfile, Dispatcher>();
+
+/**
+ * Wiederverwendbarer Agent mit TLS-Profil (Probe 14.09.2026: der OLX-WAF blockt Nodes Standard-ClientHello, mit
+ * Chrome-Cipher-Reihenfolge oder nur TLS 1.3 kommt jede Anfrage durch). Verbindungen werden normal wiederverwendet.
+ */
+export function tlsProfileDispatcher(profile: TlsProfile): Dispatcher {
+  let agent = tlsAgents.get(profile);
+  if (!agent) {
+    agent = new Agent({ connect: { ...tlsConnectOptions(profile), timeout: 30000 } });
+    tlsAgents.set(profile, agent);
+  }
+  return agent;
+}
+
+export async function freshFetch(url: string, init: UndiciRequestInit & { timeoutMs?: number; h2?: boolean; proxyUrl?: string; tls?: TlsProfile } = {}): Promise<Response> {
+  const { timeoutMs = 20000, h2 = false, proxyUrl, tls = 'node', ...rest } = init;
+  const agent: Dispatcher = proxyUrl
+    ? new ProxyAgent({ uri: proxyUrl, connectTimeout: 30000, requestTls: { timeout: 30000 } })
+    : new Agent({ connections: 1, pipelining: 0, keepAliveTimeout: 1, allowH2: h2, connect: { ...tlsConnectOptions(tls), timeout: timeoutMs } });
+  try {
+    const res = await undiciFetch(url, { ...rest, dispatcher: agent, signal: AbortSignal.timeout(timeoutMs) });
+    // Body vollständig lesen, bevor die Verbindung geschlossen wird
+    const buf = new Uint8Array(await res.arrayBuffer());
+    const headers = new Headers();
+    res.headers.forEach((v, k) => headers.set(k, v));
+    return new Response(buf, { status: res.status, headers });
+  } finally {
+    await agent.close().catch(() => undefined);
+  }
+}
+
+export async function robustFetch(url: string, init: RequestInit & { timeoutMs?: number; proxyUrl?: string; nodeOnly?: boolean; fresh?: boolean; tls?: TlsProfile } = {}): Promise<Response> {
+  const { timeoutMs = 20000, proxyUrl, nodeOnly = false, fresh = false, tls, ...rest } = init;
+  // nodeOnly: den curl-Umweg (HTTP_CLIENT=curl, für Encar auf dem Runner) auslassen – OLX weist curl mit 403 ab
+  if (process.env.HTTP_CLIENT === 'curl' && !nodeOnly) {
     return curlFetch(url, { proxyUrl, timeoutMs, headers: rest.headers as Record<string, string> | undefined });
+  }
+  if (fresh) return freshFetch(url, { ...(rest as UndiciRequestInit), timeoutMs, proxyUrl, tls });
+  if (tls && tls !== 'node' && !proxyUrl) {
+    const res = await undiciFetch(url, { ...(rest as UndiciRequestInit), dispatcher: tlsProfileDispatcher(tls), signal: AbortSignal.timeout(timeoutMs) });
+    return res as unknown as Response;
   }
   if (proxyUrl) {
     // Über Proxy immer der undici-Client (das globale fetch kennt keinen Dispatcher)
@@ -95,17 +154,18 @@ export async function robustFetch(url: string, init: RequestInit & { timeoutMs?:
   }
 }
 
-export async function getJson<T>(url: string, init: RequestInit & { retries?: number; timeoutMs?: number; maxRetryWaitMs?: number; proxyUrl?: string } = {}): Promise<T> {
-  const { retries = 2, timeoutMs = 20000, maxRetryWaitMs = 15000, proxyUrl, ...rest } = init;
+export async function getJson<T>(url: string, init: RequestInit & { retries?: number; timeoutMs?: number; maxRetryWaitMs?: number; proxyUrl?: string; retryOn403?: boolean; nodeOnly?: boolean } = {}): Promise<T> {
+  const { retries = 2, timeoutMs = 20000, maxRetryWaitMs = 15000, proxyUrl, retryOn403 = false, nodeOnly = false, ...rest } = init;
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await robustFetch(url, { ...rest, timeoutMs, proxyUrl });
+      const res = await robustFetch(url, { ...rest, timeoutMs, proxyUrl, nodeOnly });
       if (res.ok) return (await res.json()) as T;
       const body = await res.text().catch(() => '');
       const retryAfter = Number(res.headers.get('retry-after'));
       const err = new HttpError(res.status, url, body, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null);
-      if (res.status === 429 || res.status >= 500) {
+      // retryOn403: WAF-Vorschaltseiten (CloudFront) lehnen mitunter die erste Anfrage ab und lassen die identische zweite durch
+      if (res.status === 429 || res.status >= 500 || (retryOn403 && res.status === 403)) {
         lastErr = err;
         if (attempt < retries) {
           const wait = Math.min(maxRetryWaitMs, err.retryAfterSec ? err.retryAfterSec * 1000 : 500 * 2 ** attempt);

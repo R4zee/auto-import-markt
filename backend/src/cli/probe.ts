@@ -1,0 +1,301 @@
+import { config, type OlxSite } from '../config.js';
+import { allProviders } from '../providers/index.js';
+import { curlFetch, freshFetch, getJson, robustFetch } from '../providers/http.js';
+import { mapOlxOffer, olxHeaders, OlxProvider, type OlxFilterLevel } from '../providers/olx.js';
+import { mapSauto, SautoProvider } from '../providers/sauto.js';
+import { mapSubito, SubitoProvider } from '../providers/subito.js';
+
+/**
+ * Probe für die Frontend-Endpunkte (OLX, Subito, Sauto): holt eine kleine Seite direkt, zeigt die Rohantwort
+ * (gekürzt) und die abgebildeten Inserate, ohne in die Datenbank zu schreiben. Damit lässt sich vom eigenen
+ * Rechner in einer Minute prüfen, ob Endpunkt, Kategorie-IDs und Feldnamen stimmen.
+ *
+ *   npm run probe -- olx        (alle konfigurierten OLX-Seiten, je 5 Inserate; bei 403 mehrere Header-Varianten)
+ *   npm run probe -- olx-scan ro [bis] | olx-scan bg von bis   (Kategorienamen der Seite – Pkw-Kategorie-ID finden)
+ *   npm run probe -- olx-page pt /carros-motos-e-barcos/carros/  (Kategorie-ID aus dem Seitenquelltext der Pkw-Kategorie)
+ *   npm run probe -- olx-children bg 360                          (Unterkategorien aus den Inseraten einer Oberkategorie)
+ *   npm run probe -- subito
+ *   npm run probe -- sauto
+ *   npm run probe -- <provider> (jeder andere Provider: fetchAll mit Ausgabe der ersten 3 Inserate)
+ */
+const name = process.argv[2] ?? '';
+const short = (v: unknown, n = 1800) => JSON.stringify(v, null, 1).slice(0, n);
+const proxyUrl = config.europe.proxyUrl || undefined;
+const fetchedAt = new Date().toISOString();
+
+/** Gleiche URL mit verschiedenen Header-Sätzen und Clients anfragen – zeigt, welche Variante der WAF durchlässt; liefert den ersten Treffer-Body. */
+async function tryVariants(url: string, variants: Array<[string, Record<string, string>]>): Promise<string | null> {
+  console.log('  Varianten:');
+  let firstOk: string | null = null;
+  for (const [label, headers] of variants) {
+    const t0 = Date.now();
+    try {
+      const res = await robustFetch(url, { headers, timeoutMs: 20000, proxyUrl });
+      const body = await res.text();
+      console.log(`   ${res.ok ? '✔' : '✖'} ${label.padEnd(28)} HTTP ${res.status} · ${Date.now() - t0} ms · ${body.slice(0, 80).replace(/\s+/g, ' ')}`);
+      if (res.ok && !firstOk) firstOk = body;
+    } catch (e) {
+      console.log(`   ✖ ${label.padEnd(28)} ${e instanceof Error ? e.message.slice(0, 100) : String(e)}`);
+    }
+  }
+  if (variants.length < 2) return firstOk;
+  const t0 = Date.now();
+  try {
+    const res = await curlFetch(url, { headers: variants[0]?.[1], timeoutMs: 20000, proxyUrl });
+    const body = await res.text();
+    console.log(`   ${res.ok ? '✔' : '✖'} ${'curl (HTTP_CLIENT=curl)'.padEnd(28)} HTTP ${res.status} · ${Date.now() - t0} ms · ${body.slice(0, 80).replace(/\s+/g, ' ')}`);
+  } catch (e) {
+    console.log(`   ✖ ${'curl (HTTP_CLIENT=curl)'.padEnd(28)} ${e instanceof Error ? e.message.slice(0, 100) : String(e)}`);
+  }
+  return firstOk;
+}
+
+async function showOlx(json: { data?: unknown[]; metadata?: unknown }, site: OlxSite, p: OlxProvider): Promise<void> {
+  console.log('metadata:', short(json.metadata, 400));
+  const first = (json.data?.[0] ?? {}) as Record<string, unknown>;
+  console.log('data[0].params:', short(first.params, 2500));
+  console.log('data[0] ohne params/description:', short({ ...first, params: undefined, description: undefined, user: undefined }, 1500));
+  // Marke wie im Adapter über die Unterkategorie (Breadcrumbs) ermitteln
+  const makeByCategory = new Map<number, string>();
+  for (const o of (json.data ?? []).slice(0, 5) as Array<{ category?: { id?: number } }>) {
+    const cid = o.category?.id;
+    if (cid != null && cid !== site.categoryId) await p.makeForCategory(site, cid, makeByCategory);
+  }
+  for (const o of (json.data ?? []).slice(0, 5)) {
+    const l = mapOlxOffer(o as never, site, fetchedAt, makeByCategory);
+    if (l) { console.log(`  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.fuel}/${l.transmission}/${l.drive}/${l.steering} · ${l.location} · ${l.photos.length} Fotos`); continue; }
+    const ofr = o as { title?: string; status?: string; params?: Array<{ key: string; value?: unknown }> };
+    const keys = (ofr.params ?? []).map((x) => x.key);
+    console.log(`  ✖ nicht abbildbar: "${ofr.title ?? ''}" · status=${ofr.status ?? '?'} · Preis ${keys.includes('price') ? 'da' : 'FEHLT'} · Baujahr ${keys.includes('year') ? 'da' : 'FEHLT'} · Zustand ${JSON.stringify((ofr.params ?? []).find((x) => x.key === 'condition')?.value ?? null)}`);
+  }
+}
+
+async function probeOlx() {
+  const p = new OlxProvider();
+  for (const site of config.olx.sites) {
+    console.log(`\n=== OLX ${site.country.toUpperCase()} · ${site.host} · Kategorie ${site.categoryId ?? '— (OLX_SITES setzen)'} · ${site.enabled ? 'an' : 'aus'}`);
+    if (site.categoryId == null) continue;
+    const url = p.offersUrl(site, 0).replace(/limit=\d+/, 'limit=5');
+    console.log(url);
+    let json: { data?: unknown[]; metadata?: unknown } | null = null;
+    // Verbindungsexperimente: dieselbe Anfrage 5× je Variante – zeigt, ob Verbindungs-Wiederverwendung die 403 auslöst
+    const run = async (label: string, fn: () => Promise<Response>) => {
+      const seq: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        try { const res = await fn(); await res.text(); seq.push(String(res.status)); } catch (e) { seq.push(e instanceof Error ? e.name : 'ERR'); }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      console.log(`  ${label.padEnd(40)} ${seq.join(' → ')}`);
+    };
+    const hdr = olxHeaders(site, 'browser');
+    console.log('  Verbindungsexperimente (Befund 14.09.2026: WAF blockt Nodes TLS-Fingerprint; Chrome-Profil → 200):');
+    const pair = async (label: string, mk: () => Promise<Response>) => {
+      // Schlag auf Schlag: zwei Anfragen ohne Pause, dann 1 s Pause – dreimal
+      const seq: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 2; j++) { try { const r = await mk(); await r.text(); seq.push(String(r.status)); } catch (e) { seq.push(e instanceof Error ? e.name : 'ERR'); } }
+        seq.push('|');
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      console.log(`  ${label.padEnd(40)} ${seq.join(' ')}`);
+    };
+    await run('K Pool mit Chrome-TLS-Profil (Adapter)', () => robustFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, nodeOnly: true, tls: 'chrome' }));
+    if (process.env.PROBE_ALL_EXPERIMENTS) {
+      await pair('F Pool, Paare ohne Pause', () => robustFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, nodeOnly: true }));
+      await pair('G Pool, Paare, ohne eigene Header', () => robustFetch(url, { timeoutMs: 20000, proxyUrl, nodeOnly: true }));
+      await run('H frisch + Chrome-TLS-Profil', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, tls: 'chrome' }));
+      await run('I frisch + Chrome-TLS + HTTP/2', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, tls: 'chrome', h2: true }));
+      await run('J frisch + nur TLS 1.3', () => freshFetch(url, { headers: hdr, timeoutMs: 20000, proxyUrl, tls: 'tls13' }));
+    }
+    try {
+      // wie im Adapter (Chrome-TLS-Profil, Wiederholung, bei 400 ohne Serverfilter)
+      const state: { filters: OlxFilterLevel } = { filters: config.olx.serverFilters ? 'both' : 'none' };
+      const warn: string[] = [];
+      json = (await p.fetchOffers(site, 0, state, warn)) as { data?: unknown[]; metadata?: unknown };
+      json = { ...json, data: (json.data ?? []).slice(0, 5) };
+      console.log(`  ✔ Liste über den Adapter-Abruf geladen (Serverfilter: ${state.filters})`);
+      for (const w of warn) console.log(`  ⚠ ${w}`);
+    } catch (e) {
+      console.log('  ✖', e instanceof Error ? e.message.slice(0, 200) : String(e));
+      const body = await tryVariants(url, [
+        ['browser-Header', olxHeaders(site, 'browser')],
+        ['nur Accept: json', olxHeaders(site, 'minimal')],
+        ['json + User-Agent', olxHeaders(site, 'json')],
+        ['ohne Header', {}],
+      ]);
+      if (body) { try { json = JSON.parse(body); console.log('  → Treffer der ersten erfolgreichen Variante:'); } catch { /* kein JSON */ } }
+      else console.log('  Im Browser testen (liefert die Seite dort JSON?):', url);
+    }
+    if (json) {
+      await showOlx(json, site, p);
+      // Serverfilter über den Adapter-Abruf – welche akzeptiert die Seite, wie viele Treffer bleiben?
+      const base = p.offersUrl(site, 0, 'none').replace(/limit=\d+/, 'limit=1');
+      const mp = p.minPrice(site);
+      for (const [label, extra] of [['ohne Filter', ''], [`Preis ab ${mp}`, `&filter_float_price%3Afrom=${mp}`], ['Baujahr ab 2012', '&filter_float_year%3Afrom=2012'], ['Preis+Baujahr', `&filter_float_price%3Afrom=${mp}&filter_float_year%3Afrom=2012`]] as const) {
+        try {
+          const j = await p.get<{ metadata?: { visible_total_count?: number; total_elements?: number } }>(`${base}${extra}`, site);
+          console.log(`  Filter ${label.padEnd(20)} ✔ ${j.metadata?.visible_total_count ?? '?'} Treffer`);
+        } catch (e) { console.log(`  Filter ${label.padEnd(20)} ✖ ${e instanceof Error ? e.message.slice(0, 60) : String(e)}`); }
+      }
+    }
+  }
+}
+
+/**
+ * Pkw-Kategorie einer OLX-Seite finden: `npm run probe -- olx-scan ro` fragt die Kategorien 1…N nacheinander über den
+ * Breadcrumb-Endpunkt ab und zeigt die Namen; die Zeile mit „Autoturisme“ / „Автомобили“ / „Carros“ ist die gesuchte ID.
+ * Über den Adapter-Abruf (Sofort-Wiederholung), 400 ms Pause je Kategorie, Abbruch bei fünf Fehlern in Folge.
+ */
+function olxSiteFor(country: string): OlxSite {
+  return config.olx.sites.find((s) => s.country === country) ?? { country, host: `www.olx.${country}`, categoryId: null, currency: 'EUR', minPrice: 5000, enabled: true };
+}
+
+async function scanOlxCategories(country: string, from: number, to: number) {
+  const site = olxSiteFor(country);
+  const p = new OlxProvider();
+  console.log(`\n=== OLX ${country.toUpperCase()} · ${site.host} · Kategorien ${from}–${to} über /api/v1/offers/metadata/breadcrumbs/ (nur Treffer mit Unterkategorie)`);
+  let failures = 0;
+  for (let id = from; id <= to; id++) {
+    try {
+      const json = await p.get<unknown>(`https://${site.host}/api/v1/offers/metadata/breadcrumbs/?category_id=${id}`, site, 4);
+      failures = 0;
+      const labels = OlxProvider.breadcrumbLabels(json);
+      if (labels.length > 1) console.log(`  ${String(id).padStart(5)}  ${labels.slice(1).join(' › ')}`);
+    } catch (e) {
+      failures++;
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/HTTP 404|HTTP 400/.test(msg)) console.log(`  ${String(id).padStart(4)}  ✖ ${msg.slice(0, 80)}`);
+      if (failures >= 5 && !/HTTP 404|HTTP 400/.test(msg)) { console.log('  Abbruch: fünf Fehler in Folge (WAF?) – später erneut versuchen'); break; }
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+
+/**
+ * Kategorie-ID aus der HTML-Seite der Pkw-Kategorie lesen: `npm run probe -- olx-page bg /avtomobili-i-dzhipove/`
+ * Sucht im Seitenquelltext nach category_id / categoryId / "category":{"id":…}, zählt die Kandidaten und prüft die
+ * häufigsten über den Breadcrumb-Endpunkt.
+ */
+async function olxPage(country: string, path: string) {
+  const site = olxSiteFor(country);
+  const p = new OlxProvider();
+  const url = `https://${site.host}${path.startsWith('/') ? path : `/${path}`}`;
+  console.log(`\n=== OLX ${country.toUpperCase()} · Seite ${url}`);
+  const res = await robustFetch(url, { headers: { ...olxHeaders(site, 'browser'), Accept: 'text/html,application/xhtml+xml' }, timeoutMs: 30000, proxyUrl, nodeOnly: true, tls: 'chrome' });
+  const html = await res.text();
+  console.log(`  HTTP ${res.status} · ${(html.length / 1024).toFixed(0)} KB`);
+  if (!res.ok) return;
+  const counts = new Map<number, number>();
+  const patterns = [/category_id(?:%3D|=|\\?["']?\s*:\s*\\?["']?)(\d{1,6})/gi, /categoryId\\?["']?\s*[:=]\s*\\?["']?(\d{1,6})/gi, /\\?["']category\\?["']\s*:\s*\{\s*\\?["']id\\?["']\s*:\s*\\?["']?(\d{1,6})/gi, /cat_l1_id\\?["']?\s*:\s*\\?["'](\d{1,6})/gi, /cat_l2_id\\?["']?\s*:\s*\\?["'](\d{1,6})/gi];
+  for (const re of patterns) for (const m of html.matchAll(re)) counts.set(Number(m[1]), (counts.get(Number(m[1])) ?? 0) + 1);
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  if (!top.length) { console.log('  keine Kategorie-IDs im Quelltext gefunden'); return; }
+  console.log('  Kandidaten (ID × Vorkommen) und Breadcrumb:');
+  for (const [id, n] of top) {
+    try {
+      const json = await p.get<unknown>(`https://${site.host}/api/v1/offers/metadata/breadcrumbs/?category_id=${id}`, site, 4);
+      console.log(`  ${String(id).padStart(5)} ×${String(n).padEnd(4)} ${OlxProvider.breadcrumbLabels(json).slice(1).join(' › ') || '(nur Startseite)'}`);
+    } catch (e) { console.log(`  ${String(id).padStart(5)} ×${String(n).padEnd(4)} ✖ ${e instanceof Error ? e.message.slice(0, 60) : String(e)}`); }
+  }
+}
+
+/**
+ * Unterkategorien einer OLX-Oberkategorie aus ihren Inseraten ablesen: `npm run probe -- olx-children bg 360`
+ * lädt Inserate der Kategorie, sammelt die verwendeten category.id-Werte und benennt sie über den Breadcrumb-Endpunkt.
+ */
+async function olxChildren(country: string, parentId: number) {
+  const site = olxSiteFor(country);
+  const p = new OlxProvider();
+  console.log(`\n=== OLX ${country.toUpperCase()} · Unterkategorien aus Inseraten der Kategorie ${parentId}`);
+  const ids = new Map<number, number>();
+  for (let offset = 0; offset < 200; offset += 40) {
+    const json = await p.get<{ data?: Array<{ category?: { id?: number }; title?: string }> }>(`https://${site.host}/api/v1/offers/?category_id=${parentId}&offset=${offset}&limit=40&sort_by=created_at:desc`, site);
+    const offers = json.data ?? [];
+    for (const o of offers) if (o.category?.id != null) ids.set(o.category.id, (ids.get(o.category.id) ?? 0) + 1);
+    if (offers.length < 40) break;
+  }
+  if (!ids.size) { console.log('  keine Inserate/Kategorien gefunden'); return; }
+  const seen = new Set<string>();
+  for (const [id, n] of [...ids.entries()].sort((a, b) => b[1] - a[1])) {
+    try {
+      const json = await p.get<unknown>(`https://${site.host}/api/v1/offers/metadata/breadcrumbs/?category_id=${id}`, site, 4);
+      const labels = OlxProvider.breadcrumbLabels(json).slice(1);
+      // Marken-Unterkategorien auf die Pkw-Ebene zusammenfassen: die vorletzte Ebene ist die gesuchte Kategorie
+      const parentChain = labels.slice(0, -1).join(' › ');
+      console.log(`  ${String(id).padStart(5)} ×${String(n).padEnd(3)} ${labels.join(' › ')}`);
+      if (labels.length >= 3 && !seen.has(parentChain)) {
+        seen.add(parentChain);
+        console.log(`         → Oberkategorie dieser Marke: "${parentChain}" – deren ID mit olx-scan im passenden Bereich oder aus der Seite ermitteln`);
+      }
+    } catch (e) { console.log(`  ${String(id).padStart(5)} ×${String(n).padEnd(3)} ✖ ${e instanceof Error ? e.message.slice(0, 60) : String(e)}`); }
+  }
+}
+
+async function probeSubito() {
+  const p = new SubitoProvider();
+  const url = p.searchUrl(0).replace(/lim=\d+/, 'lim=5');
+  console.log(`\n=== Subito.it (Kategorie c=${config.subito.categoryId})\n${url}`);
+  try {
+    const json = await getJson<{ ads?: unknown[]; count_all?: number }>(url, { headers: { Accept: 'application/json', 'User-Agent': config.europe.userAgent }, proxyUrl, retries: 0 });
+    console.log('count_all:', json.count_all, '· Schlüssel der Antwort:', Object.keys(json).join(', '));
+    const ads = json.ads ?? [];
+    if (!ads.length) {
+      console.log('Rohantwort (gekürzt):', short(json, 1500));
+      console.log('  ✖ keine Inserate – Kategorie prüfen: im Browser https://www.subito.it/annunci-italia/vendita/auto/ öffnen → Netzwerk-Tab → Aufruf hades.subito.it/v1/search/items?c=… ablesen und als SUBITO_CATEGORY_ID setzen');
+      return;
+    }
+    const first = ads[0] as Record<string, unknown>;
+    console.log('Schlüssel von ads[0]:', Object.keys(first).join(', '));
+    console.log('ads[0].features:', short(first.features, 4000));
+    console.log('ads[0] ohne body/images/features:', short({ ...first, body: undefined, images: undefined, features: undefined }, 1500));
+    for (const ad of ads.slice(0, 5)) {
+      const l = mapSubito(ad as never, fetchedAt);
+      console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.fuel}/${l.transmission} · ${l.location} · ${l.photos.length} Fotos` : '  ✖ nicht abbildbar');
+    }
+  } catch (e) {
+    console.log('  ✖', e instanceof Error ? e.message.slice(0, 200) : String(e));
+    await tryVariants(url, [
+      ['json + User-Agent', { Accept: 'application/json', 'User-Agent': config.europe.userAgent }],
+      ['browser-Header', { Accept: 'application/json, text/plain, */*', 'User-Agent': config.europe.userAgent, 'Accept-Language': 'it-IT,it;q=0.9', Origin: 'https://www.subito.it', Referer: 'https://www.subito.it/' }],
+      ['ohne Header', {}],
+    ]);
+  }
+}
+
+async function probeSauto() {
+  const p = new SautoProvider();
+  const url = p.searchUrl(0, config.sauto.minPriceCzk, null).replace(/limit=\d+/, 'limit=5');
+  console.log(`\n=== Sauto.cz\n${url}`);
+  const json = await getJson<{ results?: unknown[]; pagination?: unknown }>(url, { headers: { Accept: 'application/json', 'User-Agent': config.europe.userAgent }, proxyUrl });
+  console.log('pagination:', short(json.pagination, 300));
+  console.log('Rohantwort results[0]:', short(json.results?.[0], 3000));
+  for (const it of (json.results ?? []).slice(0, 5)) {
+    const l = mapSauto(it as never, fetchedAt);
+    console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.location} · ${l.photoCount} Fotos · ${l.url}` : '  ✖ nicht abbildbar');
+  }
+}
+
+try {
+  if (name === 'olx') await probeOlx();
+  else if (name === 'olx-scan') {
+    const a = Number(process.argv[4] ?? 1); const b = Number(process.argv[5] ?? (process.argv[4] ? a : 120));
+    await scanOlxCategories((process.argv[3] ?? 'ro').toLowerCase(), process.argv[5] ? a : 1, b);
+  } else if (name === 'olx-page') await olxPage((process.argv[3] ?? 'bg').toLowerCase(), process.argv[4] ?? '/');
+  else if (name === 'olx-children') await olxChildren((process.argv[3] ?? 'bg').toLowerCase(), Number(process.argv[4] ?? 360));
+  else if (name === 'subito') await probeSubito();
+  else if (name === 'sauto') await probeSauto();
+  else {
+    const p = allProviders().find((x) => x.id === name);
+    if (!p) {
+      console.log(`Provider angeben: ${allProviders().map((x) => x.id).join(', ')}`);
+      process.exitCode = 2;
+    } else {
+      const res = await p.fetchAll();
+      console.log(`${p.id}: ${res.listings.length} Inserate, complete=${res.complete}${res.warnings?.length ? `\n  ⚠ ${res.warnings.join('\n  ⚠ ')}` : ''}`);
+      for (const l of res.listings.slice(0, 3)) console.log(short(l, 1200));
+    }
+  }
+} catch (e) {
+  console.error('✖', e instanceof Error ? e.message : String(e));
+  process.exitCode = 1;
+}

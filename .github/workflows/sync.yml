@@ -11,6 +11,10 @@ on:
         description: 'Max. Inserate je Teilabfrage (Test: z. B. 500)'
         required: false
         default: ''
+      only:
+        description: 'Nur diese Provider (kommagetrennt, z. B. olx,subito,sauto) – leer = alle'
+        required: false
+        default: ''
 
 concurrency:
   group: sync-listings
@@ -48,5 +52,15 @@ jobs:
           # Auf dem Runner kommt curl durch den Proxy zuverlässig zu Encar, der Node-Tunnel nicht
           HTTP_CLIENT: 'curl'
           ENCAR_LIMIT_PARTITION: ${{ github.event.inputs.encar_limit_partition }}
+          SYNC_ONLY: ${{ github.event.inputs.only }}
+          # Süd-/Osteuropa: keyless Frontend-Endpunkte (Grauzone wie Encar) – hier einschalten, sobald `npm run probe` sie bestätigt hat
+          OLX_ENABLED: ${{ vars.OLX_ENABLED || 'false' }}
+          OLX_SITES: ${{ vars.OLX_SITES }}
+          SUBITO_ENABLED: ${{ vars.SUBITO_ENABLED || 'false' }}
+          SAUTO_ENABLED: ${{ vars.SAUTO_ENABLED || 'false' }}
+          # Optionaler Residential-Proxy für die Europa-Seiten (leer = direkt vom Runner)
+          EUROPE_PROXY_URL: ${{ secrets.EUROPE_PROXY_URL }}
+          # Partner-Feeds (JSON-Array, leer = keine)
+          PARTNER_FEEDS: ${{ secrets.PARTNER_FEEDS }}
           # weitere Provider-Keys hier ergänzen, z. B. APIBARA_API_KEY: ${{ secrets.APIBARA_API_KEY }}
         run: node --import tsx src/cli/sync.ts

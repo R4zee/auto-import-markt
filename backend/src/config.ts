@@ -45,6 +45,103 @@ function databaseUrl(): string {
 /** true, wenn auf Vercel keine Turso-/DATABASE_URL gesetzt ist (Daten gehen bei jedem Kaltstart verloren) */
 export const databaseMissing = isServerless && !(env.TURSO_DATABASE_URL || env.DATABASE_URL);
 
+export interface PartnerFeedConfig {
+  /** Quellen-Schlüssel (a–z, 0–9, Bindestrich), z. B. "feed-carpathia" */
+  id: string;
+  label: string;
+  url: string;
+  /** "Header-Name: Wert", z. B. "Authorization: Bearer …" */
+  authHeader: string;
+  /** Feldzuordnung als JSON-String (siehe providers/feed.ts) */
+  mapping: string;
+  /** Vorgaben, falls der Feed sie nicht liefert */
+  market: string;
+  country: string;
+  partnerId: string;
+}
+
+/**
+ * PARTNER_FEEDS: JSON-Array von Feeds, z. B.
+ * [{"id":"carpathia","label":"Carpathia (RO)","url":"https://…/stock.json","country":"ro",
+ *   "mapping":{"items":"cars","id":"id","year":"year","make":"brand","model":"model","km":"mileage","price":"price_eur","photos":"images","url":"link"}}]
+ * `mapping` darf Objekt oder String sein. Der bisherige Einzel-Feed (JP_FEED_URL/JP_FEED_MAPPING) wird als "jpfeed" angehängt.
+ */
+function partnerFeeds(): PartnerFeedConfig[] {
+  const out: PartnerFeedConfig[] = [];
+  const raw = (env.PARTNER_FEEDS ?? '').trim();
+  if (raw) {
+    let arr: unknown;
+    try { arr = JSON.parse(raw); } catch (e) { throw new Error(`PARTNER_FEEDS ist kein gültiges JSON: ${e instanceof Error ? e.message : String(e)}`); }
+    if (!Array.isArray(arr)) throw new Error('PARTNER_FEEDS muss ein JSON-Array sein');
+    for (const f of arr as Array<Record<string, unknown>>) {
+      const id = String(f.id ?? '').toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
+      if (!id) throw new Error('PARTNER_FEEDS: jeder Feed braucht eine id');
+      out.push({
+        id: id.startsWith('feed-') ? id : `feed-${id}`,
+        label: String(f.label ?? `Partner-Feed ${id}`),
+        url: String(f.url ?? ''),
+        authHeader: String(f.authHeader ?? ''),
+        mapping: typeof f.mapping === 'string' ? f.mapping : f.mapping ? JSON.stringify(f.mapping) : '',
+        market: String(f.market ?? ''),
+        country: String(f.country ?? '').toLowerCase(),
+        partnerId: String(f.partnerId ?? ''),
+      });
+    }
+  }
+  if (env.JP_FEED_URL || env.JP_FEED_MAPPING) {
+    out.push({ id: 'jpfeed', label: 'Partner-Feed Japan', url: env.JP_FEED_URL ?? '', authHeader: env.JP_FEED_AUTH_HEADER ?? '', mapping: env.JP_FEED_MAPPING ?? '', market: 'JP', country: 'jp', partnerId: '' });
+  }
+  return out;
+}
+
+export interface OlxSite {
+  /** ISO-2 klein, wird Teil der Quelle (olx-pl) und bestimmt den Markt */
+  country: string;
+  host: string;
+  /** Pkw-Kategorie der jeweiligen OLX-Seite (null = noch nicht ermittelt → Seite bleibt aus) */
+  categoryId: number | null;
+  /** Rückfall-Währung, falls das Inserat keine nennt (olx.ro und olx.pt inserieren überwiegend in EUR) */
+  currency: string;
+  /** Mindestpreis in der dominierenden Inseratswährung der Seite (PL: PLN, RO: EUR, BG: BGN, PT: EUR) */
+  minPrice: number;
+  enabled: boolean;
+}
+
+/**
+ * OLX_SITES: JSON-Array, überschreibt/ergänzt die Vorgaben, z. B.
+ * [{"country":"pl","enabled":false}] – Pkw-Kategorien PL 84, RO 84, BG 1117, PT 378 sind vorbelegt (Live-Proben 14.09.2026)
+ * Kategorie-ID finden: Pkw-Kategorie der Seite im Browser öffnen → Netzwerk-Tab → Aufruf „api/v1/offers/?…category_id=…“.
+ */
+const OLX_DEFAULT_SITES: OlxSite[] = [
+  { country: 'pl', host: 'www.olx.pl', categoryId: 84, currency: 'PLN', minPrice: 20000, enabled: true }, // Motoryzacja › Samochody osobowe (Live-Probe 14.09.2026)
+  { country: 'ro', host: 'www.olx.ro', categoryId: 84, currency: 'EUR', minPrice: 5000, enabled: true }, // Auto, moto si ambarcatiuni › Autoturisme; Preise in EUR (Live-Probe 14.09.2026)
+  { country: 'bg', host: 'www.olx.bg', categoryId: 1117, currency: 'EUR', minPrice: 5000, enabled: true }, // Автомобили, каравани, лодки › Автомобили и Джипове; Preise in EUR (Live-Probe 14.09.2026)
+  { country: 'pt', host: 'www.olx.pt', categoryId: 378, currency: 'EUR', minPrice: 5000, enabled: true }, // Carros, motos e barcos › Carros; Preise in EUR (Live-Probe 14.09.2026)
+];
+
+function olxSites(): OlxSite[] {
+  const sites = OLX_DEFAULT_SITES.map((s) => ({ ...s }));
+  const raw = (env.OLX_SITES ?? '').trim();
+  if (!raw) return sites;
+  let arr: unknown;
+  try { arr = JSON.parse(raw); } catch (e) { throw new Error(`OLX_SITES ist kein gültiges JSON: ${e instanceof Error ? e.message : String(e)}`); }
+  if (!Array.isArray(arr)) throw new Error('OLX_SITES muss ein JSON-Array sein');
+  for (const o of arr as Array<Record<string, unknown>>) {
+    const country = String(o.country ?? '').toLowerCase();
+    if (!country) continue;
+    const cur = sites.find((s) => s.country === country);
+    const patch: Partial<OlxSite> = {};
+    if (o.host != null) patch.host = String(o.host);
+    if (o.categoryId != null) patch.categoryId = Number(o.categoryId);
+    if (o.currency != null) patch.currency = String(o.currency).toUpperCase();
+    if (o.minPrice != null) patch.minPrice = Number(o.minPrice);
+    if (o.enabled != null) patch.enabled = Boolean(o.enabled);
+    if (cur) Object.assign(cur, patch);
+    else sites.push({ country, host: patch.host ?? `www.olx.${country}`, categoryId: patch.categoryId ?? null, currency: patch.currency ?? 'EUR', minPrice: patch.minPrice ?? 5000, enabled: patch.enabled ?? true });
+  }
+  return sites;
+}
+
 export const config = {
   port: num(env.PORT, 4000),
   host: env.HOST ?? '0.0.0.0',
@@ -56,6 +153,8 @@ export const config = {
     authToken: env.TURSO_AUTH_TOKEN || env.DATABASE_AUTH_TOKEN || undefined,
   },
   syncIntervalMin: num(env.SYNC_INTERVAL_MIN, 0),
+  /** CDN-Cache-Dauer für öffentliche Lese-Antworten in Sekunden (0 = aus). Standard 10 Minuten. */
+  apiCacheSeconds: num(env.API_CACHE_SECONDS, 600),
   enableMockProvider: bool(env.ENABLE_MOCK_PROVIDER, true),
   marketcheck: {
     apiKey: env.MARKETCHECK_API_KEY ?? '',
@@ -66,10 +165,53 @@ export const config = {
     clientSecret: env.EBAY_CLIENT_SECRET ?? '',
     marketplaceId: env.EBAY_MARKETPLACE_ID ?? 'EBAY_US',
   },
-  jpFeed: {
-    url: env.JP_FEED_URL ?? '',
-    authHeader: env.JP_FEED_AUTH_HEADER ?? '',
-    mapping: env.JP_FEED_MAPPING ?? '',
+  partnerFeeds: partnerFeeds(),
+  /** Gemeinsame Einstellungen der europäischen Frontend-Endpunkte (OLX, Subito, Sauto) */
+  europe: {
+    /** Optionaler Residential-Proxy, falls eine Seite Rechenzentrums-IPs ablehnt (Form wie ENCAR_PROXY_URL) */
+    proxyUrl: env.EUROPE_PROXY_URL ?? '',
+    userAgent: env.EUROPE_USER_AGENT ?? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+  },
+  olx: {
+    enabled: bool(env.OLX_ENABLED, false),
+    sites: olxSites().map((s) => ({ ...s, enabled: s.enabled && bool(env.OLX_ENABLED, false) })),
+    /** Seiten je Land und Lauf (OLX sortiert nach Einstelldatum → die neuesten N×pageSize Inserate) */
+    pages: num(env.OLX_PAGES, 25),
+    pageSize: Math.min(50, num(env.OLX_PAGE_SIZE, 40)),
+    /** Mindestpreis je Seite (siehe OLX_DEFAULT_SITES); OLX_MIN_PRICE überschreibt alle Seiten (0 = aus) */
+    minPriceOverride: env.OLX_MIN_PRICE ? num(env.OLX_MIN_PRICE, 0) : null,
+    minYear: num(env.OLX_MIN_YEAR, 2012),
+    /** Mindestpreis und Baujahr auch als URL-Parameter senden (Probe 14.09.2026: beide werden durchgelassen, 315k → 195k Treffer) */
+    serverFilters: bool(env.OLX_SERVER_FILTERS, true),
+    /** TLS-Profil: der CloudFront-WAF blockt Nodes Standard-Fingerprint; "chrome" (Standard) oder "tls13" kommen durch */
+    tlsProfile: (['node', 'chrome', 'tls13'].includes(env.OLX_TLS_PROFILE ?? '') ? env.OLX_TLS_PROFILE : 'chrome') as 'node' | 'chrome' | 'tls13',
+    /** Je Anfrage eine frische Verbindung (mit TLS-Profil nicht nötig) */
+    freshConnection: bool(env.OLX_FRESH_CONNECTION, false),
+    delayMs: num(env.OLX_DELAY_MS, 400),
+  },
+  subito: {
+    enabled: bool(env.SUBITO_ENABLED, false),
+    /** Kategorie (c=…): 2 = Auto laut öffentlichen Scrapern – mit `npm run probe -- subito` prüfen */
+    categoryId: num(env.SUBITO_CATEGORY_ID, 2),
+    pages: num(env.SUBITO_PAGES, 30),
+    pageSize: Math.min(100, num(env.SUBITO_PAGE_SIZE, 100)),
+    /** Regionen-IDs (r=…) – leer = ganz Italien */
+    regions: list(env.SUBITO_REGIONS),
+    minPriceEur: num(env.SUBITO_MIN_PRICE_EUR, 5000),
+    minYear: num(env.SUBITO_MIN_YEAR, 2012),
+    imageRule: env.SUBITO_IMAGE_RULE ?? 'gallery-desktop-2x-jpeg',
+    delayMs: num(env.SUBITO_DELAY_MS, 400),
+  },
+  sauto: {
+    enabled: bool(env.SAUTO_ENABLED, false),
+    categoryId: num(env.SAUTO_CATEGORY_ID, 838),
+    pages: num(env.SAUTO_PAGES, 5),
+    pageSize: Math.min(200, num(env.SAUTO_PAGE_SIZE, 200)),
+    /** Preisfenster (CZK) ab Mindestpreis; maxBands begrenzt den Umfang je Lauf */
+    minPriceCzk: num(env.SAUTO_MIN_PRICE_CZK, 150000),
+    maxBands: num(env.SAUTO_MAX_BANDS, 10),
+    minYear: num(env.SAUTO_MIN_YEAR, 2012),
+    delayMs: num(env.SAUTO_DELAY_MS, 400),
   },
   encar: {
     enabled: bool(env.ENCAR_ENABLED, false),
