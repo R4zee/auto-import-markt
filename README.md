@@ -121,7 +121,7 @@ npm run probe -w backend -- olx      # bzw. subito | sauto
 Danach in GitHub → Settings → Variables `OLX_ENABLED`/`SUBITO_ENABLED`/`SAUTO_ENABLED` auf `true`. Ein Testlauf nur dieser Quellen: Actions → Sync Listings → Run workflow → Feld
 „Nur diese Provider“ = `olx,subito,sauto` (lokal `SYNC_ONLY=olx npm run sync`).
 
-Tests: `npm test` (86 Tests: Kalkulation, Kfz-Steuer, API, Suche/Facetten, Provider-Mappings inkl. OLX, Subito, Sauto und Partner-Feeds).
+Tests: `npm test` (88 Tests: Kalkulation, Kfz-Steuer, API, Suche/Facetten, Provider-Mappings inkl. OLX, Subito, Sauto und Partner-Feeds).
 
 Manueller Sync eines Providers: `curl -X POST -H "x-admin-key: …" "http://localhost:4000/api/admin/sync?provider=encar"`.
 

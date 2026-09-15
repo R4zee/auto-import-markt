@@ -19,6 +19,8 @@ export interface RefSample {
   kw: number | null;
   ccm: number | null;
   title: string;
+  /** Modellbezeichnung von mobile.de (shortTitle, z. B. "Mercedes-Benz CLS 350") – für den Modellabgleich */
+  model?: string;
   url: string | null;
 }
 
@@ -146,7 +148,8 @@ export function mapMobileItem(item: unknown): RefSample | null {
   if (priceEur == null || priceEur <= 0 || year == null || km == null) return null;
   const rel = str(it.relativeUrl ?? it.url ?? it.link ?? it.vipUrl);
   const url = rel ? (rel.startsWith('http') ? rel : `https://suchen.mobile.de${rel.startsWith('/') ? '' : '/'}${rel}`) : it.id != null ? `https://suchen.mobile.de/fahrzeuge/details.html?id=${str(it.id)}` : null;
-  return { priceEur, year, km, kw, ccm, title: str(it.title ?? it.headline ?? it.name), url };
+  const model = str(it.shortTitle);
+  return { priceEur, year, km, kw, ccm, title: str(it.title ?? it.headline ?? it.name), ...(model ? { model } : {}), url };
 }
 
 export class MobileDeReference {

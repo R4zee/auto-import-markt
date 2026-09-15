@@ -49,6 +49,8 @@ export interface Listing {
   /** Motor-Kurzbezeichnung, z. B. "4.0 V6", "77.4 kWh" */
   engine: string;
   engineCcm: number | null;
+  /** Motorleistung in kW, sofern die Quelle sie liefert (Vergleichspreis: gleiche Motorisierung) */
+  powerKw?: number | null;
   co2Gkm: number | null;
   transmission: Transmission;
   drive: Drive;

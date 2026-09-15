@@ -182,6 +182,8 @@ async function migrate(): Promise<void> {
   await ensureColumn(c, 'listings', 'landed_nl', 'REAL');
   await ensureColumn(c, 'listings', 'landed_pl', 'REAL');
   await ensureColumn(c, 'listings', 'auction_ends_at', 'TEXT');
+  // Motorleistung (kW) für den Vergleichspreis – nicht jede Quelle liefert sie
+  await ensureColumn(c, 'listings', 'power_kw', 'INTEGER');
   // Volltext-Hilfsspalte (klein geschrieben: Marke Modell Ausstattung Standort Losnummer) – wird beim Upsert gesetzt
   await ensureColumn(c, 'listings', 'search_text', 'TEXT');
   // Einmaliges Nachfüllen für Bestände von vor dieser Spalte – mit Merker in `meta`, damit nicht jeder Kaltstart

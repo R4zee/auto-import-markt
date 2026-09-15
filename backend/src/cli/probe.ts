@@ -6,7 +6,7 @@ import { mapSauto, SautoProvider } from '../providers/sauto.js';
 import { mapSubito, SubitoProvider } from '../providers/subito.js';
 import { CopartProvider, copartSkipReason, mapCopart } from '../providers/copart.js';
 import { extractItems, mapMobileItem, mobileApiUrl, mobileMakeId, MobileDeReference, mobileSearchUrl, type RefQuery } from '../providers/mobilede.js';
-import { bucketKey, kmWindow, summarize } from '../services/reference.js';
+import { bucketKey, kmWindow, summarize, titleMatches } from '../services/reference.js';
 import { yearBand } from '../domain/generations.js';
 import type { Fuel } from '../domain/types.js';
 
@@ -316,7 +316,10 @@ async function probeMobile(make: string, description: string, year: number, fuel
   for (const s of got.items.slice(0, 8)) console.log(`  ✔ ${s.year} · ${s.km} km · ${s.priceEur} € · ${s.kw ?? '?'} kW · ${s.ccm ?? '?'} cm³ · ${s.title} · ${s.url ?? ''}`);
   const bad = items.filter((it) => !mapMobileItem(it)).length;
   if (bad) console.log(`  ⚠ ${bad} Einträge nicht abbildbar (Werbeplätze oder andere Feldnamen – siehe Rohantwort)`);
-  const fake = { km, engineCcm: null } as const;
+  // mobile.de sucht die Beschreibung unscharf → Modellabgleich über shortTitle/Titel wie im Adapter
+  const matching = got.items.filter((s) => titleMatches(cleanDesc, s));
+  console.log(`Modellabgleich "${cleanDesc}": ${matching.length} von ${got.items.length} Treffern passen${matching.length < got.items.length ? ` – verworfen: ${got.items.filter((s) => !titleMatches(cleanDesc, s)).map((s) => s.model ?? s.title).slice(0, 6).join(' | ')}` : ''}`);
+  const fake = { km, engineCcm: null, powerKw: null } as const;
   const bucket = { key: bucketKey(q), source: src.id, query: q, samples: got.items, total: got.total, url: mobileSearchUrl(q), fetchedAt: fetchedAt };
   const win = kmWindow(km);
   const sum = summarize(fake, 0, bucket);

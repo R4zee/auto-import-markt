@@ -233,9 +233,15 @@ Baureihen wie „3 Series“/„E-Class“, sonst Modellname) + Kraftstoff + Bau
 Stichproben (Preis, Baujahr, km, kW, Hubraum) in `ref_prices`. Das Baujahrband ist der Bauzeitraum der Baureihe,
 wenn das Inserat einen Werkscode nennt (W221 2005–2013, W222 2013–2020, E90–E93 2005–2013, F30/F31 2012–2019, G30 …;
 Tabelle `domain/generations.ts` für Mercedes, BMW, Porsche, Audi, VW Golf/Passat, Land Rover), sonst Baujahr ±1.
-Je Inserat: Laufleistung höchstens +50 % (< 100.000 km) bzw. +30 % (≥ 100.000 km), nach unten offen; Hubraum ±12 %;
-günstigstes Angebot = Vergleichspreis; Abstand = (Endpreis − Vergleichspreis) / Vergleichspreis. Marken-IDs von
-mobile.de sind für rund 60 Marken hinterlegt (`REFERENCE_MAKE_IDS` ergänzt).
+Je Inserat: Laufleistung höchstens +50 % (< 100.000 km) bzw. +30 % (≥ 100.000 km), nach unten offen; Hubraum ±12 %
+und Leistung ±15 % (mindestens 8 kW), sofern beide Seiten den Wert kennen – damit passt die Motorisierung auch ohne
+Baureihen-Code; günstigstes Angebot = Vergleichspreis; Abstand = (Endpreis − Vergleichspreis) / Vergleichspreis.
+mobile.de sucht die Beschreibung unscharf (Live-Probe 15.09.2026: „S350“ traf auch CLS 350, E 350, GLK 350, R 350),
+deshalb prüft der Adapter zusätzlich, dass die Variantenkennung als eigenes Wort im mobile.de-Modellnamen
+(`shortTitle`) oder Titel steht („S 350“/„S350“, „320 d“/„320d“; Endbuchstabe optional, damit „E 220 d“ auch
+„E 220 CDI“ findet). Marken-IDs von mobile.de sind für rund 60 Marken hinterlegt (`REFERENCE_MAKE_IDS` ergänzt).
+Leistung (kW) liefern OLX (`enginepower`/`engine_power`/`horsepower`, PS → kW), Subito (`/power`) und Sauto
+(`engine_power`); Encar nur den Hubraum aus dem Detail.
 
 ## 10. USA, Golfstaaten, Japan, Korea – kostenlose Frontend-Endpunkte (Stand 15.09.2026)
 

@@ -359,8 +359,9 @@ inkl. Zoll, Steuer, TÜV und Zulassung in Prozent (grün = günstiger als das de
 gleiche Marke, Modell bzw. Variantenkennung (z. B. „320d“, „E 220 d“), gleicher Kraftstoff, Baujahrband der
 Baureihe (nennt das Inserat einen Code wie W221, E93 oder F30, gilt deren Bauzeitraum aus
 `backend/src/domain/generations.ts` – eine 2011er W221 zählt zur 2013er W221, eine W222 nicht; ohne Code Baujahr ±1),
-Laufleistung höchstens +50 % unter 100.000 km bzw. +30 % darüber (nach unten offen), Hubraum ±12 % sofern beide
-Seiten ihn kennen.
+Laufleistung höchstens +50 % unter 100.000 km bzw. +30 % darüber (nach unten offen), Hubraum ±12 % und Leistung
+±15 % sofern beide Seiten die Werte kennen. Weil mobile.de die Beschreibung unscharf sucht („S350“ liefert auch
+CLS 350 und E 350), muss die Variantenkennung zusätzlich als eigenes Wort im mobile.de-Modellnamen oder Titel stehen.
 
 Quelle ist der JSON-Endpunkt der mobile.de-Web-App (`/consumer/api/search/srp`, kein Key, Grauzone wie Encar).
 Damit die Suche schnell und günstig bleibt, holt nicht die API die Preise, sondern ein Job nach dem Sync

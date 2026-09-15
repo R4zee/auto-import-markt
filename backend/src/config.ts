@@ -193,6 +193,8 @@ export const config = {
     kmWindowAbove: num(env.REFERENCE_KM_WINDOW_ABOVE, 0.3),
     /** Hubraum-Toleranz für „gleiche Motorisierung“ (Anteil), wenn beide Seiten einen Hubraum kennen */
     ccmTolerance: num(env.REFERENCE_CCM_TOLERANCE, 0.12),
+    /** Leistungs-Toleranz (Anteil, mindestens 8 kW), wenn beide Seiten die Leistung kennen */
+    kwTolerance: num(env.REFERENCE_KW_TOLERANCE, 0.15),
     /** Detailansicht darf fehlende Buckets live nachladen (eine mobile.de-Anfrage) */
     liveLookup: bool(env.REFERENCE_LIVE_LOOKUP, true),
     proxyUrl: env.REFERENCE_PROXY_URL || env.EUROPE_PROXY_URL || '',

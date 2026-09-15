@@ -6,7 +6,8 @@ process.env.REFERENCE_MAKE_IDS = '{"Hongqi": 99999}';
 
 const { copartBody, copartPhoto, copartSkipReason, mapCopart } = await import('../src/providers/copart.js');
 const { extractItems, firstInt, mapMobileItem, mobileApiUrl, mobileMakeId, mobileSearchParams } = await import('../src/providers/mobilede.js');
-const { bucketKey, bucketQuery, detailFrom, diffPct, engineMatches, kmWindow, summarize, variantText } = await import('../src/services/reference.js');
+const { bucketKey, bucketQuery, detailFrom, diffPct, engineMatches, kmWindow, summarize, titleMatches, variantText } = await import('../src/services/reference.js');
+const { powerKwFromText } = await import('../src/providers/types.js');
 const { generationOf, yearBand } = await import('../src/domain/generations.js');
 import type { RefBucket } from '../src/services/reference.js';
 
@@ -104,9 +105,45 @@ describe('Vergleichspreise DE – Zusammenfassung', () => {
   it('hohe Laufleistung nutzt +30 %; Angebote mit weniger km bleiben vergleichbar', () => {
     const s = summarize({ km: 160_000, engineCcm: null }, 20_000, bucket);
     assert.ok(s);
-    assert.equal(s.count, 4, 'alle bis 208.000 km, ohne Hubraum keine Motor-Einschränkung');
+    assert.equal(s.count, 3, 'alle 320d bis 208.000 km; der 330d fällt über den Titelabgleich heraus');
     assert.equal(s.minEur, 17_900);
     assert.equal(diffPct(20_000, 17_900), 11.7);
+  });
+
+  it('Leistung ±15 % (mindestens 8 kW), wenn beide Seiten sie kennen', () => {
+    const s = { priceEur: 1, year: 2019, km: 1, kw: 140, ccm: null, title: 'BMW 320d', url: null };
+    assert.ok(engineMatches({ engineCcm: null, powerKw: 140 }, s));
+    assert.ok(engineMatches({ engineCcm: null, powerKw: 155 }, s));
+    assert.ok(!engineMatches({ engineCcm: null, powerKw: 195 }, s));
+    assert.ok(engineMatches({ engineCcm: null, powerKw: null }, s));
+    assert.ok(engineMatches({ engineCcm: null, powerKw: 195 }, { ...s, kw: null }));
+    assert.equal(powerKwFromText('140 kW (190 PS)'), 140);
+    assert.equal(powerKwFromText('190 KM'), 140);
+    assert.equal(powerKwFromText('224 CP'), 165);
+    assert.equal(powerKwFromText('150 cv'), 110);
+    assert.equal(powerKwFromText('258'), 190);
+    assert.equal(powerKwFromText('2.0 TDI'), null);
+    assert.equal(powerKwFromText(null), null);
+  });
+
+  it('Modellabgleich über mobile.de-Modellname/Titel (Live-Antwort 15.09.2026: "S350" traf auch CLS/E/GLK 350)', () => {
+    const hit = (model: string, title: string) => titleMatches('S 350', { model, title });
+    assert.ok(hit('Mercedes-Benz S 350', 'Mercedes-Benz S 350 BlueTEC L'));
+    assert.ok(hit('', 'Mercedes-Benz Hiermit möchte ich mein S 350 AMG Line ver...'));
+    assert.ok(hit('', 'Mercedes-Benz S350 CDI 4MATIC'));
+    assert.ok(!hit('Mercedes-Benz CLS 350', 'Mercedes-Benz CLS 350 CDI Automatik*Xenon*Leder*Navi*SD'));
+    assert.ok(!hit('Mercedes-Benz E 350', 'Mercedes-Benz E 350 CDI T BlueEFFICIENCY Standard'));
+    assert.ok(!hit('Mercedes-Benz GLK 350', 'Mercedes-Benz GLK 350 NAVI LIDER'));
+    assert.ok(!hit('', 'Mercedes-Benz Mercedes Benz R Klasse 350 7 Sitzer Lang'));
+    assert.ok(!hit('', 'Mercedes-Benz Mercedes S212, E350 CDI, 265 PS'));
+    assert.ok(titleMatches('320d', { model: 'BMW 320', title: 'BMW 320 3 Touring 320 d Sport Line' }), 'Ziffern und Buchstabe getrennt');
+    assert.ok(titleMatches('320d', { title: 'BMW 320d xDrive Touring' }));
+    assert.ok(!titleMatches('320d', { title: 'BMW 330d xDrive' }));
+    assert.ok(!titleMatches('320d', { title: 'BMW 320i Sport Line' }));
+    assert.ok(titleMatches('E 220 d', { title: 'Mercedes-Benz E 220 CDI T Avantgarde' }), 'Endbuchstabe optional (CDI statt d)');
+    assert.ok(titleMatches('Tucson', { title: 'Hyundai TUCSON 1.6 T-GDI Premium' }));
+    assert.ok(!titleMatches('Tucson', { title: 'Hyundai Santa Fe 2.2 CRDi' }));
+    assert.ok(titleMatches('Ioniq 5', { title: 'Hyundai IONIQ 5 77.4 kWh' }));
   });
 });
 

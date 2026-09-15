@@ -104,15 +104,37 @@ export function bucketKey(q: RefQuery): string {
   return `${source.id}|${makeKey(q.make)}|${q.description.toLowerCase()}|${q.fuel ?? 'any'}|${q.yearFrom}-${q.yearTo}`;
 }
 
-/** Gleiche Motorisierung: Hubraum innerhalb der Toleranz, sofern beide Seiten einen kennen; sonst nicht ausschließen */
-export function engineMatches(l: Pick<Listing, 'engineCcm'>, s: RefSample): boolean {
-  if (l.engineCcm == null || s.ccm == null) return true;
-  return Math.abs(s.ccm - l.engineCcm) <= l.engineCcm * config.reference.ccmTolerance;
+/**
+ * Gleiche Motorisierung: Hubraum innerhalb der Toleranz, sofern beide Seiten einen kennen; zusätzlich Leistung ±15 %,
+ * sofern beide sie kennen (wichtig für Inserate ohne Baureihen-Code). Fehlende Werte schließen nicht aus.
+ */
+export function engineMatches(l: Pick<Listing, 'engineCcm' | 'powerKw'>, s: RefSample): boolean {
+  if (l.engineCcm != null && s.ccm != null && Math.abs(s.ccm - l.engineCcm) > l.engineCcm * config.reference.ccmTolerance) return false;
+  const kw = l.powerKw ?? null;
+  if (kw != null && s.kw != null && Math.abs(s.kw - kw) > Math.max(8, kw * config.reference.kwTolerance)) return false;
+  return true;
 }
 
-export function comparable(l: Pick<Listing, 'km' | 'engineCcm'>, b: RefBucket): { samples: RefSample[]; kmFrom: number; kmTo: number } {
+/**
+ * Modellabgleich über den Titel: mobile.de sucht die Beschreibung unscharf ("S350" trifft auch CLS 350, E 350, GLK 350).
+ * Die Variantenkennung muss deshalb als eigenes Wort im mobile.de-Modellnamen oder Titel stehen – Buchstaben- und
+ * Zifferngruppen dürfen durch Leerzeichen/Bindestrich getrennt sein ("S 350", "S350", "320 d", "320d"); ein
+ * angehängter Einzelbuchstabe (d/i) ist optional, damit "E 220 d" auch "E 220 CDI" findet.
+ */
+export function titleMatches(description: string, s: Pick<RefSample, 'title' | 'model'>): boolean {
+  const groups = description.match(/\p{L}+|\p{N}+/gu) ?? [];
+  if (!groups.length) return true;
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const body = groups.map((g, i) => (i === groups.length - 1 && groups.length > 1 && /^\p{L}$/u.test(g) ? `(?:[\\s-]?${esc(g)})?` : (i ? '[\\s-]?' : '') + esc(g))).join('');
+  const re = new RegExp(`(^|[^\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, 'iu');
+  return re.test(s.model ?? '') || re.test(s.title);
+}
+
+export function comparable(l: Pick<Listing, 'km' | 'engineCcm' | 'powerKw'>, b: RefBucket): { samples: RefSample[]; kmFrom: number; kmTo: number } {
   const { from, to } = kmWindow(l.km);
-  const samples = b.samples.filter((s) => s.km >= from && s.km <= to && engineMatches(l, s)).sort((a, c) => a.priceEur - c.priceEur);
+  const samples = b.samples
+    .filter((s) => s.km >= from && s.km <= to && engineMatches(l, s) && titleMatches(b.query.description, s))
+    .sort((a, c) => a.priceEur - c.priceEur);
   return { samples, kmFrom: from, kmTo: to };
 }
 
@@ -120,7 +142,7 @@ export function diffPct(landedEur: number, refEur: number): number {
   return Math.round(((landedEur - refEur) / refEur) * 1000) / 10;
 }
 
-export function summarize(l: Pick<Listing, 'km' | 'engineCcm'>, landedEur: number, b: RefBucket): ReferenceSummary | null {
+export function summarize(l: Pick<Listing, 'km' | 'engineCcm' | 'powerKw'>, landedEur: number, b: RefBucket): ReferenceSummary | null {
   const { samples, kmFrom, kmTo } = comparable(l, b);
   if (!samples.length) return null;
   const best = samples[0];
@@ -138,7 +160,7 @@ export function summarize(l: Pick<Listing, 'km' | 'engineCcm'>, landedEur: numbe
   };
 }
 
-export function detailFrom(l: Pick<Listing, 'km' | 'engineCcm'>, landedEur: number, b: RefBucket): ReferencePrices {
+export function detailFrom(l: Pick<Listing, 'km' | 'engineCcm' | 'powerKw'>, landedEur: number, b: RefBucket): ReferencePrices {
   const { samples, kmFrom, kmTo } = comparable(l, b);
   const prices = samples.map((s) => s.priceEur);
   const minEur = prices.length ? prices[0] : null;
@@ -224,10 +246,11 @@ export async function attachReferences(items: DecoratedListing[]): Promise<void>
   }
 }
 
-/** Bucket live holen und speichern (Refresh-Job und Detailansicht) */
+/** Bucket live holen und speichern (Refresh-Job und Detailansicht); Treffer anderer Modelle (unscharfe Suche) fliegen gleich raus */
 export async function fetchBucket(q: RefQuery): Promise<RefBucket> {
   const r = await source.fetchSamples(q);
-  const b: RefBucket = { key: bucketKey(q), source: source.id, query: q, samples: r.samples.slice(0, 80), total: r.total, url: r.url, fetchedAt: new Date().toISOString() };
+  const matching = r.samples.filter((s) => titleMatches(q.description, s));
+  const b: RefBucket = { key: bucketKey(q), source: source.id, query: q, samples: matching.slice(0, 80), total: r.total, url: r.url, fetchedAt: new Date().toISOString() };
   await referenceRepo.save(b);
   return b;
 }
