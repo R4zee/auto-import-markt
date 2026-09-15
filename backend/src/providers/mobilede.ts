@@ -39,6 +39,8 @@ export interface RefQuery {
   modelId?: number | null;
   /** mobile.de-Modellgruppe (z. B. S-Klasse = 16 unter Mercedes-Benz); Baureihen sind bei mobile.de meist Gruppen */
   modelGroupId?: number | null;
+  /** Marken-ID aus der SEO-Auflösung – übersteuert die hinterlegte Tabelle (dort können IDs veraltet sein) */
+  makeId?: number | null;
   /** Modellname des Inserats (z. B. "S-Class", "3 Series", "Tucson") – Grundlage für die Modell-ID-Auflösung */
   model?: string;
 }
@@ -102,7 +104,7 @@ export const MOBILE_FUEL: Record<Fuel, string> = { Petrol: 'PETROL', Diesel: 'DI
 
 /** Klassische Suchparameter (suchen.mobile.de/fahrzeuge/search.html), günstigste zuerst, nur unbeschädigte Pkw aus Deutschland */
 export function mobileSearchParams(q: RefQuery, page = 1): URLSearchParams {
-  const makeId = mobileMakeId(q.make);
+  const makeId = q.makeId ?? mobileMakeId(q.make);
   const sp = new URLSearchParams();
   sp.set('isSearchRequest', 'true');
   sp.set('s', 'Car');
@@ -243,7 +245,10 @@ export class MobileDeReference {
       if (!more || !r.items.length) break;
       await sleep(config.reference.delayMs);
     }
-    samples.sort((a, b) => a.priceEur - b.priceEur);
-    return { samples, total, url };
+    // Top-Anzeigen erscheinen auf mehreren Seiten erneut → je Inserat einmal
+    const seen = new Set<string>();
+    const unique = samples.filter((s) => { const k = s.url ?? `${s.title}|${s.priceEur}|${s.km}`; if (seen.has(k)) return false; seen.add(k); return true; });
+    unique.sort((a, b) => a.priceEur - b.priceEur);
+    return { samples: unique, total, url };
   }
 }

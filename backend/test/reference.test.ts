@@ -170,6 +170,8 @@ describe('mobile.de – URL und Antwort', () => {
     assert.equal(withBand.get('ml'), ':125000');
     const group = mobileSearchParams({ make: 'Mercedes-Benz', description: 'S 350', yearFrom: 2005, yearTo: 2013, fuel: 'Diesel', modelGroupId: 16 });
     assert.equal(group.get('ms'), '17200;;16;', 'Modellgruppe (S-Klasse = 16, Live-Probe 15.09.2026)');
+    const resolvedMake = mobileSearchParams({ make: 'Land Rover', description: 'Discovery Sport', yearFrom: 2017, yearTo: 2019, fuel: 'Diesel', modelId: 11, makeId: 14600 });
+    assert.equal(resolvedMake.get('ms'), '14600;11;;', 'Marken-ID aus der SEO-Auflösung übersteuert die Tabelle');
     assert.ok(mobileApiUrl({ make: 'BMW', description: '320d', yearFrom: 2018, yearTo: 2020, fuel: null }, 1, 'query').startsWith('https://www.mobile.de/consumer/api/search/srp?isSearchRequest=true'));
     assert.ok(mobileApiUrl({ make: 'BMW', description: '320d', yearFrom: 2018, yearTo: 2020, fuel: null }, 2, 'url').includes(encodeURIComponent('pageNumber=2')));
   });
