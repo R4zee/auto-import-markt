@@ -4,9 +4,10 @@ import { describe, it } from 'node:test';
 process.env.REFERENCE_ENABLED = 'true';
 process.env.REFERENCE_MAKE_IDS = '{"Hongqi": 99999}';
 
-const { copartBody, copartPhoto, mapCopart } = await import('../src/providers/copart.js');
+const { copartBody, copartPhoto, copartSkipReason, mapCopart } = await import('../src/providers/copart.js');
 const { extractItems, firstInt, mapMobileItem, mobileApiUrl, mobileMakeId, mobileSearchParams } = await import('../src/providers/mobilede.js');
 const { bucketKey, bucketQuery, detailFrom, diffPct, engineMatches, kmWindow, summarize, variantText } = await import('../src/services/reference.js');
+const { generationOf, yearBand } = await import('../src/domain/generations.js');
 import type { RefBucket } from '../src/services/reference.js';
 
 const NOW = '2026-09-15T10:00:00.000Z';
@@ -25,20 +26,38 @@ describe('Vergleichspreise DE – Suchtext und Fenster', () => {
     assert.equal(variantText({ make: 'Mercedes-Benz', model: 'C-Class', trim: 'Avantgarde' }), 'C');
   });
 
-  it('Laufleistungsfenster: ±50 % unter 100.000 km, ±30 % darüber', () => {
-    assert.deepEqual(kmWindow(80_000), { from: 40_000, to: 120_000 });
-    assert.deepEqual(kmWindow(150_000), { from: 105_000, to: 195_000 });
-    assert.deepEqual(kmWindow(100_000), { from: 70_000, to: 130_000 });
+  it('Laufleistungsfenster: nur nach oben, +50 % unter 100.000 km, +30 % darüber', () => {
+    assert.deepEqual(kmWindow(80_000), { from: 0, to: 120_000 });
+    assert.deepEqual(kmWindow(150_000), { from: 0, to: 195_000 });
+    assert.deepEqual(kmWindow(100_000), { from: 0, to: 130_000 });
   });
 
-  it('Bucket: Baujahr ±1, Kraftstoff, Marken-ID nötig; Überschreibung per REFERENCE_MAKE_IDS', () => {
+  it('Bucket: Baujahr ±1 ohne Baureihe, Kraftstoff, Marken-ID nötig; Überschreibung per REFERENCE_MAKE_IDS', () => {
     const q = bucketQuery({ make: 'BMW', model: '3 Series', trim: '320d', year: 2019, fuel: 'Diesel' });
     assert.ok(q);
-    assert.equal(q.yearFrom, 2018); assert.equal(q.yearTo, 2020); assert.equal(q.description, '320d');
+    assert.equal(q.yearFrom, 2018); assert.equal(q.yearTo, 2020); assert.equal(q.description, '320d'); assert.equal(q.generation, null);
     assert.equal(bucketKey(q), 'mobilede|bmw|320d|Diesel|2018-2020');
     assert.equal(bucketQuery({ make: 'Unbekannt', model: 'X', trim: '', year: 2019, fuel: 'Petrol' }), null);
     assert.equal(mobileMakeId('Hongqi'), 99999);
     assert.equal(mobileMakeId('mercedes benz'), 17200);
+  });
+
+  it('Baureihe im Inserat → Bauzeitraum statt Baujahr ±1 (2011er W221 zählt zur 2013er, W222 nicht)', () => {
+    const w221 = bucketQuery({ make: 'Mercedes-Benz', model: 'S-Class W221', trim: 'S350 CDI 4MATIC', year: 2013, fuel: 'Diesel' });
+    assert.ok(w221);
+    assert.equal(w221.generation, 'W221'); assert.equal(w221.yearFrom, 2005); assert.equal(w221.yearTo, 2013); assert.equal(w221.description, 'S 350');
+    const w222 = bucketQuery({ make: 'Mercedes-Benz', model: 'S-Class (W222)', trim: 'S350d', year: 2014, fuel: 'Diesel' });
+    assert.ok(w222);
+    assert.equal(w222.generation, 'W222'); assert.equal(w222.yearFrom, 2013); assert.equal(w222.yearTo, 2020);
+    assert.notEqual(bucketKey(w221), bucketKey(w222));
+    const e93 = bucketQuery({ make: 'BMW', model: '3 Series (E93)', trim: '320i Convertible', year: 2012, fuel: 'Petrol' });
+    assert.equal(e93?.generation, 'E93'); assert.equal(e93?.yearFrom, 2005); assert.equal(e93?.yearTo, 2013);
+    assert.equal(generationOf({ make: 'Mercedes-Benz', model: 'E-Class', trim: 'E220 CDI', year: 2012 }), null, 'Variante E220 ist kein BMW-Code');
+    assert.equal(generationOf({ make: 'BMW', model: '5 Series', trim: 'F10 520d', year: 2014 })?.code, 'F10');
+    assert.equal(generationOf({ make: 'Audi', model: 'A6', trim: 'C7 3.0 TDI', year: 2015 })?.code, 'C7');
+    assert.equal(generationOf({ make: 'Hyundai', model: 'Tucson', trim: 'C7', year: 2015 }), null, 'Audi-Codes nur bei Audi');
+    const running = yearBand({ make: 'Porsche', model: '911 (992)', trim: 'Carrera S', year: 2021 }, 1, 2026);
+    assert.deepEqual(running, { from: 2019, to: 2026, generation: '992' });
   });
 
   it('Motorisierung: Hubraum ±12 %, unbekannter Hubraum schließt nicht aus', () => {
@@ -67,12 +86,13 @@ describe('Vergleichspreise DE – Zusammenfassung', () => {
   it('günstigstes Angebot im km-Fenster mit passendem Hubraum, Abstand des Endpreises in Prozent', () => {
     const s = summarize({ km: 80_000, engineCcm: 1995 }, 18_060, bucket);
     assert.ok(s);
-    assert.equal(s.count, 2, '95k und 60k km liegen im Fenster 40k–120k; 190k nicht; 330d hat anderen Hubraum');
+    assert.equal(s.count, 2, '95k und 60k km liegen bis 120k; 190k nicht; 330d hat anderen Hubraum');
     assert.equal(s.minEur, 21_500);
     assert.equal(s.url, 'https://suchen.mobile.de/b');
     assert.equal(s.diffPct, -16);
-    assert.equal(s.kmFrom, 40_000); assert.equal(s.kmTo, 120_000);
+    assert.equal(s.kmFrom, 0); assert.equal(s.kmTo, 120_000);
     assert.equal(s.yearFrom, 2018); assert.equal(s.yearTo, 2020);
+    assert.equal(s.generation, null);
   });
 
   it('ohne vergleichbares Angebot null; Detailansicht liefert dann count 0', () => {
@@ -81,10 +101,10 @@ describe('Vergleichspreise DE – Zusammenfassung', () => {
     assert.equal(d.count, 0); assert.equal(d.minEur, null); assert.equal(d.diffPct, null);
   });
 
-  it('hohe Laufleistung nutzt das 30-%-Fenster', () => {
+  it('hohe Laufleistung nutzt +30 %; Angebote mit weniger km bleiben vergleichbar', () => {
     const s = summarize({ km: 160_000, engineCcm: null }, 20_000, bucket);
     assert.ok(s);
-    assert.equal(s.count, 1);
+    assert.equal(s.count, 4, 'alle bis 208.000 km, ohne Hubraum keine Motor-Einschränkung');
     assert.equal(s.minEur, 17_900);
     assert.equal(diffPct(20_000, 17_900), 11.7);
   });
@@ -158,10 +178,33 @@ describe('Copart (USA) – Anfrage und Zuordnung', () => {
     assert.ok(l.trim.includes('Title: CLEAN TITLE') && l.trim.includes('Damage: FRONT END'));
   });
 
-  it('abgelaufene Auktion ohne Sofortkauf entfällt; Sofortkauf ohne Termin ist Festpreis', () => {
+  it('abgelaufene Auktion ohne Sofortkauf entfällt; Sofortkauf ohne Termin ist Festpreis; nur USA', () => {
     assert.equal(mapCopart({ ln: 1, mkn: 'FORD', lm: 'F-150', lcy: 2018, orr: 10, hb: 500, bnp: 0, ad: Date.now() - 86400000 }, NOW), null);
+    assert.equal(copartSkipReason({ ln: 1, hb: 500, bnp: 0, ad: Date.now() - 86400000 }), 'Auktionstermin liegt zurück, kein Sofortkauf');
+    assert.equal(copartSkipReason({ ln: 1, hb: 0, bnp: 0, ad: Date.now() + 86400000 }), 'noch kein Gebot, kein Sofortkauf');
+    assert.equal(copartSkipReason({ ln: 1, hb: 900, ad: Date.now() + 86400000, locCountry: 'CAN' }), 'nicht USA');
     const l = mapCopart({ ln: 2, mkn: 'FORD', lm: 'F-150', lcy: 2018, orr: 10, hb: 0, bnp: 15000 }, NOW);
     assert.equal(l?.offerType, 'fixed'); assert.equal(l?.price, 15000);
     assert.equal(copartPhoto('x_thb.jpg'), 'x_ful.jpg');
+  });
+
+  it('Live-Antwort 15.09.2026: Titelart, Standort, Slug-URL, Tachobewertung', () => {
+    const lot = {
+      ln: 73672065, mkn: 'KIA', lmg: 'FORTE', lm: 'FORTE', ltd: 'GT', lcy: 2021, orr: 77968, ord: 'ACTUAL', odometerUOM: 'A', egn: '1.6L  4', cy: '4',
+      yn: 'WA - SPANAWAY', ad: Date.now() + 5 * 86400000, hb: 550, bnp: 0, tgc: 'TITLEGROUP_S', tgd: 'SALVAGE TITLE', td: 'BILL OF SALE', dd: 'REAR END',
+      tims: 'https://cs.copart.com/v1/AUTH_svc.pdoc00001/lpp/0226/426146574f484073bb7768cc26f78005_thb.jpg', locCountry: 'USA', locCity: 'SPANAWAY', locState: 'WA',
+      tmtp: 'AUTOMATIC', lcd: 'RUNS AND DRIVES', ft: 'GAS', hk: 'YES', drv: 'Front-wheel Drive', ldu: 'salvage-2021-kia-forte-gt-wa-spanaway',
+    };
+    const l = mapCopart(lot, NOW);
+    assert.ok(l);
+    assert.equal(l.make, 'Kia'); assert.equal(l.model, 'FORTE');
+    assert.equal(l.trim, 'GT · Title: SALVAGE TITLE · Damage: REAR END');
+    assert.equal(l.location, 'SPANAWAY');
+    assert.equal(l.url, 'https://www.copart.com/lot/73672065/salvage-2021-kia-forte-gt-wa-spanaway');
+    assert.equal(l.km, 125_477);
+    assert.equal(l.engine, '1.6 L 4-cyl'); assert.equal(l.engineCcm, 1600);
+    assert.equal(l.auction?.grade, 'RUNS AND DRIVES');
+    const notActual = mapCopart({ ...lot, ord: 'NOT ACTUAL' }, NOW);
+    assert.ok(notActual?.trim.endsWith('Odometer: NOT ACTUAL'));
   });
 });

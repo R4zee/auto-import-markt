@@ -146,7 +146,7 @@ export interface VehicleTax {
 
 /**
  * Vergleichspreis aus dem deutschen Markt (günstigstes vergleichbares Angebot: gleiche Marke, Modell/Variante,
- * Kraftstoff, Baujahr ±1, Laufleistung im Fenster ±50 % unter 100.000 km bzw. ±30 % darüber).
+ * Kraftstoff, Baujahrband der Baureihe bzw. Baujahr ±1, Laufleistung höchstens +50 % unter 100.000 km bzw. +30 % darüber).
  */
 export interface ReferenceSummary {
   source: string;
@@ -163,6 +163,8 @@ export interface ReferenceSummary {
   url: string | null;
   /** Endpreis (inkl. Zoll, Steuer, TÜV, Zulassung) relativ zum Vergleichspreis in Prozent: -20 = 20 % günstiger */
   diffPct: number;
+  /** Baureihe (z. B. "W221"), falls das Baujahrband daraus stammt */
+  generation: string | null;
   fetchedAt: string;
 }
 

@@ -178,16 +178,16 @@ export const config = {
    */
   reference: {
     enabled: bool(env.REFERENCE_ENABLED, false),
-    /** 'query' = Suchparameter direkt an /consumer/api/search/srp; 'url' = search.html-URL als Parameter `url` */
-    mobileMode: (env.REFERENCE_MOBILE_MODE ?? 'query') as 'query' | 'url',
+    /** 'url' = search.html-Adresse als Parameter `url` an /consumer/api/search/srp (bestätigt 15.09.2026); 'query' = Parameter direkt (liefert 400) */
+    mobileMode: (env.REFERENCE_MOBILE_MODE ?? 'url') as 'query' | 'url',
     ttlDays: num(env.REFERENCE_TTL_DAYS, 7),
     /** Buckets je Lauf (mobile.de-Anfragen = Buckets × Seiten) */
     maxPerRun: num(env.REFERENCE_MAX_PER_RUN, 1500),
     pages: num(env.REFERENCE_PAGES, 2),
     delayMs: num(env.REFERENCE_DELAY_MS, 700),
-    /** Baujahr ± Jahre im Suchband */
+    /** Baujahr ± Jahre im Suchband, wenn keine Baureihe (W221, F30 …) erkannt wird – sonst gilt deren Bauzeitraum */
     yearSpan: num(env.REFERENCE_YEAR_SPAN, 1),
-    /** Laufleistungsfenster: ±50 % unter 100.000 km, ±30 % darüber */
+    /** Laufleistung vergleichbarer Angebote höchstens +50 % unter 100.000 km bzw. +30 % darüber (nach unten offen) */
     kmThreshold: num(env.REFERENCE_KM_THRESHOLD, 100000),
     kmWindowBelow: num(env.REFERENCE_KM_WINDOW_BELOW, 0.5),
     kmWindowAbove: num(env.REFERENCE_KM_WINDOW_ABOVE, 0.3),
@@ -200,10 +200,11 @@ export const config = {
     makeIds: (() => { try { return JSON.parse(env.REFERENCE_MAKE_IDS || '{}') as Record<string, number>; } catch { return {}; } })(),
     userAgent: env.EUROPE_USER_AGENT ?? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
   },
-  /** USA: Copart-Suchendpunkt der Website (kein Login, kein Key; Grauzone wie Encar) */
+  /** USA: Copart-Suchendpunkt der Website (kein Login, kein Key; Grauzone wie Encar). Live bestätigt 15.09.2026: 385.803 Lose. */
   copart: {
     enabled: bool(env.COPART_ENABLED, false),
-    pages: num(env.COPART_PAGES, 5),
+    /** Seiten × pageSize Lose je Lauf, nach Auktionstermin sortiert (nächste zuerst) */
+    pages: num(env.COPART_PAGES, 20),
     pageSize: num(env.COPART_PAGE_SIZE, 100),
     /** Optional auf Marken einschränken (Copart-Schreibweise, z. B. BMW,MERCEDES-BENZ) */
     makes: list(env.COPART_MAKES),

@@ -226,19 +226,22 @@ mobile.de-Web-App:
 
 | Quelle | Endpunkt (keyless) | Adapter | Stand |
 |---|---|---|---|
-| **mobile.de** | `GET https://www.mobile.de/consumer/api/search/srp?<search.html-Parameter>` mit Header `x-mobile-client: de.mobile.consumer-webapp` (ohne Header 400 „Missing or invalid client header“); Parameter wie die klassische Suche: `ms=<MarkenID>;;;<Beschreibung>`, `fr=2018:2020` (Erstzulassung), `ft=DIESEL`, `sb=p&od=up` (Preis aufsteigend), `cn=DE`, `dam=0`; Antwort `searchResults{numResultsTotal,numPages,hasNextPage,items[]}` mit `price`, `attr{fr,ml,pw,ft,…}`, `relativeUrl` **[G]** (Beschreibungen von Scraper-Anbietern; bis zu ~50 Seiten je Suche) | `providers/mobilede.ts`, `services/reference.ts`, Job `cli/reference.ts` | **ungeprüft** – mit `npm run probe -- mobile BMW 320d 2019 Diesel` bestätigen; Feldnamen werden tolerant gelesen, die Probe zeigt die Rohantwort |
+| **mobile.de** | `GET https://www.mobile.de/consumer/api/search/srp?url=<search.html-Adresse>` mit Header `x-mobile-client: de.mobile.consumer-webapp`; die search.html-Adresse trägt die klassischen Parameter `ms=<MarkenID>;;;<Beschreibung>`, `fr=2018:2020` (Erstzulassung), `ft=DIESEL`, `sb=p&od=up` (Preis aufsteigend), `cn=DE`, `dam=0`, `pageNumber=`; Antwort `searchResults{numResultsTotal,numPages,hasNextPage,items[]}` mit `price{gross,grossAmount}`, `attr{fr:"05/2020", ml:"130.000 km", pw:"140 kW (190 PS)", cc:"1.995 cm³", ft, tr, loc}`, `title`, `subTitle`, `relativeUrl`, `priceRating` **[B]** (Live-Probe 15.09.2026: 730 Treffer, 37 Seiten; dieselben Parameter direkt an `/srp` → 400) | `providers/mobilede.ts`, `services/reference.ts`, Job `cli/reference.ts` | **bestätigt 15.09.2026**, direkt aus Node ohne Proxy; 21 von 26 Einträgen einer Seite sind Inserate, der Rest Werbeplätze |
 
 Berechnung (`services/reference.ts`): Bucket = Marke + Variantentext (erstes Ausstattungswort mit Ziffer bei
-Baureihen wie „3 Series“/„E-Class“, sonst Modellname) + Kraftstoff + Baujahr ±1 → günstigste Angebote als
-Stichproben (Preis, Baujahr, km, kW, Hubraum) in `ref_prices`. Je Inserat: Laufleistungsfenster ±50 % (< 100.000 km)
-bzw. ±30 % (≥ 100.000 km), Hubraum ±12 %, günstigstes Angebot = Vergleichspreis; Abstand = (Endpreis − Vergleichspreis)
-/ Vergleichspreis. Marken-IDs von mobile.de sind für rund 60 Marken hinterlegt (`REFERENCE_MAKE_IDS` ergänzt).
+Baureihen wie „3 Series“/„E-Class“, sonst Modellname) + Kraftstoff + Baujahrband → günstigste Angebote als
+Stichproben (Preis, Baujahr, km, kW, Hubraum) in `ref_prices`. Das Baujahrband ist der Bauzeitraum der Baureihe,
+wenn das Inserat einen Werkscode nennt (W221 2005–2013, W222 2013–2020, E90–E93 2005–2013, F30/F31 2012–2019, G30 …;
+Tabelle `domain/generations.ts` für Mercedes, BMW, Porsche, Audi, VW Golf/Passat, Land Rover), sonst Baujahr ±1.
+Je Inserat: Laufleistung höchstens +50 % (< 100.000 km) bzw. +30 % (≥ 100.000 km), nach unten offen; Hubraum ±12 %;
+günstigstes Angebot = Vergleichspreis; Abstand = (Endpreis − Vergleichspreis) / Vergleichspreis. Marken-IDs von
+mobile.de sind für rund 60 Marken hinterlegt (`REFERENCE_MAKE_IDS` ergänzt).
 
 ## 10. USA, Golfstaaten, Japan, Korea – kostenlose Frontend-Endpunkte (Stand 15.09.2026)
 
 | Markt | Quelle | Endpunkt | Stand |
 |---|---|---|---|
-| **USA** | **Copart** | `POST https://www.copart.com/public/lots/search-results` (JSON-Body `query:["*"], filter:{MISC:["#VehicleTypeCode:VEHTYPE_V"]}, page, size`; Antwort `data.results.content[]` mit Kurzschlüsseln `ln, mkn, lm, lmg, lcy, orr, hb, bnp, ad, yn, dd, ft, tmtp, drv, egn, tims, tt, lcd`) **[G]** (von öffentlichen Scraper-Projekten belegt) | `providers/copart.ts` umgesetzt, **ungeprüft** – `npm run probe -- copart`; Copart nutzt Imperva-Schutz, ggf. `COPART_PROXY_URL` |
+| **USA** | **Copart** | `POST https://www.copart.com/public/lots/search-results` (JSON-Body `query:["*"], filter:{MISC:["#VehicleTypeCode:VEHTYPE_V"]}, page, size`; Antwort `data.results.content[]` mit Kurzschlüsseln `ln, mkn, lmg, lm, ltd, lcy, orr, ord, hb, bnp, ad, yn, locCity, locState, locCountry, dd, tgd, lcd, hk, ft, tmtp, drv, egn, cy, tims, ldu`) **[B]** (Live-Probe 15.09.2026: 385.803 Lose, direkt aus Node) | `providers/copart.ts` **bestätigt**; übernommen werden Lose mit Gebot oder Sofortkauf und künftigem Termin (viele Lose haben noch kein Gebot) |
 | USA | IAAI | Suche nur über geschützte Endpunkte (Incapsula) | offen – weiterhin über Apibara |
 | USA | Cars.com / Autotrader / CarGurus | serverseitig gerenderte Seiten, Bot-Schutz | offen |
 | **VAE** | **Dubizzle** | Algolia-Suchindex der Website (App-ID, Search-Key und Indexname stehen im Seitenquelltext; `POST https://<app>-dsn.algolia.net/1/indexes/*/queries`), Motors-Kategorie mit Preis in AED, Baujahr, km, Marke/Modell **[G]** | offen – App-ID/Key per Browser (Netzwerk-Tab, Aufruf `algolia.net`) auslesen und mit `probe url` prüfen |

@@ -7,16 +7,33 @@ import { listingId, milesToKm, normalizeDrive, normalizeFuel, normalizeTransmiss
 
 /**
  * Copart (USA) über den Suchendpunkt der Website (`POST /public/lots/search-results`), den die öffentliche Suche
- * ohne Login nutzt. Kein Key – Grauzone wie Encar, deshalb per COPART_ENABLED schaltbar und mit
- * `npm run probe -- copart` vor dem Einschalten prüfbar. Feldnamen sind Kurzschlüssel der Copart-Antwort
- * (ln = Losnummer, mkn = Marke, lm = Modell, lcy = Baujahr, orr = Tacho, hb = Höchstgebot, bnp = Sofortkauf,
- * ad = Auktionstermin, yn = Standort, dd = Hauptschaden, tims = Vorschaubild …) und werden tolerant gelesen.
+ * ohne Login nutzt. Kein Key – Grauzone wie Encar, deshalb per COPART_ENABLED schaltbar. Live bestätigt 15.09.2026
+ * (`npm run probe -- copart`: 385.803 Lose). Feldnamen sind Kurzschlüssel der Antwort `data.results.content[]`:
+ * ln Losnummer, mkn Marke, lmg/lm Modell, ltd Ausstattung, lcy Baujahr, orr Tacho (Meilen; ord = ACTUAL/NOT ACTUAL),
+ * hb aktuelles Gebot, bnp Sofortkauf, ad Auktionstermin (ms), yn/locCity/locState/locCountry Standort, dd Schaden,
+ * tgd Titelart ("SALVAGE TITLE"), lcd Zustand ("RUNS AND DRIVES"), hk Schlüssel, egn/cy Motor, tims Vorschaubild,
+ * ldu URL-Slug. Lose ohne Gebot/Sofortkauf oder mit zurückliegendem Termin werden übersprungen und gezählt.
  */
 export interface CopartLot {
-  ln?: number | string; mkn?: string; lm?: string; lmg?: string; lcy?: number | string; orr?: number | string; ord?: string;
-  hb?: number | string; bnp?: number | string; ad?: number | string; yn?: string; ynumb?: number | string; dd?: string; sdd?: string;
-  ft?: string; tmtp?: string; drv?: string; egn?: string; cy?: number | string; tims?: string; tt?: string; tgc?: string; lcd?: string;
+  ln?: number | string; mkn?: string; lm?: string; lmg?: string; ltd?: string; lmtd?: string; ld?: string; lcy?: number | string;
+  orr?: number | string; ord?: string; odometerUOM?: string;
+  hb?: number | string; bnp?: number | string; ad?: number | string; lad?: number | string; yn?: string; ynumb?: number | string; dd?: string; sdd?: string;
+  ft?: string; tmtp?: string; drv?: string; egn?: string; cy?: number | string; tims?: string; tt?: string; tgc?: string; tgd?: string; td?: string; lcd?: string;
   hk?: string; fv?: string; lcc?: string; lstg?: string; lu?: string; cuv?: string; ts?: string; lcu?: string; syn?: string; ldu?: string;
+  locCity?: string; locState?: string; locCountry?: string; clr?: string; lotPlugAcv?: number | string; ess?: string; cuc?: string;
+}
+
+/** Warum ein Los nicht übernommen wurde (für Probe und Sync-Protokoll) */
+export function copartSkipReason(v: CopartLot): string | null {
+  if (v.locCountry && v.locCountry.toUpperCase() !== 'USA') return 'nicht USA';
+  const bid = num(v.hb) ?? 0;
+  const buyNow = num(v.bnp) ?? 0;
+  if (bid <= 0 && buyNow <= 0) return 'noch kein Gebot, kein Sofortkauf';
+  const adMs = num(v.ad);
+  const endsAt = adMs && adMs > 0 ? new Date(adMs > 1e12 ? adMs : adMs * 1000) : null;
+  const live = !!endsAt && !Number.isNaN(endsAt.getTime()) && endsAt.getTime() > Date.now();
+  if (!live && buyNow <= 0) return 'Auktionstermin liegt zurück, kein Sofortkauf';
+  return null;
 }
 
 export function copartBody(page: number, size: number, makes: string[] = []): Record<string, unknown> {
@@ -40,23 +57,24 @@ export function mapCopart(v: CopartLot, fetchedAt: string): Listing | null {
   const make = canonicalMake(str(v.mkn));
   const model = str(v.lmg || v.lm);
   if (!lot || !year || !make || !model) return null;
+  if (copartSkipReason(v)) return null;
   const bid = num(v.hb) ?? 0;
   const buyNow = num(v.bnp) ?? 0;
-  const price = bid > 0 ? bid : buyNow;
-  if (price <= 0) return null;
   const adMs = num(v.ad);
   const endsAt = adMs && adMs > 0 ? new Date(adMs > 1e12 ? adMs : adMs * 1000) : null;
   const isAuction = !!endsAt && !Number.isNaN(endsAt.getTime()) && endsAt.getTime() > Date.now();
-  if (!isAuction && buyNow <= 0) return null;
+  // Tacho in Meilen (odometerUOM 'K' = km); ord = Tachobewertung (ACTUAL / NOT ACTUAL / EXEMPT), keine Einheit
   const odo = num(v.orr) ?? 0;
-  const km = (v.ord ?? '').toUpperCase().startsWith('K') ? odo : milesToKm(odo);
+  const km = (v.odometerUOM ?? '').toUpperCase().startsWith('K') ? odo : milesToKm(odo);
   const yard = str(v.yn);
   const damage = str(v.dd);
   const runCond = str(v.lcd);
-  const title = str(v.tt || v.tgc);
-  const engine = str(v.egn);
+  const title = str(v.tgd || v.td || v.tt || v.tgc);
+  const engine = str(v.egn).replace(/\s+/g, ' ');
   const litres = engine.match(/(\d\.\d)\s*L/i)?.[1];
   const photo = copartPhoto(str(v.tims) || undefined);
+  const variant = str(v.ltd) || (str(v.lm) !== model ? str(v.lm) : '');
+  const odoNote = v.ord && !/^ACTUAL$/i.test(str(v.ord)) ? `Odometer: ${str(v.ord)}` : '';
 
   return {
     id: listingId('copart', lot),
@@ -64,13 +82,13 @@ export function mapCopart(v: CopartLot, fetchedAt: string): Listing | null {
     externalId: lot,
     market: 'US',
     country: 'us',
-    location: yard.replace(/^[A-Z]{2}\s*-\s*/, '').trim(),
+    location: str(v.locCity) || yard.replace(/^[A-Z]{2}\s*-\s*/, '').trim(),
     offerType: isAuction ? 'auction' : 'fixed',
-    url: `https://www.copart.com/lot/${lot}`,
+    url: `https://www.copart.com/lot/${lot}${v.ldu ? `/${str(v.ldu)}` : ''}`,
     year,
     make,
     model,
-    trim: [str(v.lm) !== model ? str(v.lm) : '', title ? `Title: ${title}` : '', damage ? `Damage: ${damage}` : ''].filter(Boolean).join(' · '),
+    trim: [variant, title ? `Title: ${title}` : '', damage ? `Damage: ${damage}` : '', odoNote].filter(Boolean).join(' · '),
     km: Math.round(km),
     engine: litres ? `${litres} L${v.cy ? ` ${str(v.cy)}-cyl` : ''}` : engine,
     engineCcm: litres ? Math.round(Number(litres) * 1000) : null,
@@ -143,17 +161,23 @@ export class CopartProvider implements MarketProvider {
     const fetchedAt = new Date().toISOString();
     const listings: Listing[] = [];
     const seen = new Set<string>();
+    const skipped = new Map<string, number>();
     let total: number | null = null;
     for (let page = 0; page < config.copart.pages; page++) {
       const r = await this.fetchPage(page);
       total = r.total;
       for (const lot of r.lots) {
+        const reason = copartSkipReason(lot);
+        if (reason) { skipped.set(reason, (skipped.get(reason) ?? 0) + 1); continue; }
         const l = mapCopart(lot, fetchedAt);
-        if (l && l.year >= config.copart.minYear && !seen.has(l.id)) { seen.add(l.id); listings.push(l); }
+        if (!l) { skipped.set('unvollständig', (skipped.get('unvollständig') ?? 0) + 1); continue; }
+        if (l.year < config.copart.minYear) { skipped.set(`vor ${config.copart.minYear}`, (skipped.get(`vor ${config.copart.minYear}`) ?? 0) + 1); continue; }
+        if (!seen.has(l.id)) { seen.add(l.id); listings.push(l); }
       }
       if (r.lots.length < config.copart.pageSize) break;
       await sleep(config.copart.delayMs);
     }
-    return { listings, complete: false, warnings: [`${listings.length} Lose${total != null ? ` von ${total}` : ''} (nur laufende Auktionen/Sofortkauf, ab ${config.copart.minYear})`] };
+    const skipInfo = [...skipped.entries()].map(([k, n]) => `${n}× ${k}`).join(', ');
+    return { listings, complete: false, warnings: [`${listings.length} Lose${total != null ? ` von ${total}` : ''} übernommen${skipInfo ? ` · übersprungen: ${skipInfo}` : ''}`] };
   }
 }

@@ -4,9 +4,10 @@ import { curlFetch, freshFetch, getJson, robustFetch } from '../providers/http.j
 import { mapOlxOffer, olxHeaders, OlxProvider, type OlxFilterLevel } from '../providers/olx.js';
 import { mapSauto, SautoProvider } from '../providers/sauto.js';
 import { mapSubito, SubitoProvider } from '../providers/subito.js';
-import { CopartProvider, mapCopart } from '../providers/copart.js';
+import { CopartProvider, copartSkipReason, mapCopart } from '../providers/copart.js';
 import { extractItems, mapMobileItem, mobileApiUrl, mobileMakeId, MobileDeReference, mobileSearchUrl, type RefQuery } from '../providers/mobilede.js';
 import { bucketKey, kmWindow, summarize } from '../services/reference.js';
+import { yearBand } from '../domain/generations.js';
 import type { Fuel } from '../domain/types.js';
 
 /**
@@ -20,7 +21,8 @@ import type { Fuel } from '../domain/types.js';
  *   npm run probe -- olx-children bg 360                          (Unterkategorien aus den Inseraten einer Oberkategorie)
  *   npm run probe -- subito
  *   npm run probe -- sauto
- *   npm run probe -- mobile BMW 320d 2019 Diesel   (Vergleichspreise DE: beide mobile.de-Modi, Rohantwort, Stichproben, km-Fenster)
+ *   npm run probe -- mobile BMW 320d 2019 Diesel [km]   (Vergleichspreise DE: beide mobile.de-Modi, Rohantwort, Stichproben, km-Fenster)
+ *   npm run probe -- mobile Mercedes-Benz "S350 W221" 2013 Diesel   (Baureihen-Code → Bauzeitraum 2005–2013 statt Baujahr ±1)
  *   npm run probe -- copart                        (Copart-Suchendpunkt: Rohantwort des ersten Loses, Zuordnung)
  *   npm run probe -- url <URL> [Header:Wert …]     (beliebige Adresse: Status, Content-Type, Anfang der Antwort – für neue Quellen)
  *   npm run probe -- <provider> (jeder andere Provider: fetchAll mit Ausgabe der ersten 3 Inserate)
@@ -284,9 +286,12 @@ async function probeSauto() {
 
 /** Vergleichspreise DE: `probe mobile <Marke> <Beschreibung> [Baujahr] [Petrol|Diesel|Hybrid|Electric] [km]` */
 async function probeMobile(make: string, description: string, year: number, fuel: Fuel | null, km: number) {
-  const q: RefQuery = { make, description, yearFrom: year - config.reference.yearSpan, yearTo: year + config.reference.yearSpan, fuel };
+  // Beschreibung darf einen Baureihen-Code enthalten ("S350 W221") → Bauzeitraum statt Baujahr ±1
+  const band = yearBand({ make, model: description, trim: description, year }, config.reference.yearSpan);
+  const cleanDesc = band.generation ? description.replace(new RegExp(`\\s*\\b${band.generation}\\b\\s*`, 'i'), ' ').trim() : description;
+  const q: RefQuery = { make, description: cleanDesc, yearFrom: band.from, yearTo: band.to, fuel, generation: band.generation };
   const src = new MobileDeReference();
-  console.log(`\n=== mobile.de · ${make} (ID ${mobileMakeId(make) ?? 'UNBEKANNT → REFERENCE_MAKE_IDS'}) · "${description}" · ${q.yearFrom}–${q.yearTo} · ${fuel ?? 'alle Kraftstoffe'}`);
+  console.log(`\n=== mobile.de · ${make} (ID ${mobileMakeId(make) ?? 'UNBEKANNT → REFERENCE_MAKE_IDS'}) · "${cleanDesc}" · ${q.yearFrom}–${q.yearTo}${band.generation ? ` (Baureihe ${band.generation})` : ''} · ${fuel ?? 'alle Kraftstoffe'}`);
   console.log('Such-URL (Browser):', mobileSearchUrl(q));
   let got: Awaited<ReturnType<typeof src.fetchPage>> | null = null;
   for (const mode of ['query', 'url'] as const) {
@@ -315,7 +320,7 @@ async function probeMobile(make: string, description: string, year: number, fuel
   const bucket = { key: bucketKey(q), source: src.id, query: q, samples: got.items, total: got.total, url: mobileSearchUrl(q), fetchedAt: fetchedAt };
   const win = kmWindow(km);
   const sum = summarize(fake, 0, bucket);
-  console.log(`km-Fenster für ${km} km: ${win.from}–${win.to} km → ${sum ? `${sum.count} vergleichbar, günstigstes ${sum.minEur} €` : 'kein vergleichbares Angebot auf Seite 1'}`);
+  console.log(`km-Fenster für ${km} km: bis ${win.to} km → ${sum ? `${sum.count} vergleichbar, günstigstes ${sum.minEur} €` : 'kein vergleichbares Angebot auf Seite 1'}`);
 }
 
 async function probeCopart() {
@@ -328,7 +333,7 @@ async function probeCopart() {
     console.log('content[0] (gekürzt):', short(r.lots[0], 3000));
     for (const lot of r.lots) {
       const l = mapCopart(lot, fetchedAt);
-      console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.offerType}${l.auction ? ` bis ${l.auction.endsAt}` : ''} · ${l.location} · ${l.photos.length} Fotos` : `  ✖ nicht abbildbar: ln=${lot.ln} hb=${lot.hb} bnp=${lot.bnp} ad=${lot.ad} lcy=${lot.lcy}`);
+      console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.offerType}${l.auction ? ` bis ${l.auction.endsAt}` : ''} · ${l.location} · ${l.photos.length} Fotos · ${l.url}` : `  – übersprungen (${copartSkipReason(lot) ?? 'unvollständig'}): ln=${lot.ln} ${lot.lcy} ${lot.mkn} ${lot.lmg ?? lot.lm} · hb=${lot.hb} bnp=${lot.bnp} ad=${lot.ad ? new Date(Number(lot.ad)).toISOString().slice(0, 10) : '–'}`);
     }
   } catch (e) {
     console.log('  ✖', e instanceof Error ? e.message.slice(0, 300) : String(e));

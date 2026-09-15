@@ -83,7 +83,7 @@ export function CarCard({ car }: { car: Listing }) {
             {car.reference && (
               <div
                 className="tabular aim-ref"
-                title={t('refTooltip', { n: car.reference.count, kmFrom: car.reference.kmFrom.toLocaleString('de-DE'), kmTo: car.reference.kmTo.toLocaleString('de-DE'), yearFrom: car.reference.yearFrom, yearTo: car.reference.yearTo, landed: money(car.landed.totalEur) })}
+                title={t('refTooltip', { n: car.reference.count, kmTo: car.reference.kmTo.toLocaleString('de-DE'), years: `${car.reference.generation ? car.reference.generation + ' ' : ''}${car.reference.yearFrom}–${car.reference.yearTo}`, landed: money(car.landed.totalEur) })}
               >
                 <span className="aim-ref-label">{t('refDeFrom', { price: money(car.reference.minEur) })}</span>
                 <span className={car.reference.diffPct <= 0 ? 'aim-ref-diff aim-ref-good' : 'aim-ref-diff aim-ref-bad'}>

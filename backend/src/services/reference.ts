@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { one, query, run, type Row } from '../db.js';
+import { yearBand } from '../domain/generations.js';
 import { makeKey } from '../domain/makes.js';
 import type { DecoratedListing, Fuel, Listing, ReferenceSummary } from '../domain/types.js';
 import { HttpError, sleep } from '../providers/http.js';
@@ -11,7 +12,8 @@ import { MobileDeReference, mobileMakeId, type RefQuery, type RefSample } from '
  * Ablauf: Je Suchbucket (Marke, Modell/Variante, Kraftstoff, Baujahr ±1) werden die günstigsten Angebote von
  * mobile.de mit Preis, Baujahr, km und Leistung in `ref_prices` abgelegt (Job cli/reference.ts, GitHub Actions).
  * Beim Ausliefern einer Trefferseite werden nur die Buckets der 48 Inserate gelesen (eine Abfrage) und je Inserat
- * das Laufleistungsfenster (±50 % unter 100.000 km, ±30 % darüber) sowie die Motorisierung (Hubraum ±12 %) angewendet.
+ * das Laufleistungsfenster (höchstens +50 % unter 100.000 km, +30 % darüber; nach unten offen) sowie die
+ * Motorisierung (Hubraum ±12 %) angewendet. Das Baujahrband folgt der Baureihe (W221, F30 …), sonst Baujahr ±1.
  * Ergebnis: günstigstes vergleichbares Angebot und Abstand des Endpreises inkl. TÜV in Prozent.
  */
 export interface RefBucket {
@@ -40,6 +42,8 @@ export interface ReferencePrices {
   /** Endpreis relativ zum günstigsten vergleichbaren Angebot (Prozent) */
   diffPct: number | null;
   url: string | null;
+  /** Baureihe, falls das Baujahrband daraus stammt (z. B. "W221") */
+  generation: string | null;
   samples: Array<{ priceEur: number; year: number; km: number; url: string | null }>;
   fetchedAt: string;
 }
@@ -78,17 +82,22 @@ export function variantText(l: Pick<Listing, 'make' | 'model' | 'trim'>): string
   return text.replace(/\s+/g, ' ').trim();
 }
 
+/** Laufleistungsfenster: nur nach oben begrenzt (+50 % unter 100.000 km, +30 % darüber), nach unten offen */
 export function kmWindow(km: number): { from: number; to: number } {
   const pct = km < config.reference.kmThreshold ? config.reference.kmWindowBelow : config.reference.kmWindowAbove;
-  return { from: Math.max(0, Math.round(km * (1 - pct))), to: Math.round(km * (1 + pct)) };
+  return { from: 0, to: Math.round(km * (1 + pct)) };
 }
 
+/**
+ * Bucket-Abfrage: Marke, Variantentext, Kraftstoff und Baujahrband. Das Band ist der Bauzeitraum der Baureihe
+ * (W221, E93, F30 …), wenn das Inserat den Code nennt, sonst Baujahr ± REFERENCE_YEAR_SPAN.
+ */
 export function bucketQuery(l: Pick<Listing, 'make' | 'model' | 'trim' | 'year' | 'fuel'>): RefQuery | null {
   if (mobileMakeId(l.make) == null) return null;
   const description = variantText(l);
   if (!description) return null;
-  const span = config.reference.yearSpan;
-  return { make: l.make, description, yearFrom: l.year - span, yearTo: l.year + span, fuel: (l.fuel as Fuel) ?? null };
+  const band = yearBand(l, config.reference.yearSpan);
+  return { make: l.make, description, yearFrom: band.from, yearTo: band.to, fuel: (l.fuel as Fuel) ?? null, generation: band.generation };
 }
 
 export function bucketKey(q: RefQuery): string {
@@ -124,6 +133,7 @@ export function summarize(l: Pick<Listing, 'km' | 'engineCcm'>, landedEur: numbe
     yearFrom: b.query.yearFrom, yearTo: b.query.yearTo,
     url: best.url,
     diffPct: diffPct(landedEur, best.priceEur),
+    generation: b.query.generation ?? null,
     fetchedAt: b.fetchedAt,
   };
 }
@@ -144,6 +154,7 @@ export function detailFrom(l: Pick<Listing, 'km' | 'engineCcm'>, landedEur: numb
     landedEur,
     diffPct: minEur != null ? diffPct(landedEur, minEur) : null,
     url: samples[0]?.url ?? null,
+    generation: b.query.generation ?? null,
     samples: samples.slice(0, 12).map((s) => ({ priceEur: s.priceEur, year: s.year, km: s.km, url: s.url })),
     fetchedAt: b.fetchedAt,
   };

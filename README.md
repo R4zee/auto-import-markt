@@ -88,7 +88,7 @@ Lokal reproduzieren: `backend/test/search.test.ts` prüft Pfade und Facetten; ei
 | `marketcheck` | USA (Händler, Festpreis) | `MARKETCHECK_API_KEY` |
 | `ebay` | USA (eBay Motors, Auktion + Festpreis) | `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET` |
 | `apibara` | USA (Copart/IAAI-Auktionen) | `APIBARA_API_KEY` (Test-Plan kostenlos, 100 Req/Monat) |
-| `copart` | **USA** – Copart-Suchendpunkt der Website `POST /public/lots/search-results`, keyless, kostenlos (Grauzone wie Encar); vor dem Einschalten `npm run probe -w backend -- copart` | `COPART_ENABLED=true`, optional `COPART_MAKES` |
+| `copart` | **USA** – Copart-Suchendpunkt der Website `POST /public/lots/search-results`, keyless, kostenlos (Grauzone wie Encar); live bestätigt 15.09.2026 (385.803 Lose) | `COPART_ENABLED=true`, optional `COPART_MAKES` |
 | `encar` | **Südkorea (Hauptquelle)** – Encar direkt, Vollabgleich (~150.000 Inserate) | `ENCAR_ENABLED=true` + `ENCAR_PROXY_URL` (Residential-Proxy); läuft per GitHub Actions alle 6 h, Teilabfragen < 10.000, Übersetzungs-Cache `encar_grades` |
 | `xapikorea` | Südkorea (Fallback, Encar-Wrapper mit englischen Feldern) | `XAPIKOREA_API_KEY` (Free 500 Req/Monat) |
 | `autoapi` | VAE (Dubizzle, Dubicars) | `AUTOAPI_ACCESS_NAME`, `AUTOAPI_API_KEY` (Zugang via access@auto-api.com) |
@@ -121,7 +121,7 @@ npm run probe -w backend -- olx      # bzw. subito | sauto
 Danach in GitHub → Settings → Variables `OLX_ENABLED`/`SUBITO_ENABLED`/`SAUTO_ENABLED` auf `true`. Ein Testlauf nur dieser Quellen: Actions → Sync Listings → Run workflow → Feld
 „Nur diese Provider“ = `olx,subito,sauto` (lokal `SYNC_ONLY=olx npm run sync`).
 
-Tests: `npm test` (84 Tests: Kalkulation, Kfz-Steuer, API, Suche/Facetten, Provider-Mappings inkl. OLX, Subito, Sauto und Partner-Feeds).
+Tests: `npm test` (86 Tests: Kalkulation, Kfz-Steuer, API, Suche/Facetten, Provider-Mappings inkl. OLX, Subito, Sauto und Partner-Feeds).
 
 Manueller Sync eines Providers: `curl -X POST -H "x-admin-key: …" "http://localhost:4000/api/admin/sync?provider=encar"`.
 

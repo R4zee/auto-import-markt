@@ -5,10 +5,12 @@ import { HttpError, num, robustFetch, sleep, str } from './http.js';
 
 /**
  * mobile.de als Quelle für deutsche Vergleichspreise (kein Inserate-Import). Genutzt wird der JSON-Endpunkt der
- * mobile.de-Web-App (`/consumer/api/search/srp`, Header `x-mobile-client`), der die klassischen search.html-Parameter
- * versteht. Kein Key, keine Anmeldung – Grauzone wie Encar, deshalb per REFERENCE_ENABLED schaltbar und mit Probe
- * (`npm run probe -- mobile BMW 320d 2019 Diesel`) vor dem Einschalten prüfbar. Feldnamen sind tolerant gelesen,
- * weil sie aus Beschreibungen Dritter stammen; die Probe zeigt die Rohantwort.
+ * mobile.de-Web-App `/consumer/api/search/srp?url=<search.html-Adresse>` (Header `x-mobile-client`). Kein Key,
+ * keine Anmeldung – Grauzone wie Encar, deshalb per REFERENCE_ENABLED schaltbar.
+ * Live bestätigt 15.09.2026 (`npm run probe -- mobile BMW 320d 2019 Diesel`: HTTP 200, 730 Treffer, 37 Seiten):
+ * Antwort `searchResults{numResultsTotal,numPages,hasNextPage,items[]}`, je Treffer `id`, `title`, `subTitle`,
+ * `price{gross,grossAmount}`, `attr{fr:"05/2020", ml:"130.000 km", pw:"140 kW (190 PS)", cc:"1.995 cm³", ft, tr, loc, cn}`,
+ * `relativeUrl`, `priceRating{rating,thresholdLabels}`. Die Parameter direkt an /srp (ohne `url=`) liefern HTTP 400.
  */
 export interface RefSample {
   priceEur: number;
@@ -27,6 +29,8 @@ export interface RefQuery {
   yearFrom: number;
   yearTo: number;
   fuel: Fuel | null;
+  /** Baureihe, aus der das Baujahrband stammt (nur zur Anzeige) */
+  generation?: string | null;
 }
 
 /** mobile.de-Marken-IDs (Parameter `ms=<id>;;;<Beschreibung>`), Schlüssel = makeKey des kanonischen Namens */

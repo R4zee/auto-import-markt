@@ -30,13 +30,13 @@ export interface Listing {
 
 export interface ReferenceSummary {
   source: string; minEur: number; medianEur: number | null; count: number; kmFrom: number; kmTo: number;
-  yearFrom: number; yearTo: number; url: string | null; diffPct: number; fetchedAt: string;
+  yearFrom: number; yearTo: number; url: string | null; diffPct: number; generation: string | null; fetchedAt: string;
 }
 
 export interface ReferencePrices {
   source: string; count: number; minEur: number | null; medianEur: number | null; maxEur: number | null; medianKm: number | null;
   yearFrom: number; yearTo: number; kmFrom: number; kmTo: number; landedEur: number; diffPct: number | null; url: string | null;
-  samples: Array<{ priceEur: number; year: number; km: number; url: string | null }>; fetchedAt: string;
+  generation: string | null; samples: Array<{ priceEur: number; year: number; km: number; url: string | null }>; fetchedAt: string;
 }
 
 export interface Partner { id: string; name: string; note: string; markets: MarketCode[]; email: string | null }
