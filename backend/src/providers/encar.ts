@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import { generationOf } from '../domain/generations.js';
 import type { Listing } from '../domain/types.js';
 import { encarGradesRepo, gradeKey, type EncarGrade } from '../repositories/listings.js';
 import { defaultPartnerFor } from '../seed/partners.js';
@@ -79,11 +80,17 @@ export function encarDrive(badge: string, make: string): Listing['drive'] {
   return 'FWD';
 }
 
-/** Ausstattungszeile nur aus englischen Bestandteilen; koreanische Reste bleiben außen vor. */
-export function encarTrim(item: EncarListItem, grade: EncarGrade | null): string {
+/**
+ * Ausstattungszeile nur aus englischen Bestandteilen; koreanische Reste bleiben außen vor. Der Baureihen-Code aus
+ * dem koreanischen Modellnamen ("E-클래스 W213", "5시리즈 (G30)") wird angehängt – er bestimmt beim Vergleichspreis
+ * das Baujahrband (domain/generations.ts).
+ */
+export function encarTrim(item: EncarListItem, grade: EncarGrade | null, make = grade?.makeEn || MAKER_EN[item.Manufacturer] || item.Manufacturer): string {
   const parts = [grade?.gradeEn, item.Badge, item.BadgeDetail]
     .map((p) => (p ?? '').trim())
     .filter((p) => p && !HANGUL.test(p) && !p.includes('세부등급'));
+  const gen = generationOf({ make, model: item.Model ?? '', trim: '' });
+  if (gen && !parts.some((p) => new RegExp(`(^|\\s)${gen.code}(?=\\s|$)`, 'i').test(p))) parts.push(gen.code);
   return Array.from(new Set(parts)).join(' · ');
 }
 
@@ -128,7 +135,7 @@ export function mapEncarItem(item: EncarListItem, grade: EncarGrade | null, fetc
     year,
     make,
     model,
-    trim: encarTrim(item, grade),
+    trim: encarTrim(item, grade, make),
     km: Math.round(num(item.Mileage) ?? 0),
     engine,
     engineCcm: ccm,
