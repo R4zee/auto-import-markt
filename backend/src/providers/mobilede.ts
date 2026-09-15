@@ -33,6 +33,10 @@ export interface RefQuery {
   fuel: Fuel | null;
   /** Baureihe, aus der das Baujahrband stammt (nur zur Anzeige) */
   generation?: string | null;
+  /** Obergrenze Laufleistung (Band, z. B. 125000) – als `ml=:<kmTo>` mitgesucht; null = ohne Grenze */
+  kmTo?: number | null;
+  /** mobile.de-Modell-ID (Parameter `ms=<make>;<model>;;`), sofern bekannt – sonst Beschreibungssuche */
+  modelId?: number | null;
 }
 
 /** mobile.de-Marken-IDs (Parameter `ms=<id>;;;<Beschreibung>`), Schlüssel = makeKey des kanonischen Namens */
@@ -65,9 +69,10 @@ export function mobileSearchParams(q: RefQuery, page = 1): URLSearchParams {
   sp.set('vc', 'Car');
   sp.set('cn', 'DE');
   sp.set('dam', '0');
-  sp.set('ms', `${makeId ?? ''};;;${q.description}`);
+  sp.set('ms', q.modelId ? `${makeId ?? ''};${q.modelId};;` : `${makeId ?? ''};;;${q.description}`);
   sp.set('fr', `${q.yearFrom}:${q.yearTo}`);
   if (q.fuel) sp.set('ft', MOBILE_FUEL[q.fuel]);
+  if (q.kmTo) sp.set('ml', `:${q.kmTo}`);
   sp.set('sb', 'p');
   sp.set('od', 'up');
   if (page > 1) sp.set('pageNumber', String(page));

@@ -88,20 +88,46 @@ export function kmWindow(km: number): { from: number; to: number } {
   return { from: 0, to: Math.round(km * (1 + pct)) };
 }
 
+export const KM_BAND_STEP = 25000;
+export const KM_BAND_MAX = 300000;
+
 /**
- * Bucket-Abfrage: Marke, Variantentext, Kraftstoff und Baujahrband. Das Band ist der Bauzeitraum der Baureihe
- * (W221, E93, F30 …), wenn das Inserat den Code nennt, sonst Baujahr ± REFERENCE_YEAR_SPAN.
+ * Laufleistungsband für die Suche: die Obergrenze des km-Fensters, auf 25.000 km aufgerundet (mindestens 50.000),
+ * damit mobile.de nur passende Angebote liefert und nicht die Seite mit 300.000-km-Wagen füllt. Über 300.000 km
+ * ohne Grenze. Muss zur SQL-Gruppierung in refreshReferenceBuckets passen.
  */
-export function bucketQuery(l: Pick<Listing, 'make' | 'model' | 'trim' | 'year' | 'fuel'>): RefQuery | null {
+export function kmBandFor(km: number): number | null {
+  const pct = km < config.reference.kmThreshold ? config.reference.kmWindowBelow : config.reference.kmWindowAbove;
+  // ganzzahlig wie in kmBandSql() (CAST … AS INTEGER schneidet ab)
+  const to = Math.floor(km * (1 + pct));
+  if (to > KM_BAND_MAX) return null;
+  return Math.max(2 * KM_BAND_STEP, Math.ceil(to / KM_BAND_STEP) * KM_BAND_STEP);
+}
+
+/** Dasselbe Band als SQL-Ausdruck über die Spalte `km` (Gruppierung im Refresh-Job) – muss zu kmBandFor() passen */
+export function kmBandSql(): string {
+  const { kmThreshold, kmWindowBelow, kmWindowAbove } = config.reference;
+  const kmTo = `CAST((CASE WHEN km < ${kmThreshold} THEN km * ${1 + kmWindowBelow} ELSE km * ${1 + kmWindowAbove} END) AS INTEGER)`;
+  // Ganzzahldivision: (n + Schritt − 1) / Schritt = aufrunden
+  return `CASE WHEN ${kmTo} > ${KM_BAND_MAX} THEN NULL ELSE MAX(${2 * KM_BAND_STEP}, ((${kmTo} + ${KM_BAND_STEP - 1}) / ${KM_BAND_STEP}) * ${KM_BAND_STEP}) END`;
+}
+
+/**
+ * Bucket-Abfrage: Marke, Variantentext, Kraftstoff, Baujahrband und Laufleistungsband. Das Baujahrband ist der
+ * Bauzeitraum der Baureihe (W221, E93, F30 …), wenn das Inserat den Code nennt, sonst Baujahr ± REFERENCE_YEAR_SPAN.
+ * `kmBand` übersteuert das aus `km` berechnete Band (Refresh-Job gruppiert in SQL).
+ */
+export function bucketQuery(l: Pick<Listing, 'make' | 'model' | 'trim' | 'year' | 'fuel' | 'km'> & { kmBand?: number | null }): RefQuery | null {
   if (mobileMakeId(l.make) == null) return null;
   const description = variantText(l);
   if (!description) return null;
   const band = yearBand(l, config.reference.yearSpan);
-  return { make: l.make, description, yearFrom: band.from, yearTo: band.to, fuel: (l.fuel as Fuel) ?? null, generation: band.generation };
+  const kmTo = l.kmBand !== undefined ? l.kmBand : kmBandFor(l.km);
+  return { make: l.make, description, yearFrom: band.from, yearTo: band.to, fuel: (l.fuel as Fuel) ?? null, generation: band.generation, kmTo };
 }
 
 export function bucketKey(q: RefQuery): string {
-  return `${source.id}|${makeKey(q.make)}|${q.description.toLowerCase()}|${q.fuel ?? 'any'}|${q.yearFrom}-${q.yearTo}`;
+  return `${source.id}|${makeKey(q.make)}|${q.description.toLowerCase()}|${q.fuel ?? 'any'}|${q.yearFrom}-${q.yearTo}|km${q.kmTo ?? 'all'}`;
 }
 
 /**
@@ -287,13 +313,13 @@ export interface RefreshReport { candidates: number; fetched: number; fresh: num
 export async function refreshReferenceBuckets(opts: { limit?: number; log?: (line: string) => void } = {}): Promise<RefreshReport> {
   const limit = opts.limit ?? config.reference.maxPerRun;
   const log = opts.log ?? (() => undefined);
-  const rows = await query<{ make: string; model: string; trim1: string; fuel: string; year: number; n: number }>(
-    `SELECT make, model, substr(trim, 1, instr(trim || ' ', ' ') - 1) AS trim1, fuel, year, COUNT(*) AS n
-     FROM listings WHERE active = 1 GROUP BY make, model, trim1, fuel, year`,
+  const rows = await query<{ make: string; model: string; trim1: string; fuel: string; year: number; km_band: number | null; n: number }>(
+    `SELECT make, model, substr(trim, 1, instr(trim || ' ', ' ') - 1) AS trim1, fuel, year, ${kmBandSql()} AS km_band, COUNT(*) AS n
+     FROM listings WHERE active = 1 GROUP BY make, model, trim1, fuel, year, km_band`,
   );
   const wanted = new Map<string, { q: RefQuery; n: number }>();
   for (const r of rows) {
-    const q = bucketQuery({ make: r.make, model: r.model, trim: r.trim1 ?? '', year: Number(r.year), fuel: r.fuel as Fuel });
+    const q = bucketQuery({ make: r.make, model: r.model, trim: r.trim1 ?? '', year: Number(r.year), fuel: r.fuel as Fuel, km: 0, kmBand: r.km_band == null ? null : Number(r.km_band) });
     if (!q) continue;
     const key = bucketKey(q);
     const cur = wanted.get(key);
@@ -311,7 +337,7 @@ export async function refreshReferenceBuckets(opts: { limit?: number; log?: (lin
       const b = await fetchBucket(q);
       report.fetched++;
       report.samples += b.samples.length;
-      log(`  ✔ ${q.make} ${q.description} ${q.fuel ?? ''} ${q.yearFrom}–${q.yearTo} (${n} Inserate) → ${b.samples.length} Angebote${b.total != null ? ` von ${b.total}` : ''}, ab ${b.samples[0]?.priceEur ?? '–'} €`);
+      log(`  ✔ ${q.make} ${q.description} ${q.fuel ?? ''} ${q.yearFrom}–${q.yearTo}${q.kmTo ? ` ≤${q.kmTo} km` : ''} (${n} Inserate) → ${b.samples.length} passende${b.total != null ? ` von ${b.total}` : ''}, ab ${b.samples[0]?.priceEur ?? '–'} €`);
     } catch (e) {
       report.failed++;
       const msg = e instanceof Error ? e.message : String(e);

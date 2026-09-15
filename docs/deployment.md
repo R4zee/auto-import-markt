@@ -365,8 +365,8 @@ CLS 350 und E 350), muss die Variantenkennung zusätzlich als eigenes Wort im mo
 
 Quelle ist der JSON-Endpunkt der mobile.de-Web-App (`/consumer/api/search/srp`, kein Key, Grauzone wie Encar).
 Damit die Suche schnell und günstig bleibt, holt nicht die API die Preise, sondern ein Job nach dem Sync
-(`backend/src/cli/reference.ts`): je Suchbucket (Marke, Variante, Kraftstoff, Baujahrband) die günstigsten
-Angebote in die Tabelle `ref_prices`; die API liest je Trefferseite nur diese Buckets (eine Abfrage).
+(`backend/src/cli/reference.ts`): je Suchbucket (Marke, Variante, Kraftstoff, Baujahrband, Laufleistungsband) die
+günstigsten Angebote in die Tabelle `ref_prices`; die API liest je Trefferseite nur diese Buckets (eine Abfrage).
 
 1. Vom eigenen Rechner prüfen (schreibt nichts):
    `npm run probe -w backend -- mobile BMW 320d 2019 Diesel`. Bestätigt 15.09.2026: `✔ Modus url HTTP 200 · 21 Stichproben ·

@@ -6,7 +6,7 @@ process.env.REFERENCE_MAKE_IDS = '{"Hongqi": 99999}';
 
 const { copartBody, copartPhoto, copartSkipReason, mapCopart } = await import('../src/providers/copart.js');
 const { extractItems, firstInt, mapMobileItem, mobileApiUrl, mobileMakeId, mobileSearchParams } = await import('../src/providers/mobilede.js');
-const { bucketKey, bucketQuery, detailFrom, diffPct, engineMatches, kmWindow, summarize, titleMatches, variantText } = await import('../src/services/reference.js');
+const { bucketKey, bucketQuery, detailFrom, diffPct, engineMatches, kmBandFor, kmWindow, summarize, titleMatches, variantText } = await import('../src/services/reference.js');
 const { powerKwFromText } = await import('../src/providers/types.js');
 const { generationOf, yearBand } = await import('../src/domain/generations.js');
 import type { RefBucket } from '../src/services/reference.js';
@@ -33,25 +33,34 @@ describe('Vergleichspreise DE – Suchtext und Fenster', () => {
     assert.deepEqual(kmWindow(100_000), { from: 0, to: 130_000 });
   });
 
-  it('Bucket: Baujahr ±1 ohne Baureihe, Kraftstoff, Marken-ID nötig; Überschreibung per REFERENCE_MAKE_IDS', () => {
-    const q = bucketQuery({ make: 'BMW', model: '3 Series', trim: '320d', year: 2019, fuel: 'Diesel' });
+  it('Laufleistungsband für die Suche: Fenster-Obergrenze auf 25.000 aufgerundet, min. 50.000, über 300.000 offen', () => {
+    assert.equal(kmBandFor(80_000), 125_000);
+    assert.equal(kmBandFor(10_000), 50_000);
+    assert.equal(kmBandFor(100_000), 150_000);
+    assert.equal(kmBandFor(200_000), 275_000);
+    assert.equal(kmBandFor(250_000), null);
+  });
+
+  it('Bucket: Baujahr ±1 ohne Baureihe, Kraftstoff, km-Band, Marken-ID nötig; Überschreibung per REFERENCE_MAKE_IDS', () => {
+    const q = bucketQuery({ make: 'BMW', model: '3 Series', trim: '320d', year: 2019, fuel: 'Diesel', km: 80_000 });
     assert.ok(q);
-    assert.equal(q.yearFrom, 2018); assert.equal(q.yearTo, 2020); assert.equal(q.description, '320d'); assert.equal(q.generation, null);
-    assert.equal(bucketKey(q), 'mobilede|bmw|320d|Diesel|2018-2020');
-    assert.equal(bucketQuery({ make: 'Unbekannt', model: 'X', trim: '', year: 2019, fuel: 'Petrol' }), null);
+    assert.equal(q.yearFrom, 2018); assert.equal(q.yearTo, 2020); assert.equal(q.description, '320d'); assert.equal(q.generation, null); assert.equal(q.kmTo, 125_000);
+    assert.equal(bucketKey(q), 'mobilede|bmw|320d|Diesel|2018-2020|km125000');
+    assert.equal(bucketQuery({ make: 'BMW', model: '3 Series', trim: '320d', year: 2019, fuel: 'Diesel', km: 0, kmBand: 125_000 })?.kmTo, 125_000, 'Refresh-Job übergibt das Band aus SQL');
+    assert.equal(bucketQuery({ make: 'Unbekannt', model: 'X', trim: '', year: 2019, fuel: 'Petrol', km: 1 }), null);
     assert.equal(mobileMakeId('Hongqi'), 99999);
     assert.equal(mobileMakeId('mercedes benz'), 17200);
   });
 
   it('Baureihe im Inserat → Bauzeitraum statt Baujahr ±1 (2011er W221 zählt zur 2013er, W222 nicht)', () => {
-    const w221 = bucketQuery({ make: 'Mercedes-Benz', model: 'S-Class W221', trim: 'S350 CDI 4MATIC', year: 2013, fuel: 'Diesel' });
+    const w221 = bucketQuery({ make: 'Mercedes-Benz', model: 'S-Class W221', trim: 'S350 CDI 4MATIC', year: 2013, fuel: 'Diesel', km: 80_000 });
     assert.ok(w221);
     assert.equal(w221.generation, 'W221'); assert.equal(w221.yearFrom, 2005); assert.equal(w221.yearTo, 2013); assert.equal(w221.description, 'S 350');
-    const w222 = bucketQuery({ make: 'Mercedes-Benz', model: 'S-Class (W222)', trim: 'S350d', year: 2014, fuel: 'Diesel' });
+    const w222 = bucketQuery({ make: 'Mercedes-Benz', model: 'S-Class (W222)', trim: 'S350d', year: 2014, fuel: 'Diesel', km: 80_000 });
     assert.ok(w222);
     assert.equal(w222.generation, 'W222'); assert.equal(w222.yearFrom, 2013); assert.equal(w222.yearTo, 2020);
     assert.notEqual(bucketKey(w221), bucketKey(w222));
-    const e93 = bucketQuery({ make: 'BMW', model: '3 Series (E93)', trim: '320i Convertible', year: 2012, fuel: 'Petrol' });
+    const e93 = bucketQuery({ make: 'BMW', model: '3 Series (E93)', trim: '320i Convertible', year: 2012, fuel: 'Petrol', km: 80_000 });
     assert.equal(e93?.generation, 'E93'); assert.equal(e93?.yearFrom, 2005); assert.equal(e93?.yearTo, 2013);
     assert.equal(generationOf({ make: 'Mercedes-Benz', model: 'E-Class', trim: 'E220 CDI', year: 2012 }), null, 'Variante E220 ist kein BMW-Code');
     assert.equal(generationOf({ make: 'BMW', model: '5 Series', trim: 'F10 520d', year: 2014 })?.code, 'F10');
@@ -155,6 +164,10 @@ describe('mobile.de – URL und Antwort', () => {
     assert.equal(sp.get('ft'), 'DIESEL');
     assert.equal(sp.get('sb'), 'p'); assert.equal(sp.get('od'), 'up');
     assert.equal(sp.get('cn'), 'DE'); assert.equal(sp.get('dam'), '0');
+    assert.equal(sp.get('ml'), null);
+    const withBand = mobileSearchParams({ make: 'Mercedes-Benz', description: 'S 350', yearFrom: 2005, yearTo: 2013, fuel: 'Diesel', kmTo: 125_000, modelId: 10 });
+    assert.equal(withBand.get('ms'), '17200;10;;', 'Modell-ID statt Freitext');
+    assert.equal(withBand.get('ml'), ':125000');
     assert.ok(mobileApiUrl({ make: 'BMW', description: '320d', yearFrom: 2018, yearTo: 2020, fuel: null }, 1, 'query').startsWith('https://www.mobile.de/consumer/api/search/srp?isSearchRequest=true'));
     assert.ok(mobileApiUrl({ make: 'BMW', description: '320d', yearFrom: 2018, yearTo: 2020, fuel: null }, 2, 'url').includes(encodeURIComponent('pageNumber=2')));
   });

@@ -229,8 +229,9 @@ mobile.de-Web-App:
 | **mobile.de** | `GET https://www.mobile.de/consumer/api/search/srp?url=<search.html-Adresse>` mit Header `x-mobile-client: de.mobile.consumer-webapp`; die search.html-Adresse trägt die klassischen Parameter `ms=<MarkenID>;;;<Beschreibung>`, `fr=2018:2020` (Erstzulassung), `ft=DIESEL`, `sb=p&od=up` (Preis aufsteigend), `cn=DE`, `dam=0`, `pageNumber=`; Antwort `searchResults{numResultsTotal,numPages,hasNextPage,items[]}` mit `price{gross,grossAmount}`, `attr{fr:"05/2020", ml:"130.000 km", pw:"140 kW (190 PS)", cc:"1.995 cm³", ft, tr, loc}`, `title`, `subTitle`, `relativeUrl`, `priceRating` **[B]** (Live-Probe 15.09.2026: 730 Treffer, 37 Seiten; dieselben Parameter direkt an `/srp` → 400) | `providers/mobilede.ts`, `services/reference.ts`, Job `cli/reference.ts` | **bestätigt 15.09.2026**, direkt aus Node ohne Proxy; 21 von 26 Einträgen einer Seite sind Inserate, der Rest Werbeplätze |
 
 Berechnung (`services/reference.ts`): Bucket = Marke + Variantentext (erstes Ausstattungswort mit Ziffer bei
-Baureihen wie „3 Series“/„E-Class“, sonst Modellname) + Kraftstoff + Baujahrband → günstigste Angebote als
-Stichproben (Preis, Baujahr, km, kW, Hubraum) in `ref_prices`. Das Baujahrband ist der Bauzeitraum der Baureihe,
+Baureihen wie „3 Series“/„E-Class“, sonst Modellname) + Kraftstoff + Baujahrband + Laufleistungsband (Obergrenze
+des km-Fensters auf 25.000 km aufgerundet, als `ml=:<km>` mitgesucht, damit die günstigsten Treffer nicht aus
+300.000-km-Wagen bestehen) → günstigste Angebote als Stichproben (Preis, Baujahr, km, kW, Hubraum) in `ref_prices`. Das Baujahrband ist der Bauzeitraum der Baureihe,
 wenn das Inserat einen Werkscode nennt (W221 2005–2013, W222 2013–2020, E90–E93 2005–2013, F30/F31 2012–2019, G30 …;
 Tabelle `domain/generations.ts` für Mercedes, BMW, Porsche, Audi, VW Golf/Passat, Land Rover), sonst Baujahr ±1.
 Je Inserat: Laufleistung höchstens +50 % (< 100.000 km) bzw. +30 % (≥ 100.000 km), nach unten offen; Hubraum ±12 %

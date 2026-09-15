@@ -6,7 +6,7 @@ import { mapSauto, SautoProvider } from '../providers/sauto.js';
 import { mapSubito, SubitoProvider } from '../providers/subito.js';
 import { CopartProvider, copartSkipReason, mapCopart } from '../providers/copart.js';
 import { extractItems, mapMobileItem, mobileApiUrl, mobileMakeId, MobileDeReference, mobileSearchUrl, type RefQuery } from '../providers/mobilede.js';
-import { bucketKey, kmWindow, summarize, titleMatches } from '../services/reference.js';
+import { bucketKey, kmBandFor, kmWindow, summarize, titleMatches } from '../services/reference.js';
 import { yearBand } from '../domain/generations.js';
 import type { Fuel } from '../domain/types.js';
 
@@ -289,9 +289,9 @@ async function probeMobile(make: string, description: string, year: number, fuel
   // Beschreibung darf einen Baureihen-Code enthalten ("S350 W221") → Bauzeitraum statt Baujahr ±1
   const band = yearBand({ make, model: description, trim: description, year }, config.reference.yearSpan);
   const cleanDesc = band.generation ? description.replace(new RegExp(`\\s*\\b${band.generation}\\b\\s*`, 'i'), ' ').trim() : description;
-  const q: RefQuery = { make, description: cleanDesc, yearFrom: band.from, yearTo: band.to, fuel, generation: band.generation };
+  const q: RefQuery = { make, description: cleanDesc, yearFrom: band.from, yearTo: band.to, fuel, generation: band.generation, kmTo: kmBandFor(km) };
   const src = new MobileDeReference();
-  console.log(`\n=== mobile.de · ${make} (ID ${mobileMakeId(make) ?? 'UNBEKANNT → REFERENCE_MAKE_IDS'}) · "${cleanDesc}" · ${q.yearFrom}–${q.yearTo}${band.generation ? ` (Baureihe ${band.generation})` : ''} · ${fuel ?? 'alle Kraftstoffe'}`);
+  console.log(`\n=== mobile.de · ${make} (ID ${mobileMakeId(make) ?? 'UNBEKANNT → REFERENCE_MAKE_IDS'}) · "${cleanDesc}" · ${q.yearFrom}–${q.yearTo}${band.generation ? ` (Baureihe ${band.generation})` : ''} · ${fuel ?? 'alle Kraftstoffe'} · ${km} km → Suche bis ${q.kmTo ?? 'unbegrenzt'} km`);
   console.log('Such-URL (Browser):', mobileSearchUrl(q));
   let got: Awaited<ReturnType<typeof src.fetchPage>> | null = null;
   for (const mode of ['query', 'url'] as const) {
@@ -311,6 +311,10 @@ async function probeMobile(make: string, description: string, year: number, fuel
   }
   const raw = got.raw as Record<string, unknown>;
   console.log('Schlüssel der Antwort:', Object.keys(raw).join(', '));
+  // Filterdaten der Antwort: enthalten vermutlich die Modell-Liste der Marke mit IDs (für ms=<make>;<model>;; statt Freitext)
+  console.log('filters (gekürzt):', short(raw.filters, 6000));
+  console.log('aggregations (gekürzt):', short(raw.aggregations, 1500));
+  console.log('chips (gekürzt):', short(raw.chips, 800));
   const items = extractItems(raw);
   console.log(`Trefferliste: ${items.length} Einträge · erster Eintrag (gekürzt):`, short(items[0], 2500));
   for (const s of got.items.slice(0, 8)) console.log(`  ✔ ${s.year} · ${s.km} km · ${s.priceEur} € · ${s.kw ?? '?'} kW · ${s.ccm ?? '?'} cm³ · ${s.title} · ${s.url ?? ''}`);

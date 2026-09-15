@@ -12,6 +12,7 @@ process.env.FX_BASE_URL = 'http://127.0.0.1:1';
 const { closeDb, query, ready, run } = await import('../src/db.js');
 const { listingsRepo } = await import('../src/repositories/listings.js');
 const { canonicalizeStoredMakes, syncProvider } = await import('../src/services/sync.js');
+const { kmBandFor, kmBandSql } = await import('../src/services/reference.js');
 const { listingId } = await import('../src/providers/types.js');
 
 import type { Listing } from '../src/domain/types.js';
@@ -88,6 +89,12 @@ describe('Sync: Teilquellen, Duplikate und unveränderte Inserate', async () => 
     assert.equal(rows.length, 2);
     assert.deepEqual(rows.map((x) => x.make), ['Mercedes-Benz', 'Mercedes-Benz']);
     assert.ok(rows.every((x) => x.search_text.startsWith('mercedes-benz ')), JSON.stringify(rows));
+  });
+
+  it('Laufleistungsband in SQL entspricht kmBandFor() (Refresh-Job und Auslieferung finden denselben Bucket)', async () => {
+    const kms = [0, 9_999, 33_333, 50_000, 66_667, 80_000, 99_999, 100_000, 123_456, 150_000, 192_307, 192_308, 230_769, 230_770, 250_000, 400_000];
+    const rows = await query<{ km: number; band: number | null }>(`SELECT km, ${kmBandSql()} AS band FROM (${kms.map((k) => `SELECT ${k} AS km`).join(' UNION ALL ')})`);
+    for (const r of rows) assert.equal(r.band == null ? null : Number(r.band), kmBandFor(Number(r.km)), `km=${r.km}`);
   });
 
   it('Bestandskorrektur vereinheitlicht bereits gespeicherte Marken samt Suchspalte', async () => {
