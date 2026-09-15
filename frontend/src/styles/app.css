@@ -20,6 +20,13 @@ select.input option { background: var(--color-surface); color: var(--color-text)
 .aim-picker select option { background: var(--color-surface); color: var(--color-text); }
 .aim-picker .ph-caret-down { font-size: 12px; color: var(--color-neutral-500); }
 
+/* Vergleichspreis DE auf der Kachel: „DE ab €X“ und Abstand des Endpreises in Prozent */
+.aim-ref { display: flex; align-items: center; gap: 6px; font-size: 11.5px; margin-top: 4px; white-space: nowrap; cursor: help; }
+.aim-ref-label { color: var(--color-neutral-400); }
+.aim-ref-diff { font-weight: 600; padding: 1px 6px; border-radius: 999px; }
+.aim-ref-good { color: var(--color-accent-100, #d7f5e3); background: color-mix(in srgb, var(--color-accent) 28%, transparent); }
+.aim-ref-bad { color: var(--color-neutral-200); background: color-mix(in srgb, #e5484d 26%, transparent); }
+
 /* Segment-Schalter: der Rahmen der aktiven Option folgt den abgerundeten Ecken des Containers,
    statt an ihnen abgeschnitten zu werden (Container hat overflow: hidden). */
 .seg .seg-opt:first-child { border-top-left-radius: inherit; border-bottom-left-radius: inherit; }

@@ -80,6 +80,17 @@ export function CarCard({ car }: { car: Listing }) {
               <span className="tabular" style={{ fontFamily: 'var(--font-heading)', fontSize: 21, letterSpacing: '-0.02em' }}>{sourceMain}</span>
             </div>
             <div className="tabular" style={{ fontSize: 11.5, color: 'var(--color-neutral-400)', marginTop: 2 }}>{sourceSub}</div>
+            {car.reference && (
+              <div
+                className="tabular aim-ref"
+                title={t('refTooltip', { n: car.reference.count, kmFrom: car.reference.kmFrom.toLocaleString('de-DE'), kmTo: car.reference.kmTo.toLocaleString('de-DE'), yearFrom: car.reference.yearFrom, yearTo: car.reference.yearTo, landed: money(car.landed.totalEur) })}
+              >
+                <span className="aim-ref-label">{t('refDeFrom', { price: money(car.reference.minEur) })}</span>
+                <span className={car.reference.diffPct <= 0 ? 'aim-ref-diff aim-ref-good' : 'aim-ref-diff aim-ref-bad'}>
+                  {(car.reference.diffPct > 0 ? '+' : '−') + Math.abs(car.reference.diffPct).toLocaleString('de-DE', { maximumFractionDigits: 0 })} %
+                </span>
+              </div>
+            )}
           </div>
           <button className="btn btn-primary" style={{ height: 32, fontSize: 12.5 }} onClick={() => navigate({ view: 'detail', id: car.id })}>
             {t('details')}<i className="ph ph-arrow-right" style={{ fontSize: 13 }} />

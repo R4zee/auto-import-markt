@@ -24,11 +24,19 @@ export interface Listing {
   fetchedAt: string; active: boolean;
   landed: LandedCost;
   vehicleTax: { annualEur: number; method: string; estimated: boolean } | null;
+  /** Vergleichspreis DE (günstigstes vergleichbares Angebot) und Abstand des Endpreises in Prozent */
+  reference: ReferenceSummary | null;
+}
+
+export interface ReferenceSummary {
+  source: string; minEur: number; medianEur: number | null; count: number; kmFrom: number; kmTo: number;
+  yearFrom: number; yearTo: number; url: string | null; diffPct: number; fetchedAt: string;
 }
 
 export interface ReferencePrices {
   source: string; count: number; minEur: number | null; medianEur: number | null; maxEur: number | null; medianKm: number | null;
-  yearFrom: number; yearTo: number; samples: Array<{ priceEur: number; year: number; km: number; url: string | null }>; fetchedAt: string;
+  yearFrom: number; yearTo: number; kmFrom: number; kmTo: number; landedEur: number; diffPct: number | null; url: string | null;
+  samples: Array<{ priceEur: number; year: number; km: number; url: string | null }>; fetchedAt: string;
 }
 
 export interface Partner { id: string; name: string; note: string; markets: MarketCode[]; email: string | null }
@@ -80,8 +88,8 @@ export const api = {
 
   listing: (id: string, dest: DestCode) => http<{ listing: Listing; partner: Partner | null; referenceAvailable?: boolean }>(`/api/listings/${encodeURIComponent(id)}?dest=${dest}`),
 
-  async reference(id: string): Promise<ReferencePrices | null> {
-    const res = await fetch(`${BASE}/api/listings/${encodeURIComponent(id)}/reference`);
+  async reference(id: string, dest: DestCode): Promise<ReferencePrices | null> {
+    const res = await fetch(`${BASE}/api/listings/${encodeURIComponent(id)}/reference?dest=${dest}`);
     if (res.status === 204 || !res.ok) return null;
     return (await res.json()) as ReferencePrices;
   },

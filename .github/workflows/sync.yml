@@ -62,5 +62,22 @@ jobs:
           EUROPE_PROXY_URL: ${{ secrets.EUROPE_PROXY_URL }}
           # Partner-Feeds (JSON-Array, leer = keine)
           PARTNER_FEEDS: ${{ secrets.PARTNER_FEEDS }}
+          # USA: Copart-Suchendpunkt (kein Key) – einschalten, sobald `npm run probe -- copart` ihn bestätigt hat
+          COPART_ENABLED: ${{ vars.COPART_ENABLED || 'false' }}
+          COPART_MAKES: ${{ vars.COPART_MAKES }}
+          COPART_PROXY_URL: ${{ secrets.COPART_PROXY_URL }}
           # weitere Provider-Keys hier ergänzen, z. B. APIBARA_API_KEY: ${{ secrets.APIBARA_API_KEY }}
         run: node --import tsx src/cli/sync.ts
+      - name: Vergleichspreise DE (mobile.de) → Turso
+        # Läuft nur mit Variable REFERENCE_ENABLED=true; je Lauf höchstens REFERENCE_MAX_PER_RUN Buckets (Standard 1500)
+        if: ${{ vars.REFERENCE_ENABLED == 'true' }}
+        working-directory: backend
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          REFERENCE_ENABLED: 'true'
+          REFERENCE_MOBILE_MODE: ${{ vars.REFERENCE_MOBILE_MODE || 'query' }}
+          REFERENCE_MAX_PER_RUN: ${{ vars.REFERENCE_MAX_PER_RUN || '1500' }}
+          REFERENCE_MAKE_IDS: ${{ vars.REFERENCE_MAKE_IDS }}
+          REFERENCE_PROXY_URL: ${{ secrets.REFERENCE_PROXY_URL }}
+        run: node --import tsx src/cli/reference.ts

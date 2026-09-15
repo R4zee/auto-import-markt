@@ -213,3 +213,41 @@ bundesfinanzministerium.de (Kfz-Rechner)
 ## 8. Anbindungsstand und Aucnet
 
 Umgesetzte Adapter (Encar live, Apibara, auto-api.com, Carapis) und die Aucnet-Pruefung stehen in [anbindung.md](anbindung.md).
+
+---
+
+## 9. Vergleichspreise Deutschland (Stand 15.09.2026)
+
+Ziel: auf jeder Kachel das günstigste vergleichbare deutsche Angebot und der Abstand des Endpreises inkl. TÜV.
+Keine deutsche Plattform bietet eine kostenlose Lese-API (AutoScout24: Akamai-Bot-Schutz, nur Einstell-API;
+Kleinanzeigen: inoffizielle App-API mit rotierenden Zugangsdaten, AGB verbieten automatisierten Zugriff;
+mobile.de Search-API: nur für Händler mit Vertrag). Genutzt wird deshalb – wie bei Encar – der JSON-Endpunkt der
+mobile.de-Web-App:
+
+| Quelle | Endpunkt (keyless) | Adapter | Stand |
+|---|---|---|---|
+| **mobile.de** | `GET https://www.mobile.de/consumer/api/search/srp?<search.html-Parameter>` mit Header `x-mobile-client: de.mobile.consumer-webapp` (ohne Header 400 „Missing or invalid client header“); Parameter wie die klassische Suche: `ms=<MarkenID>;;;<Beschreibung>`, `fr=2018:2020` (Erstzulassung), `ft=DIESEL`, `sb=p&od=up` (Preis aufsteigend), `cn=DE`, `dam=0`; Antwort `searchResults{numResultsTotal,numPages,hasNextPage,items[]}` mit `price`, `attr{fr,ml,pw,ft,…}`, `relativeUrl` **[G]** (Beschreibungen von Scraper-Anbietern; bis zu ~50 Seiten je Suche) | `providers/mobilede.ts`, `services/reference.ts`, Job `cli/reference.ts` | **ungeprüft** – mit `npm run probe -- mobile BMW 320d 2019 Diesel` bestätigen; Feldnamen werden tolerant gelesen, die Probe zeigt die Rohantwort |
+
+Berechnung (`services/reference.ts`): Bucket = Marke + Variantentext (erstes Ausstattungswort mit Ziffer bei
+Baureihen wie „3 Series“/„E-Class“, sonst Modellname) + Kraftstoff + Baujahr ±1 → günstigste Angebote als
+Stichproben (Preis, Baujahr, km, kW, Hubraum) in `ref_prices`. Je Inserat: Laufleistungsfenster ±50 % (< 100.000 km)
+bzw. ±30 % (≥ 100.000 km), Hubraum ±12 %, günstigstes Angebot = Vergleichspreis; Abstand = (Endpreis − Vergleichspreis)
+/ Vergleichspreis. Marken-IDs von mobile.de sind für rund 60 Marken hinterlegt (`REFERENCE_MAKE_IDS` ergänzt).
+
+## 10. USA, Golfstaaten, Japan, Korea – kostenlose Frontend-Endpunkte (Stand 15.09.2026)
+
+| Markt | Quelle | Endpunkt | Stand |
+|---|---|---|---|
+| **USA** | **Copart** | `POST https://www.copart.com/public/lots/search-results` (JSON-Body `query:["*"], filter:{MISC:["#VehicleTypeCode:VEHTYPE_V"]}, page, size`; Antwort `data.results.content[]` mit Kurzschlüsseln `ln, mkn, lm, lmg, lcy, orr, hb, bnp, ad, yn, dd, ft, tmtp, drv, egn, tims, tt, lcd`) **[G]** (von öffentlichen Scraper-Projekten belegt) | `providers/copart.ts` umgesetzt, **ungeprüft** – `npm run probe -- copart`; Copart nutzt Imperva-Schutz, ggf. `COPART_PROXY_URL` |
+| USA | IAAI | Suche nur über geschützte Endpunkte (Incapsula) | offen – weiterhin über Apibara |
+| USA | Cars.com / Autotrader / CarGurus | serverseitig gerenderte Seiten, Bot-Schutz | offen |
+| **VAE** | **Dubizzle** | Algolia-Suchindex der Website (App-ID, Search-Key und Indexname stehen im Seitenquelltext; `POST https://<app>-dsn.algolia.net/1/indexes/*/queries`), Motors-Kategorie mit Preis in AED, Baujahr, km, Marke/Modell **[G]** | offen – App-ID/Key per Browser (Netzwerk-Tab, Aufruf `algolia.net`) auslesen und mit `probe url` prüfen |
+| VAE | Dubicars, YallaMotor | HTML | offen |
+| **Japan** | Goo-net Exchange (goo-net-exchange.com, ~256.000 Exportfahrzeuge), TCV, BE FORWARD, SBT | serverseitig gerenderte Seiten, kein bekannter JSON-Endpunkt | offen – Kandidaten-URLs mit `probe url` prüfen; alternativ Carsensor-Web-API (kostenloser Key, japanischer Inlandsmarkt) |
+| **Korea** | **Charancha (차란차, Deutsch Auto World / Deutsch Automobil Group)** – charancha.com, Plattform des Gebrauchtwagenzentrums Deutsch Auto World in Seoul | Suche unter `/search/view.do` (JSP), JSON-Endpunkt unbekannt | offen – im Browser Netzwerk-Tab die Listen-Anfrage kopieren, `probe url` |
+| Korea | **Lotte Rent-a-Car „T car“** (tcar.lotterentacar.net) – Direktverkauf ehemaliger Mietwagen der Lotte Rental | JSON-Endpunkt unbekannt | offen – wie oben („Lotte Car World“ wurde als dieses Portal gedeutet; Lotte Auto Auction ist nur für Händler) |
+
+Vorgehen für offene Zeilen: Seite im Browser öffnen → F12 → Netzwerk → Filter „Fetch/XHR“ → Liste blättern →
+den Aufruf mit der Trefferliste per Rechtsklick „Copy as cURL“ kopieren und hier einfügen; alternativ
+`npm run probe -w backend -- url "<URL>" "Header:Wert"` ausführen und die Ausgabe schicken. Daraus entsteht der
+Adapter wie bei Sauto/Subito in einer Runde.

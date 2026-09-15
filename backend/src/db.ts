@@ -148,6 +148,19 @@ async function migrate(): Promise<void> {
       value TEXT NOT NULL
     );
 
+    -- Vergleichspreise DE: je Suchbucket (Quelle, Marke, Variante, Kraftstoff, Baujahrband) die günstigsten Angebote
+    -- mit Preis/Baujahr/km/Leistung als JSON; das Laufleistungsfenster wird je Inserat beim Ausliefern angewendet
+    CREATE TABLE IF NOT EXISTS ref_prices (
+      key TEXT PRIMARY KEY,
+      source TEXT NOT NULL,
+      query_json TEXT NOT NULL,
+      samples_json TEXT NOT NULL,
+      total INTEGER,
+      url TEXT NOT NULL DEFAULT '',
+      fetched_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ref_prices_fetched ON ref_prices(fetched_at);
+
     -- Übersetzungs-/Spezifikations-Cache je Encar-Ausstattungskombination (Hersteller, Modell, Badge → englische Namen, Hubraum)
     CREATE TABLE IF NOT EXISTS encar_grades (
       manufacturer TEXT NOT NULL,

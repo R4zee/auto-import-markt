@@ -144,8 +144,32 @@ export interface VehicleTax {
   estimated: boolean;
 }
 
+/**
+ * Vergleichspreis aus dem deutschen Markt (günstigstes vergleichbares Angebot: gleiche Marke, Modell/Variante,
+ * Kraftstoff, Baujahr ±1, Laufleistung im Fenster ±50 % unter 100.000 km bzw. ±30 % darüber).
+ */
+export interface ReferenceSummary {
+  source: string;
+  /** Günstigstes vergleichbares Angebot (EUR) */
+  minEur: number;
+  medianEur: number | null;
+  /** Vergleichbare Angebote im Laufleistungsfenster */
+  count: number;
+  kmFrom: number;
+  kmTo: number;
+  yearFrom: number;
+  yearTo: number;
+  /** Inserat mit dem Mindestpreis */
+  url: string | null;
+  /** Endpreis (inkl. Zoll, Steuer, TÜV, Zulassung) relativ zum Vergleichspreis in Prozent: -20 = 20 % günstiger */
+  diffPct: number;
+  fetchedAt: string;
+}
+
 export interface DecoratedListing extends Listing {
   landed: LandedCost;
   /** Nur für Deutschland berechnet */
   vehicleTax: VehicleTax | null;
+  /** Vergleichspreis DE, sofern im Cache (null = keine Daten oder Funktion aus) */
+  reference: ReferenceSummary | null;
 }

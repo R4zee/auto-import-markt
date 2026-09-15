@@ -35,7 +35,7 @@ export function DetailView({ id }: { id: string }) {
       setData(d); setState('ok');
       if (d.referenceAvailable) {
         setRef('loading');
-        api.reference(id).then((r) => { if (!cancelled) setRef(r); }).catch(() => { if (!cancelled) setRef(null); });
+        api.reference(id, dest).then((r) => { if (!cancelled) setRef(r); }).catch(() => { if (!cancelled) setRef(null); });
       }
     }).catch(() => { if (!cancelled) setState('error'); });
     return () => { cancelled = true; };

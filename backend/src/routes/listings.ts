@@ -6,7 +6,7 @@ import { listingsRepo, partnersRepo } from '../repositories/listings.js';
 import { decorate, search } from '../services/catalog.js';
 import { getFx } from '../services/fx.js';
 import { publicCache } from '../services/httpCache.js';
-import { referenceEnabled, referencePrices } from '../services/reference.js';
+import { attachReferences, referenceEnabled, referencePrices } from '../services/reference.js';
 
 const csv = (v: unknown) => (typeof v === 'string' && v.length ? v.split(',').map((s) => s.trim()).filter(Boolean) : []);
 
@@ -66,8 +66,10 @@ export async function listingRoutes(app: FastifyInstance): Promise<void> {
     const ids = csv(req.query.ids).slice(0, 100);
     const [, partnerList, items] = await Promise.all([getFx(), partnersRepo.all(), listingsRepo.byIds(ids)]);
     const partners = Object.fromEntries(partnerList.map((p) => [p.id, p]));
+    const decorated = items.map((l) => decorate(l, dest));
+    await attachReferences(decorated);
     publicCache(reply);
-    return { items: items.map((l) => decorate(l, dest)), partners };
+    return { items: decorated, partners };
   });
 
   app.get<{ Params: { id: string }; Querystring: { dest?: string } }>('/api/listings/:id', async (req, reply) => {
@@ -75,17 +77,24 @@ export async function listingRoutes(app: FastifyInstance): Promise<void> {
     if (!l) return reply.code(404).send({ error: 'not_found' });
     const dest = isDestCode(req.query.dest) ? req.query.dest : 'DE';
     const partner = await partnersRepo.byId(l.partnerId);
+    const listing = decorate(l, dest);
+    await attachReferences([listing]);
     publicCache(reply);
-    return { listing: decorate(l, dest), partner, referenceAvailable: referenceEnabled() };
+    return { listing, partner, referenceAvailable: referenceEnabled() };
   });
 
-  /** Referenzpreise vergleichbarer Fahrzeuge im Zielmarkt (mobile.de via Carapis) */
-  app.get<{ Params: { id: string } }>('/api/listings/:id/reference', async (req, reply) => {
-    const l = await listingsRepo.byId(req.params.id);
+  /**
+   * Vergleichspreise DE (mobile.de) für die Detailansicht: Laufleistungsfenster und Motorisierung des Inserats,
+   * Abstand des Endpreises inkl. TÜV zum günstigsten Angebot. Fehlt der Bucket im Cache, wird er (wenn erlaubt) live geholt.
+   */
+  app.get<{ Params: { id: string }; Querystring: { dest?: string } }>('/api/listings/:id/reference', async (req, reply) => {
+    const [, l] = await Promise.all([getFx(), listingsRepo.byId(req.params.id)]);
     if (!l) return reply.code(404).send({ error: 'not_found' });
     if (!referenceEnabled()) return reply.code(204).send();
-    const ref = await referencePrices(l);
+    const dest = isDestCode(req.query.dest) ? req.query.dest : 'DE';
+    const ref = await referencePrices(l, decorate(l, dest).landed.totalEur);
     if (!ref) return reply.code(204).send();
+    publicCache(reply);
     return ref;
   });
 

@@ -351,3 +351,35 @@ Erfahrungswert nach dem ersten Lauf im DataImpulse-Dashboard unter **Usage** pr�
 
 **Ablauf ändern:** Zeitplan oder Umfang (`ENCAR_MIN_PRICE_MANWON`, `ENCAR_MIN_YEAR`, `ENCAR_CAR_TYPES`)
 in `.github/workflows/sync.yml` bzw. als weitere `env:`-Einträge dort setzen, committen, pushen.
+
+## Teil K – Vergleichspreise DE auf den Kacheln (Stand 15.09.2026)
+
+Jede Kachel zeigt „DE ab €X“ (günstigstes vergleichbares Angebot in Deutschland) und den Abstand des Endpreises
+inkl. Zoll, Steuer, TÜV und Zulassung in Prozent (grün = günstiger als das deutsche Angebot). Vergleichbar heißt:
+gleiche Marke, Modell bzw. Variantenkennung (z. B. „320d“, „E 220 d“), gleicher Kraftstoff, Baujahr ±1,
+Laufleistung ±50 % unter 100.000 km bzw. ±30 % darüber, Hubraum ±12 % sofern beide Seiten ihn kennen.
+
+Quelle ist der JSON-Endpunkt der mobile.de-Web-App (`/consumer/api/search/srp`, kein Key, Grauzone wie Encar).
+Damit die Suche schnell und günstig bleibt, holt nicht die API die Preise, sondern ein Job nach dem Sync
+(`backend/src/cli/reference.ts`): je Suchbucket (Marke, Variante, Kraftstoff, Baujahrband) die günstigsten
+Angebote in die Tabelle `ref_prices`; die API liest je Trefferseite nur diese Buckets (eine Abfrage).
+
+1. Vom eigenen Rechner prüfen (schreibt nichts):
+   `npm run probe -w backend -- mobile BMW 320d 2019 Diesel`. Erwartet: `✔ Modus query HTTP 200 · … Stichproben`
+   und darunter Zeilen `✔ 2019 · 95000 km · 21500 € · …`. Scheitern beide Modi (403/400), die Ausgabe hier einfügen.
+   Zeigt die Probe „ID UNBEKANNT“, fehlt die mobile.de-Marken-ID → als Variable `REFERENCE_MAKE_IDS`
+   ergänzen, z. B. `{"Genesis":8501}` (ID aus der mobile.de-Such-URL `ms=<id>;;;` ablesen).
+2. GitHub → Settings → Secrets and variables → Actions → Variables: `REFERENCE_ENABLED=true`
+   (optional `REFERENCE_MAX_PER_RUN`, Standard 1500 Buckets je Lauf ≈ 25 Minuten; `REFERENCE_MOBILE_MODE`
+   auf `url`, falls die Probe nur diesen Modus bestätigt). Sperrt mobile.de die Runner-IP (403), als Secret
+   `REFERENCE_PROXY_URL` den Residential-Proxy eintragen.
+3. Vercel → Settings → Environment Variables: `REFERENCE_ENABLED=true` (sonst bleiben die Kacheln ohne
+   Vergleichspreis, obwohl Buckets vorliegen), dann Redeploy.
+4. Actions → Sync Listings → Run workflow. Der Schritt „Vergleichspreise DE“ meldet
+   `✔ reference buckets=… · aktuell=… · Kandidaten=…`. Mit 1500 Buckets je Lauf und vier Läufen am Tag sind
+   die häufigsten Kombinationen nach dem ersten Tag abgedeckt, der Rest folgt in den nächsten Tagen; danach
+   werden Buckets alle 7 Tage (`REFERENCE_TTL_DAYS`) erneuert. Die Detailansicht lädt fehlende Buckets live nach
+   (`REFERENCE_LIVE_LOOKUP`, eine mobile.de-Anfrage).
+
+Kosten: der Job läuft auf GitHub Actions (kostenlos im Kontingent); Turso liest je Trefferseite bis zu 48 kleine
+Zeilen mehr. Auf Vercel entsteht keine zusätzliche externe Anfrage außer in der Detailansicht.

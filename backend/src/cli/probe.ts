@@ -4,6 +4,10 @@ import { curlFetch, freshFetch, getJson, robustFetch } from '../providers/http.j
 import { mapOlxOffer, olxHeaders, OlxProvider, type OlxFilterLevel } from '../providers/olx.js';
 import { mapSauto, SautoProvider } from '../providers/sauto.js';
 import { mapSubito, SubitoProvider } from '../providers/subito.js';
+import { CopartProvider, mapCopart } from '../providers/copart.js';
+import { extractItems, mapMobileItem, mobileApiUrl, mobileMakeId, MobileDeReference, mobileSearchUrl, type RefQuery } from '../providers/mobilede.js';
+import { bucketKey, kmWindow, summarize } from '../services/reference.js';
+import type { Fuel } from '../domain/types.js';
 
 /**
  * Probe für die Frontend-Endpunkte (OLX, Subito, Sauto): holt eine kleine Seite direkt, zeigt die Rohantwort
@@ -16,6 +20,9 @@ import { mapSubito, SubitoProvider } from '../providers/subito.js';
  *   npm run probe -- olx-children bg 360                          (Unterkategorien aus den Inseraten einer Oberkategorie)
  *   npm run probe -- subito
  *   npm run probe -- sauto
+ *   npm run probe -- mobile BMW 320d 2019 Diesel   (Vergleichspreise DE: beide mobile.de-Modi, Rohantwort, Stichproben, km-Fenster)
+ *   npm run probe -- copart                        (Copart-Suchendpunkt: Rohantwort des ersten Loses, Zuordnung)
+ *   npm run probe -- url <URL> [Header:Wert …]     (beliebige Adresse: Status, Content-Type, Anfang der Antwort – für neue Quellen)
  *   npm run probe -- <provider> (jeder andere Provider: fetchAll mit Ausgabe der ersten 3 Inserate)
  */
 const name = process.argv[2] ?? '';
@@ -275,8 +282,86 @@ async function probeSauto() {
   }
 }
 
+/** Vergleichspreise DE: `probe mobile <Marke> <Beschreibung> [Baujahr] [Petrol|Diesel|Hybrid|Electric] [km]` */
+async function probeMobile(make: string, description: string, year: number, fuel: Fuel | null, km: number) {
+  const q: RefQuery = { make, description, yearFrom: year - config.reference.yearSpan, yearTo: year + config.reference.yearSpan, fuel };
+  const src = new MobileDeReference();
+  console.log(`\n=== mobile.de · ${make} (ID ${mobileMakeId(make) ?? 'UNBEKANNT → REFERENCE_MAKE_IDS'}) · "${description}" · ${q.yearFrom}–${q.yearTo} · ${fuel ?? 'alle Kraftstoffe'}`);
+  console.log('Such-URL (Browser):', mobileSearchUrl(q));
+  let got: Awaited<ReturnType<typeof src.fetchPage>> | null = null;
+  for (const mode of ['query', 'url'] as const) {
+    const url = mobileApiUrl(q, 1, mode);
+    const t0 = Date.now();
+    try {
+      const r = await src.fetchPage(q, 1, mode);
+      console.log(`  ✔ Modus ${mode.padEnd(5)} HTTP 200 · ${Date.now() - t0} ms · ${r.items.length} Stichproben · Treffer gesamt ${r.total ?? '?'} · Seiten ${r.numPages ?? '?'}\n    ${url}`);
+      if (!got) got = r;
+    } catch (e) {
+      console.log(`  ✖ Modus ${mode.padEnd(5)} ${e instanceof Error ? e.message.slice(0, 160) : String(e)}\n    ${url}`);
+    }
+  }
+  if (!got) {
+    console.log('  Beide Modi scheitern. Im Browser die Such-URL öffnen → Netzwerk-Tab → Aufruf mit "consumer/api/search" kopieren und mit `probe url <URL> x-mobile-client:de.mobile.consumer-webapp` prüfen.');
+    return;
+  }
+  const raw = got.raw as Record<string, unknown>;
+  console.log('Schlüssel der Antwort:', Object.keys(raw).join(', '));
+  const items = extractItems(raw);
+  console.log(`Trefferliste: ${items.length} Einträge · erster Eintrag (gekürzt):`, short(items[0], 2500));
+  for (const s of got.items.slice(0, 8)) console.log(`  ✔ ${s.year} · ${s.km} km · ${s.priceEur} € · ${s.kw ?? '?'} kW · ${s.ccm ?? '?'} cm³ · ${s.title} · ${s.url ?? ''}`);
+  const bad = items.filter((it) => !mapMobileItem(it)).length;
+  if (bad) console.log(`  ⚠ ${bad} Einträge nicht abbildbar (Werbeplätze oder andere Feldnamen – siehe Rohantwort)`);
+  const fake = { km, engineCcm: null } as const;
+  const bucket = { key: bucketKey(q), source: src.id, query: q, samples: got.items, total: got.total, url: mobileSearchUrl(q), fetchedAt: fetchedAt };
+  const win = kmWindow(km);
+  const sum = summarize(fake, 0, bucket);
+  console.log(`km-Fenster für ${km} km: ${win.from}–${win.to} km → ${sum ? `${sum.count} vergleichbar, günstigstes ${sum.minEur} €` : 'kein vergleichbares Angebot auf Seite 1'}`);
+}
+
+async function probeCopart() {
+  const p = new CopartProvider();
+  console.log(`\n=== Copart · POST https://www.copart.com/public/lots/search-results · Seite 0, 5 Lose${config.copart.makes.length ? ` · Marken ${config.copart.makes.join(',')}` : ''}`);
+  try {
+    const r = await p.fetchPage(0, 5);
+    console.log(`  ✔ ${r.lots.length} Lose · gesamt ${r.total ?? '?'}`);
+    console.log('Schlüssel der Antwort:', Object.keys((r.raw as Record<string, unknown>) ?? {}).join(', '));
+    console.log('content[0] (gekürzt):', short(r.lots[0], 3000));
+    for (const lot of r.lots) {
+      const l = mapCopart(lot, fetchedAt);
+      console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.offerType}${l.auction ? ` bis ${l.auction.endsAt}` : ''} · ${l.location} · ${l.photos.length} Fotos` : `  ✖ nicht abbildbar: ln=${lot.ln} hb=${lot.hb} bnp=${lot.bnp} ad=${lot.ad} lcy=${lot.lcy}`);
+    }
+  } catch (e) {
+    console.log('  ✖', e instanceof Error ? e.message.slice(0, 300) : String(e));
+    console.log('  Im Browser https://www.copart.com/vehicleFinder öffnen → Netzwerk-Tab → Aufruf "search-results" → Request-Body und Antwort hier einfügen.');
+  }
+}
+
+/** Beliebige Adresse anfragen: `probe url https://… Header:Wert …` */
+async function probeUrl(url: string, headerArgs: string[]) {
+  const headers: Record<string, string> = { 'User-Agent': config.europe.userAgent, Accept: 'application/json, text/html;q=0.9, */*;q=0.8' };
+  for (const h of headerArgs) { const i = h.indexOf(':'); if (i > 0) headers[h.slice(0, i).trim()] = h.slice(i + 1).trim(); }
+  console.log(`\n=== ${url}`);
+  const t0 = Date.now();
+  const res = await robustFetch(url, { headers, timeoutMs: 30000, proxyUrl, nodeOnly: true, tls: 'chrome' });
+  const body = await res.text();
+  console.log(`  HTTP ${res.status} · ${Date.now() - t0} ms · ${res.headers.get('content-type') ?? '?'} · ${(body.length / 1024).toFixed(1)} KB`);
+  try {
+    const json = JSON.parse(body) as Record<string, unknown>;
+    console.log('  JSON-Schlüssel:', Object.keys(json).join(', '));
+    console.log(short(json, 4000));
+  } catch {
+    console.log(body.slice(0, 3000));
+  }
+}
+
 try {
-  if (name === 'olx') await probeOlx();
+  if (name === 'mobile') {
+    const fuelArg = process.argv[6] ?? '';
+    const fuel = (['Petrol', 'Diesel', 'Hybrid', 'Electric'] as Fuel[]).find((f) => f.toLowerCase() === fuelArg.toLowerCase()) ?? null;
+    await probeMobile(process.argv[3] ?? 'BMW', process.argv[4] ?? '320d', Number(process.argv[5] ?? 2019), fuel, Number(process.argv[7] ?? 80000));
+  } else if (name === 'copart') await probeCopart();
+  else if (name === 'url') await probeUrl(process.argv[3] ?? '', process.argv.slice(4));
+  else if (name === 'olx') await probeOlx();
   else if (name === 'olx-scan') {
     const a = Number(process.argv[4] ?? 1); const b = Number(process.argv[5] ?? (process.argv[4] ? a : 120));
     await scanOlxCategories((process.argv[3] ?? 'ro').toLowerCase(), process.argv[5] ? a : 1, b);
