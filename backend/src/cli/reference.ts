@@ -21,6 +21,6 @@ const before = await referenceRepo.count();
 const t0 = Date.now();
 const r = await refreshReferenceBuckets({ log: console.log });
 const after = await referenceRepo.count();
-console.log(`${r.aborted ? '✖' : '✔'} reference    buckets=${r.fetched} (${r.samples} Angebote) · aktuell=${r.fresh} · fehlgeschlagen=${r.failed} · Kandidaten=${r.candidates} · gespeichert ${before}→${after} · ${Date.now() - t0} ms${r.aborted ? `  ⚠ ${r.aborted}` : ''}${r.stopped ? `  ⚠ ${r.stopped}` : ''}`);
+console.log(`${r.aborted ? '✖' : '✔'} reference    buckets=${r.fetched} (${r.withSamples} mit Angeboten, ${r.samples} Angebote) · aktuell=${r.fresh} · fehlgeschlagen=${r.failed} · Kandidaten=${r.candidates} · gespeichert ${before}→${after} · ${Date.now() - t0} ms${r.aborted ? `  ⚠ ${r.aborted}` : ''}${r.stopped ? `  ⚠ ${r.stopped}` : ''}`);
 await closeDb();
 if (r.aborted) process.exitCode = 1;
