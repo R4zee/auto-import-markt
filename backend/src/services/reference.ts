@@ -353,15 +353,23 @@ export async function referencePrices(l: Listing, landedEur: number): Promise<Re
 
 // --- Refresh-Job ---------------------------------------------------------------------------------------------------
 
-export interface RefreshReport { candidates: number; fetched: number; fresh: number; failed: number; aborted: string | null; samples: number }
+export interface RefreshReport {
+  candidates: number; fetched: number; fresh: number; failed: number; samples: number;
+  /** Abbruch wegen Sperre/Fehlern (Job rot) */
+  aborted: string | null;
+  /** Regulär vor dem Limit beendet, z. B. Zeitbudget erreicht (Job grün) */
+  stopped: string | null;
+}
 
 /**
  * Buckets aller aktiven Inserate bestimmen (Gruppierung in SQL nach Marke, Modell, erstem Ausstattungswort,
  * Kraftstoff, Baujahr), die häufigsten zuerst, fehlende oder abgelaufene bis `limit` nachladen.
  * Bricht bei Sperre (403/429) ab, damit der Job nicht in eine Blockade läuft.
  */
-export async function refreshReferenceBuckets(opts: { limit?: number; log?: (line: string) => void } = {}): Promise<RefreshReport> {
+export async function refreshReferenceBuckets(opts: { limit?: number; maxMs?: number; log?: (line: string) => void } = {}): Promise<RefreshReport> {
   const limit = opts.limit ?? config.reference.maxPerRun;
+  const maxMs = opts.maxMs ?? config.reference.maxMinutes * 60000;
+  const started = Date.now();
   const log = opts.log ?? (() => undefined);
   const rows = await query<{ make: string; model: string; trim1: string; fuel: string; year: number; km_band: number | null; n: number }>(
     `SELECT make, model, substr(trim, 1, instr(trim || ' ', ' ') - 1) AS trim1, fuel, year, ${kmBandSql()} AS km_band, COUNT(*) AS n
@@ -380,9 +388,11 @@ export async function refreshReferenceBuckets(opts: { limit?: number; log?: (lin
   const due = [...wanted.entries()]
     .filter(([key]) => { const at = existing.get(key); return !at || new Date(at).getTime() < cutoff; })
     .sort((a, b) => b[1].n - a[1].n);
-  const report: RefreshReport = { candidates: wanted.size, fetched: 0, fresh: wanted.size - due.length, failed: 0, aborted: null, samples: 0 };
-  log(`Buckets: ${wanted.size} gesamt · ${report.fresh} aktuell · ${due.length} fällig · Limit ${limit}`);
+  const report: RefreshReport = { candidates: wanted.size, fetched: 0, fresh: wanted.size - due.length, failed: 0, aborted: null, stopped: null, samples: 0 };
+  log(`Buckets: ${wanted.size} gesamt · ${report.fresh} aktuell · ${due.length} fällig · Limit ${limit} · Zeitbudget ${Math.round(maxMs / 60000)} min`);
   for (const [key, { q, n }] of due.slice(0, limit)) {
+    // Zeitbudget: der nächste geplante Lauf soll nicht hinter diesem warten müssen
+    if (Date.now() - started > maxMs) { report.stopped = `Zeitbudget von ${Math.round(maxMs / 60000)} min erreicht`; break; }
     try {
       const b = await fetchBucket(q);
       report.fetched++;
