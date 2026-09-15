@@ -1,6 +1,6 @@
 import { closeDb, ready } from '../db.js';
 import { getFx } from '../services/fx.js';
-import { syncAll, syncProvider } from '../services/sync.js';
+import { canonicalizeStoredMakes, syncAll, syncProvider } from '../services/sync.js';
 import { refreshFacets } from '../services/facets.js';
 import { listingsRepo } from '../repositories/listings.js';
 import { activeProviders } from '../providers/index.js';
@@ -27,6 +27,9 @@ if (only.length) {
   if (missing.length) console.log(`Nicht aktiv oder unbekannt: ${missing.join(', ')} (aktiv: ${activeProviders().map((p) => p.id).join(', ') || '–'})`);
   reports = [];
   for (const p of chosen) reports.push(await syncProvider(p));
+  // Markenschreibweisen im Bestand vereinheitlichen (billig: nur DISTINCT-Marken), dann Filterlisten neu aufbauen
+  const canon = await canonicalizeStoredMakes();
+  if (canon.listings > 0) reports.push({ provider: 'makes', status: 'ok', upserted: canon.listings, deactivated: 0, warnings: [`${canon.makes} Markenschreibweisen vereinheitlicht`], durationMs: 0 });
   await refreshFacets();
 } else {
   reports = await syncAll();
