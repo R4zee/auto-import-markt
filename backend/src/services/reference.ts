@@ -130,7 +130,7 @@ export function bucketQuery(l: Pick<Listing, 'make' | 'model' | 'trim' | 'year' 
 // --- Modell-IDs von mobile.de (SEO-Modellseite → filters.ms[0].model), Cache in `meta` ------------------------------
 
 const MODEL_TTL_MS = 30 * 86400000;
-export interface ModelRef { modelId: number | null; modelGroupId: number | null }
+export interface ModelRef { modelId: number | null; modelGroupId: number | null; makeId?: number | null }
 const NO_MODEL: ModelRef = { modelId: null, modelGroupId: null };
 const modelMemo = new Map<string, ModelRef>();
 
@@ -148,9 +148,9 @@ export async function modelRefFor(make: string, model: string): Promise<ModelRef
   const row = await one<{ value: string }>('SELECT value FROM meta WHERE key = ?', [key]);
   if (row) {
     try {
-      const v = JSON.parse(row.value) as { modelId?: number | null; modelGroupId?: number | null; at: string };
+      const v = JSON.parse(row.value) as { modelId?: number | null; modelGroupId?: number | null; makeId?: number | null; at: string };
       if (Date.now() - new Date(v.at).getTime() < MODEL_TTL_MS) {
-        const ref = { modelId: v.modelId ?? null, modelGroupId: v.modelGroupId ?? null };
+        const ref: ModelRef = { modelId: v.modelId ?? null, modelGroupId: v.modelGroupId ?? null, makeId: v.makeId ?? null };
         modelMemo.set(key, ref);
         return ref;
       }
@@ -159,8 +159,10 @@ export async function modelRefFor(make: string, model: string): Promise<ModelRef
   let ref: ModelRef = NO_MODEL;
   try {
     const r = await source.resolveModel(make, clean);
-    // Nur übernehmen, wenn mobile.de auch die Marke erkannt hat (sonst war es eine generische Seite)
-    if (r.makeId != null && (r.modelId != null || r.modelGroupId != null)) ref = { modelId: r.modelId, modelGroupId: r.modelGroupId };
+    // Nur übernehmen, wenn mobile.de auch die Marke erkannt hat (sonst war es eine generische Seite). Die Marken-ID
+    // der Antwort geht mit – sie ist verlässlicher als die hinterlegte Tabelle (Lauf 24: Land Rover/MINI mit 0 Treffern)
+    if (r.makeId != null && (r.modelId != null || r.modelGroupId != null)) ref = { modelId: r.modelId, modelGroupId: r.modelGroupId, makeId: r.makeId };
+    else if (r.makeId != null) ref = { modelId: null, modelGroupId: null, makeId: r.makeId };
   } catch (e) {
     if (e instanceof HttpError && (e.status === 403 || e.status === 429)) throw e;
   }
