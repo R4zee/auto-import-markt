@@ -3,7 +3,7 @@ import type { Listing } from '../domain/types.js';
 import { defaultPartnerFor } from '../seed/partners.js';
 import { encarDrive } from './encar.js';
 import { getJson, num, sleep, str } from './http.js';
-import { listingId, normalizeFuel, normalizeTransmission, type MarketProvider, type ProviderResult } from './types.js';
+import { listingId, normalizeFuel, normalizeTransmission, powerKwFromText, type MarketProvider, type ProviderResult } from './types.js';
 import { makeFromTitle } from './olx.js';
 
 /**
@@ -137,6 +137,7 @@ export function mapSubito(ad: SubitoAd, fetchedAt: string): Listing | null {
     km,
     engine: fuel === 'Electric' ? 'EV' : ccm ? `${(ccm / 1000).toFixed(1)} L` : '',
     engineCcm: ccm,
+    powerKw: powerKwFromText(subitoFeature(ad, '/power').value || (bodyText.match(/\b(\d{2,3})\s*(cv|kw)\b/i)?.[0] ?? null)),
     co2Gkm: null,
     transmission,
     drive,

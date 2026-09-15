@@ -48,7 +48,7 @@ Alternativ über die Claude-Code-Vorschau: `.claude/launch.json` enthält die Ko
 | `GET /api/listings/batch?ids=` | Merkliste/Vergleich |
 | `POST /api/calc/landed-cost` | Freie Kalkulation (Markt, Preis, Währung, Oldtimer, Präferenzursprung, Fahrzeugdaten) |
 | `POST /api/enquiries`, `POST /api/enquiries/bulk` | Anfrage an den Partner-Importeur / Sammelanfrage je Partner |
-| `GET /api/listings/:id/reference` | Referenzpreise im Zielmarkt – Provider-Registry in `services/reference.ts`, derzeit ohne Quelle → 204 |
+| `GET /api/listings/:id/reference?dest=` | Vergleichspreise DE (mobile.de-Web-App-Endpunkt): günstigstes vergleichbares Angebot, Median, Spanne, Laufleistungsfenster, Abstand des Endpreises in Prozent; ohne `REFERENCE_ENABLED` → 204. Die Trefferliste trägt je Inserat `reference` (Mindestpreis + Abstand) aus dem Bucket-Cache `ref_prices` |
 | `GET /api/cron/sync` | Vercel-Cron (Header `Authorization: Bearer CRON_SECRET`) |
 | `GET /api/partners` | Partner-Importeure |
 | `POST /api/admin/sync`, `POST /api/admin/cleanup`, `POST /api/admin/facets`, `GET /api/admin/status`, `GET /api/admin/enquiries` | Admin (Header `x-admin-key`); `cleanup` deaktiviert Bestände entfernter Anbieter, `facets` berechnet die Filterlisten neu |
@@ -88,6 +88,7 @@ Lokal reproduzieren: `backend/test/search.test.ts` prüft Pfade und Facetten; ei
 | `marketcheck` | USA (Händler, Festpreis) | `MARKETCHECK_API_KEY` |
 | `ebay` | USA (eBay Motors, Auktion + Festpreis) | `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET` |
 | `apibara` | USA (Copart/IAAI-Auktionen) | `APIBARA_API_KEY` (Test-Plan kostenlos, 100 Req/Monat) |
+| `copart` | **USA** – Copart-Suchendpunkt der Website `POST /public/lots/search-results`, keyless, kostenlos (Grauzone wie Encar); live bestätigt 15.09.2026 (385.803 Lose) | `COPART_ENABLED=true`, optional `COPART_MAKES` |
 | `encar` | **Südkorea (Hauptquelle)** – Encar direkt, Vollabgleich (~150.000 Inserate) | `ENCAR_ENABLED=true` + `ENCAR_PROXY_URL` (Residential-Proxy); läuft per GitHub Actions alle 6 h, Teilabfragen < 10.000, Übersetzungs-Cache `encar_grades` |
 | `xapikorea` | Südkorea (Fallback, Encar-Wrapper mit englischen Feldern) | `XAPIKOREA_API_KEY` (Free 500 Req/Monat) |
 | `autoapi` | VAE (Dubizzle, Dubicars) | `AUTOAPI_ACCESS_NAME`, `AUTOAPI_API_KEY` (Zugang via access@auto-api.com) |
@@ -120,7 +121,7 @@ npm run probe -w backend -- olx      # bzw. subito | sauto
 Danach in GitHub → Settings → Variables `OLX_ENABLED`/`SUBITO_ENABLED`/`SAUTO_ENABLED` auf `true`. Ein Testlauf nur dieser Quellen: Actions → Sync Listings → Run workflow → Feld
 „Nur diese Provider“ = `olx,subito,sauto` (lokal `SYNC_ONLY=olx npm run sync`).
 
-Tests: `npm test` (55 Tests: Kalkulation, Kfz-Steuer, API, Suche/Facetten, Provider-Mappings inkl. OLX, Subito, Sauto und Partner-Feeds).
+Tests: `npm test` (91 Tests: Kalkulation, Kfz-Steuer, API, Suche/Facetten, Provider-Mappings inkl. OLX, Subito, Sauto und Partner-Feeds).
 
 Manueller Sync eines Providers: `curl -X POST -H "x-admin-key: …" "http://localhost:4000/api/admin/sync?provider=encar"`.
 

@@ -5,7 +5,7 @@ import type { Listing } from '../domain/types.js';
 import { defaultPartnerFor } from '../seed/partners.js';
 import { encarDrive } from './encar.js';
 import { HttpError, num, robustFetch, sleep, str } from './http.js';
-import { listingId, normalizeFuel, normalizeTransmission, type MarketProvider, type ProviderResult } from './types.js';
+import { listingId, normalizeFuel, normalizeTransmission, powerKwFromText, type MarketProvider, type ProviderResult } from './types.js';
 
 /**
  * OLX (Polen, Rumänien, Bulgarien, Portugal) – öffentlicher Frontend-Endpunkt der OLX-Seiten, kein Key:
@@ -52,6 +52,7 @@ const KEYS = {
   fuel: ['petrol', 'fuel', 'auto_engine_type', 'engine_type', 'paliwo', 'combustibil', 'gorivo', 'dvigatel', 'combustivel', 'fuel_type'],
   transmission: ['transmission', 'auto_transmission_type', 'skrzynia', 'cutie_de_viteze', 'skorosti', 'caixa', 'gearbox'],
   engine: ['enginesize', 'engine_size', 'pojemnosc', 'capacitate_motor', 'cilindrada', 'engine_capacity', 'motor'],
+  power: ['enginepower', 'engine_power', 'horsepower', 'moc', 'putere', 'potencia', 'power'],
   body: ['car_body', 'body_type', 'body', 'caroserie', 'tip_caroserie', 'coupe'],
   drive: ['drive', 'naped', 'tractiune', 'tracao'],
   condition: ['condition', 'technical_condition', 'stan', 'stare', 'state', 'estado', 'condicao', 'sastoyanie'],
@@ -186,6 +187,7 @@ export function mapOlxOffer(o: OlxOffer, site: OlxSite, fetchedAt: string, makeB
     km,
     engine: fuel === 'Electric' ? 'EV' : ccm ? `${(ccm / 1000).toFixed(1)} L` : '',
     engineCcm: ccm,
+    powerKw: powerKwFromText(paramText(o, KEYS.power) || paramNum(o, KEYS.power)),
     co2Gkm: null,
     transmission,
     drive,

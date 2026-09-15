@@ -128,6 +128,10 @@ describe('Encar trim', () => {
     assert.equal(grade.ccm, 2497);
     assert.equal(encarTrim(item, grade), '2.5 Premium · 2.5');
     assert.equal(encarTrim({ Id: '2', Manufacturer: '기아', Model: 'X', Badge: 'Gasoline 2.5T 2WD', BadgeDetail: '(세부등급 없음)' }, null), 'Gasoline 2.5T 2WD');
+    // Baureihen-Code aus dem koreanischen Modellnamen bleibt für den Vergleichspreis erhalten
+    assert.equal(encarTrim({ Id: '3', Manufacturer: '벤츠', Model: 'E-클래스 W213', Badge: 'E220d 4MATIC' }, null), 'E220d 4MATIC · W213');
+    assert.equal(encarTrim({ Id: '4', Manufacturer: 'BMW', Model: '5시리즈 (G30)', Badge: '520d xDrive' }, null), '520d xDrive · G30');
+    assert.equal(encarTrim({ Id: '5', Manufacturer: '현대', Model: '그랜저 IG', Badge: '2.5 Premium' }, null), '2.5 Premium', 'unbekannte Codes werden nicht angehängt');
   });
 });
 

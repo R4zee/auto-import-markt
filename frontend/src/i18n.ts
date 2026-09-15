@@ -83,6 +83,8 @@ const en = {
   signInTitle: 'Accounts are coming soon', signInBody: 'Your watchlist and comparison are stored in this browser for now. Sign-in with synced lists and saved searches follows with the next release.',
   close: 'Close', ended: 'Ended', estimated: 'estimated',
   refTitle: 'Reference · {source}', refLine: '{n} comparable offers · {yearFrom}–{yearTo}', refMedian: 'Median asking price', refRange: 'Range', refKm: 'Median mileage', refNone: 'No comparable offers found.', refLoading: 'Loading reference prices…', refNote: 'Asking prices of comparable listings in the destination market, not a valuation.',
+  refDeFrom: 'DE from {price}', refMin: 'Cheapest comparable offer', refDiff: 'Landed price vs. cheapest DE offer', refWindow: 'up to {kmTo} km · {years}',
+  refTooltip: '{n} comparable offers in Germany (up to {kmTo} km, {years}). Percentage: landed price {landed} incl. duty, tax, TÜV and registration vs. the cheapest offer.',
 };
 
 const de: typeof en = {
@@ -168,6 +170,8 @@ const de: typeof en = {
   signInTitle: 'Konten folgen in Kürze', signInBody: 'Merkliste und Vergleich werden derzeit in diesem Browser gespeichert. Die Anmeldung mit synchronisierten Listen und gespeicherten Suchen kommt mit dem nächsten Release.',
   close: 'Schließen', ended: 'Beendet', estimated: 'geschätzt',
   refTitle: 'Referenz · {source}', refLine: '{n} vergleichbare Angebote · {yearFrom}–{yearTo}', refMedian: 'Median Angebotspreis', refRange: 'Spanne', refKm: 'Median Laufleistung', refNone: 'Keine vergleichbaren Angebote gefunden.', refLoading: 'Referenzpreise werden geladen…', refNote: 'Angebotspreise vergleichbarer Inserate im Zielmarkt, keine Bewertung.',
+  refDeFrom: 'DE ab {price}', refMin: 'Günstigstes vergleichbares Angebot', refDiff: 'Endpreis zum günstigsten DE-Angebot', refWindow: 'bis {kmTo} km · {years}',
+  refTooltip: '{n} vergleichbare Angebote in Deutschland (bis {kmTo} km, {years}). Prozent: Endpreis {landed} inkl. Zoll, Steuer, TÜV und Zulassung gegenüber dem günstigsten Angebot.',
 };
 
 export const DICT: Record<Lang, typeof en> = { en, de };

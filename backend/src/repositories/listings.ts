@@ -8,7 +8,7 @@ import { fxSync } from '../services/fx.js';
 interface ListingRow extends Row {
   id: string; source: string; external_id: string; market: string; country: string; location: string;
   offer_type: string; url: string | null; year: number; make: string; model: string; trim: string; km: number;
-  engine: string; engine_ccm: number | null; co2_gkm: number | null; transmission: string; drive: string; fuel: string;
+  engine: string; engine_ccm: number | null; power_kw: number | null; co2_gkm: number | null; transmission: string; drive: string; fuel: string;
   price: number; currency: string; steering: string; auction_json: string | null; coc: number; classic: number;
   duty_rate_override: number | null; origin_proof: number; resale_eur: number | null; partner_id: string;
   photos_json: string; photo_count: number; damage_json: string; fetched_at: string; active: number;
@@ -31,6 +31,7 @@ function rowToListing(r: ListingRow): Listing {
     km: Number(r.km),
     engine: r.engine,
     engineCcm: r.engine_ccm == null ? null : Number(r.engine_ccm),
+    powerKw: r.power_kw == null ? null : Number(r.power_kw),
     co2Gkm: r.co2_gkm == null ? null : Number(r.co2_gkm),
     transmission: r.transmission as Listing['transmission'],
     drive: r.drive as Listing['drive'],
@@ -77,8 +78,8 @@ INSERT INTO listings (
   id, source, external_id, market, country, location, offer_type, url, year, make, model, trim, km, engine,
   engine_ccm, co2_gkm, transmission, drive, fuel, price, currency, steering, auction_json, coc, classic,
   duty_rate_override, origin_proof, resale_eur, partner_id, photos_json, photo_count, damage_json, fetched_at, active,
-  price_eur, landed_de, landed_at, landed_nl, landed_pl, auction_ends_at, search_text
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+  price_eur, landed_de, landed_at, landed_nl, landed_pl, auction_ends_at, search_text, power_kw
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   market = excluded.market, country = excluded.country, location = excluded.location, offer_type = excluded.offer_type,
   url = excluded.url, year = excluded.year, make = excluded.make, model = excluded.model, trim = excluded.trim,
@@ -90,7 +91,7 @@ ON CONFLICT(id) DO UPDATE SET
   photo_count = excluded.photo_count, damage_json = excluded.damage_json, fetched_at = excluded.fetched_at, active = 1,
   price_eur = excluded.price_eur, landed_de = excluded.landed_de, landed_at = excluded.landed_at,
   landed_nl = excluded.landed_nl, landed_pl = excluded.landed_pl, auction_ends_at = excluded.auction_ends_at,
-  search_text = excluded.search_text
+  search_text = excluded.search_text, power_kw = excluded.power_kw
 `;
 
 function upsertStatement(l: Listing): InStatement {
@@ -102,7 +103,7 @@ function upsertStatement(l: Listing): InStatement {
       l.km, l.engine, l.engineCcm, l.co2Gkm, l.transmission, l.drive, l.fuel, l.price, l.currency, l.steering,
       l.auction ? JSON.stringify(l.auction) : null, l.coc ? 1 : 0, l.classic ? 1 : 0, l.dutyRateOverride,
       l.originProof ? 1 : 0, l.resaleEur, l.partnerId, JSON.stringify(l.photos), l.photoCount, JSON.stringify(l.damage), l.fetchedAt,
-      pre.priceEur, pre.landed.DE, pre.landed.AT, pre.landed.NL, pre.landed.PL, l.auction?.endsAt ?? null, searchText(l),
+      pre.priceEur, pre.landed.DE, pre.landed.AT, pre.landed.NL, pre.landed.PL, l.auction?.endsAt ?? null, searchText(l), l.powerKw ?? null,
     ],
   };
 }
@@ -115,7 +116,7 @@ const LANDED_COL: Record<DestCode, string> = { DE: 'landed_de', AT: 'landed_at',
  * alle Fotos liefert die Detailansicht. Spart je Seite mehrere hundert KB Transfer aus Turso.
  */
 const LIST_COLUMN_NAMES = ['id', 'source', 'external_id', 'market', 'country', 'location', 'offer_type', 'url', 'year', 'make', 'model', 'trim', 'km', 'engine',
-  'engine_ccm', 'co2_gkm', 'transmission', 'drive', 'fuel', 'price', 'currency', 'steering', 'auction_json', 'coc', 'classic', 'duty_rate_override',
+  'engine_ccm', 'power_kw', 'co2_gkm', 'transmission', 'drive', 'fuel', 'price', 'currency', 'steering', 'auction_json', 'coc', 'classic', 'duty_rate_override',
   'origin_proof', 'resale_eur', 'partner_id', 'photo_count', 'damage_json', 'fetched_at', 'active'];
 function listColumns(alias = ''): string {
   const p = alias ? `${alias}.` : '';

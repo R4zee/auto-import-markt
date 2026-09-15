@@ -213,3 +213,55 @@ bundesfinanzministerium.de (Kfz-Rechner)
 ## 8. Anbindungsstand und Aucnet
 
 Umgesetzte Adapter (Encar live, Apibara, auto-api.com, Carapis) und die Aucnet-Pruefung stehen in [anbindung.md](anbindung.md).
+
+---
+
+## 9. Vergleichspreise Deutschland (Stand 15.09.2026)
+
+Ziel: auf jeder Kachel das günstigste vergleichbare deutsche Angebot und der Abstand des Endpreises inkl. TÜV.
+Keine deutsche Plattform bietet eine kostenlose Lese-API (AutoScout24: Akamai-Bot-Schutz, nur Einstell-API;
+Kleinanzeigen: inoffizielle App-API mit rotierenden Zugangsdaten, AGB verbieten automatisierten Zugriff;
+mobile.de Search-API: nur für Händler mit Vertrag). Genutzt wird deshalb – wie bei Encar – der JSON-Endpunkt der
+mobile.de-Web-App:
+
+| Quelle | Endpunkt (keyless) | Adapter | Stand |
+|---|---|---|---|
+| **mobile.de** | `GET https://www.mobile.de/consumer/api/search/srp?url=<search.html-Adresse>` mit Header `x-mobile-client: de.mobile.consumer-webapp`; die search.html-Adresse trägt die klassischen Parameter `ms=<MarkenID>;;;<Beschreibung>`, `fr=2018:2020` (Erstzulassung), `ft=DIESEL`, `sb=p&od=up` (Preis aufsteigend), `cn=DE`, `dam=0`, `pageNumber=`; Antwort `searchResults{numResultsTotal,numPages,hasNextPage,items[]}` mit `price{gross,grossAmount}`, `attr{fr:"05/2020", ml:"130.000 km", pw:"140 kW (190 PS)", cc:"1.995 cm³", ft, tr, loc}`, `title`, `subTitle`, `relativeUrl`, `priceRating` **[B]** (Live-Probe 15.09.2026: 730 Treffer, 37 Seiten; dieselben Parameter direkt an `/srp` → 400) | `providers/mobilede.ts`, `services/reference.ts`, Job `cli/reference.ts` | **bestätigt 15.09.2026**, direkt aus Node ohne Proxy; 21 von 26 Einträgen einer Seite sind Inserate, der Rest Werbeplätze |
+
+Berechnung (`services/reference.ts`): Bucket = Marke + Variantentext (erstes Ausstattungswort mit Ziffer bei
+Baureihen wie „3 Series“/„E-Class“, sonst Modellname) + Kraftstoff + Baujahrband + Laufleistungsband (Obergrenze
+des km-Fensters auf 25.000 km aufgerundet, als `ml=:<km>` mitgesucht, damit die günstigsten Treffer nicht aus
+300.000-km-Wagen bestehen) → günstigste Angebote als Stichproben (Preis, Baujahr, km, kW, Hubraum) in `ref_prices`. Das Baujahrband ist der Bauzeitraum der Baureihe,
+wenn das Inserat einen Werkscode nennt (W221 2005–2013, W222 2013–2020, E90–E93 2005–2013, F30/F31 2012–2019, G30 …;
+Tabelle `domain/generations.ts` für Mercedes, BMW, Porsche, Audi, VW Golf/Passat, Land Rover), sonst Baujahr ±1.
+Je Inserat: Laufleistung höchstens +50 % (< 100.000 km) bzw. +30 % (≥ 100.000 km), nach unten offen; Hubraum ±12 %
+und Leistung ±15 % (mindestens 8 kW), sofern beide Seiten den Wert kennen – damit passt die Motorisierung auch ohne
+Baureihen-Code; günstigstes Angebot = Vergleichspreis; Abstand = (Endpreis − Vergleichspreis) / Vergleichspreis.
+mobile.de sucht die Beschreibung unscharf (Live-Probe 15.09.2026: „S350“ traf auch CLS 350, E 350, GLK 350, R 350).
+Deshalb löst der Adapter zuerst die **Modell-/Modellgruppen-ID** auf: Der srp-Endpunkt versteht die SEO-Modellseite
+`suchen.mobile.de/auto/<marke>-<modell>.html` (englische Namen eingedeutscht: S-Class → s-klasse, 3 Series → 3er)
+und liefert in `filters.ms[0]` `make`, `model`, `modelGroup` – Baureihen sind bei mobile.de Modellgruppen
+(S-Klasse = 17200;;16;). Gesucht wird dann mit `ms=<Marke>;<Modell>;<Gruppe>;` statt Freitext (Probe: 14 Treffer,
+alle S-Klasse, statt 51 gemischte); die IDs liegen 30 Tage in `meta`. Zusätzlich muss die Variantenkennung als
+eigenes Wort im mobile.de-Modellnamen (`shortTitle`) oder Titel stehen („S 350“/„S350“, „320 d“/„320d“; Endbuchstabe
+optional, damit „E 220 d“ auch „E 220 CDI“ findet) – so bleiben S 320 und S 420 außen vor. Marken-IDs von mobile.de sind für rund 60 Marken hinterlegt (`REFERENCE_MAKE_IDS` ergänzt).
+Leistung (kW) liefern OLX (`enginepower`/`engine_power`/`horsepower`, PS → kW), Subito (`/power`) und Sauto
+(`engine_power`); Encar nur den Hubraum aus dem Detail.
+
+## 10. USA, Golfstaaten, Japan, Korea – kostenlose Frontend-Endpunkte (Stand 15.09.2026)
+
+| Markt | Quelle | Endpunkt | Stand |
+|---|---|---|---|
+| **USA** | **Copart** | `POST https://www.copart.com/public/lots/search-results` (JSON-Body `query:["*"], filter:{MISC:["#VehicleTypeCode:VEHTYPE_V"]}, page, size`; Antwort `data.results.content[]` mit Kurzschlüsseln `ln, mkn, lmg, lm, ltd, lcy, orr, ord, hb, bnp, ad, yn, locCity, locState, locCountry, dd, tgd, lcd, hk, ft, tmtp, drv, egn, cy, tims, ldu`) **[B]** (Live-Probe 15.09.2026: 385.803 Lose, direkt aus Node) | `providers/copart.ts` **bestätigt**; übernommen werden Lose mit Gebot oder Sofortkauf und künftigem Termin (viele Lose haben noch kein Gebot) |
+| USA | IAAI | Suche nur über geschützte Endpunkte (Incapsula) | offen – weiterhin über Apibara |
+| USA | Cars.com / Autotrader / CarGurus | serverseitig gerenderte Seiten, Bot-Schutz | offen |
+| **VAE** | **Dubizzle** | Algolia-Suchindex der Website (App-ID, Search-Key und Indexname stehen im Seitenquelltext; `POST https://<app>-dsn.algolia.net/1/indexes/*/queries`), Motors-Kategorie mit Preis in AED, Baujahr, km, Marke/Modell **[G]** | offen – App-ID/Key per Browser (Netzwerk-Tab, Aufruf `algolia.net`) auslesen und mit `probe url` prüfen |
+| VAE | Dubicars, YallaMotor | HTML | offen |
+| **Japan** | Goo-net Exchange (goo-net-exchange.com, ~256.000 Exportfahrzeuge), TCV, BE FORWARD, SBT | serverseitig gerenderte Seiten, kein bekannter JSON-Endpunkt | offen – Kandidaten-URLs mit `probe url` prüfen; alternativ Carsensor-Web-API (kostenloser Key, japanischer Inlandsmarkt) |
+| **Korea** | **Charancha (차란차, Deutsch Auto World / Deutsch Automobil Group)** – charancha.com, Plattform des Gebrauchtwagenzentrums Deutsch Auto World in Seoul | Suche unter `/search/view.do` (JSP), JSON-Endpunkt unbekannt | offen – im Browser Netzwerk-Tab die Listen-Anfrage kopieren, `probe url` |
+| Korea | **Lotte Rent-a-Car „T car“** (tcar.lotterentacar.net) – Direktverkauf ehemaliger Mietwagen der Lotte Rental | JSON-Endpunkt unbekannt | offen – wie oben („Lotte Car World“ wurde als dieses Portal gedeutet; Lotte Auto Auction ist nur für Händler) |
+
+Vorgehen für offene Zeilen: Seite im Browser öffnen → F12 → Netzwerk → Filter „Fetch/XHR“ → Liste blättern →
+den Aufruf mit der Trefferliste per Rechtsklick „Copy as cURL“ kopieren und hier einfügen; alternativ
+`npm run probe -w backend -- url "<URL>" "Header:Wert"` ausführen und die Ausgabe schicken. Daraus entsteht der
+Adapter wie bei Sauto/Subito in einer Runde.

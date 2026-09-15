@@ -351,3 +351,39 @@ Erfahrungswert nach dem ersten Lauf im DataImpulse-Dashboard unter **Usage** pr�
 
 **Ablauf ändern:** Zeitplan oder Umfang (`ENCAR_MIN_PRICE_MANWON`, `ENCAR_MIN_YEAR`, `ENCAR_CAR_TYPES`)
 in `.github/workflows/sync.yml` bzw. als weitere `env:`-Einträge dort setzen, committen, pushen.
+
+## Teil K – Vergleichspreise DE auf den Kacheln (Stand 15.09.2026)
+
+Jede Kachel zeigt „DE ab €X“ (günstigstes vergleichbares Angebot in Deutschland) und den Abstand des Endpreises
+inkl. Zoll, Steuer, TÜV und Zulassung in Prozent (grün = günstiger als das deutsche Angebot). Vergleichbar heißt:
+gleiche Marke, Modell bzw. Variantenkennung (z. B. „320d“, „E 220 d“), gleicher Kraftstoff, Baujahrband der
+Baureihe (nennt das Inserat einen Code wie W221, E93 oder F30, gilt deren Bauzeitraum aus
+`backend/src/domain/generations.ts` – eine 2011er W221 zählt zur 2013er W221, eine W222 nicht; ohne Code Baujahr ±1),
+Laufleistung höchstens +50 % unter 100.000 km bzw. +30 % darüber (nach unten offen), Hubraum ±12 % und Leistung
+±15 % sofern beide Seiten die Werte kennen. Weil mobile.de die Beschreibung unscharf sucht („S350“ liefert auch
+CLS 350 und E 350), muss die Variantenkennung zusätzlich als eigenes Wort im mobile.de-Modellnamen oder Titel stehen.
+
+Quelle ist der JSON-Endpunkt der mobile.de-Web-App (`/consumer/api/search/srp`, kein Key, Grauzone wie Encar).
+Damit die Suche schnell und günstig bleibt, holt nicht die API die Preise, sondern ein Job nach dem Sync
+(`backend/src/cli/reference.ts`): je Suchbucket (Marke, Variante, Kraftstoff, Baujahrband, Laufleistungsband) die
+günstigsten Angebote in die Tabelle `ref_prices`; die API liest je Trefferseite nur diese Buckets (eine Abfrage).
+
+1. Vom eigenen Rechner prüfen (schreibt nichts):
+   `npm run probe -w backend -- mobile BMW 320d 2019 Diesel`. Bestätigt 15.09.2026: `✔ Modus url HTTP 200 · 21 Stichproben ·
+   Treffer gesamt 730 · Seiten 37` und darunter Zeilen `✔ 2019 · 95000 km · 21500 € · 140 kW · 1995 cm³ · …`
+   (der Modus `query` liefert 400 und ist nur noch Rückfall).
+   Zeigt die Probe „ID UNBEKANNT“, fehlt die mobile.de-Marken-ID → als Variable `REFERENCE_MAKE_IDS`
+   ergänzen, z. B. `{"Genesis":8501}` (ID aus der mobile.de-Such-URL `ms=<id>;;;` ablesen).
+2. GitHub → Settings → Secrets and variables → Actions → Variables: `REFERENCE_ENABLED=true`
+   (optional `REFERENCE_MAX_PER_RUN`, Standard 1500 Buckets je Lauf ≈ 25 Minuten). Sperrt mobile.de die Runner-IP (403), als Secret
+   `REFERENCE_PROXY_URL` den Residential-Proxy eintragen.
+3. Vercel → Settings → Environment Variables: `REFERENCE_ENABLED=true` (sonst bleiben die Kacheln ohne
+   Vergleichspreis, obwohl Buckets vorliegen), dann Redeploy.
+4. Actions → Sync Listings → Run workflow. Der Schritt „Vergleichspreise DE“ meldet
+   `✔ reference buckets=… · aktuell=… · Kandidaten=…`. Mit 1500 Buckets je Lauf und vier Läufen am Tag sind
+   die häufigsten Kombinationen nach dem ersten Tag abgedeckt, der Rest folgt in den nächsten Tagen; danach
+   werden Buckets alle 7 Tage (`REFERENCE_TTL_DAYS`) erneuert. Die Detailansicht lädt fehlende Buckets live nach
+   (`REFERENCE_LIVE_LOOKUP`, eine mobile.de-Anfrage).
+
+Kosten: der Job läuft auf GitHub Actions (kostenlos im Kontingent); Turso liest je Trefferseite bis zu 48 kleine
+Zeilen mehr. Auf Vercel entsteht keine zusätzliche externe Anfrage außer in der Detailansicht.

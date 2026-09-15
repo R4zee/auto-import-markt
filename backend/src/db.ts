@@ -148,6 +148,19 @@ async function migrate(): Promise<void> {
       value TEXT NOT NULL
     );
 
+    -- Vergleichspreise DE: je Suchbucket (Quelle, Marke, Variante, Kraftstoff, Baujahrband) die günstigsten Angebote
+    -- mit Preis/Baujahr/km/Leistung als JSON; das Laufleistungsfenster wird je Inserat beim Ausliefern angewendet
+    CREATE TABLE IF NOT EXISTS ref_prices (
+      key TEXT PRIMARY KEY,
+      source TEXT NOT NULL,
+      query_json TEXT NOT NULL,
+      samples_json TEXT NOT NULL,
+      total INTEGER,
+      url TEXT NOT NULL DEFAULT '',
+      fetched_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ref_prices_fetched ON ref_prices(fetched_at);
+
     -- Übersetzungs-/Spezifikations-Cache je Encar-Ausstattungskombination (Hersteller, Modell, Badge → englische Namen, Hubraum)
     CREATE TABLE IF NOT EXISTS encar_grades (
       manufacturer TEXT NOT NULL,
@@ -169,6 +182,8 @@ async function migrate(): Promise<void> {
   await ensureColumn(c, 'listings', 'landed_nl', 'REAL');
   await ensureColumn(c, 'listings', 'landed_pl', 'REAL');
   await ensureColumn(c, 'listings', 'auction_ends_at', 'TEXT');
+  // Motorleistung (kW) für den Vergleichspreis – nicht jede Quelle liefert sie
+  await ensureColumn(c, 'listings', 'power_kw', 'INTEGER');
   // Volltext-Hilfsspalte (klein geschrieben: Marke Modell Ausstattung Standort Losnummer) – wird beim Upsert gesetzt
   await ensureColumn(c, 'listings', 'search_text', 'TEXT');
   // Einmaliges Nachfüllen für Bestände von vor dieser Spalte – mit Merker in `meta`, damit nicht jeder Kaltstart

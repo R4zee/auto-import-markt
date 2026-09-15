@@ -86,6 +86,8 @@ export function mapSauto(it: SautoItem, fetchedAt: string): Listing | null {
     km: Math.round(num(it.tachometer) ?? 0),
     engine: fuel === 'Electric' ? 'EV' : ccm ? `${(ccm / 1000).toFixed(1)} L` : litres ? `${litres[1]}.${litres[2]} L` : '',
     engineCcm: ccm,
+    // Sauto liefert engine_power in kW
+    powerKw: (() => { const p = num(it.engine_power); return p && p >= 20 && p <= 1200 ? Math.round(p) : null; })(),
     co2Gkm: null,
     transmission,
     drive,

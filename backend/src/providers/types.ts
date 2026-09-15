@@ -26,6 +26,22 @@ export function listingId(source: string, externalId: string): string {
   return `${source}:${externalId}`;
 }
 
+/**
+ * Motorleistung in kW aus Anzeigetexten: "140 kW (190 PS)", "190 KM" (polnisch PS), "224 CP" (rumänisch), "150 cv",
+ * "к.с." (bulgarisch). Reine Zahl ohne Einheit gilt als PS (so führen OLX, Subito, Sauto die Leistung überwiegend).
+ */
+export function powerKwFromText(text: string | number | null | undefined): number | null {
+  if (text == null || text === '') return null;
+  const s = String(text).replace(/ /g, ' ');
+  const kw = s.match(/(\d{2,4})\s*kw/i);
+  if (kw) return Number(kw[1]);
+  const ps = s.match(/(\d{2,4})\s*(ps|hp|km|cp|cv|к\.?\s?с\.?|bhp)/i) ?? (/^\s*\d{2,4}\s*$/.test(s) ? [s, s.trim()] : null);
+  if (!ps) return null;
+  const n = Number(ps[1]);
+  if (!Number.isFinite(n) || n < 30 || n > 1500) return null;
+  return Math.round(n * 0.7355);
+}
+
 /** Hilfsfunktion: Meilen → km */
 export function milesToKm(miles: number): number {
   return Math.round(miles * 1.609344);
