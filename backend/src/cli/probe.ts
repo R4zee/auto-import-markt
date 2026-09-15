@@ -5,7 +5,7 @@ import { mapOlxOffer, olxHeaders, OlxProvider, type OlxFilterLevel } from '../pr
 import { mapSauto, SautoProvider } from '../providers/sauto.js';
 import { mapSubito, SubitoProvider } from '../providers/subito.js';
 import { CopartProvider, copartSkipReason, mapCopart } from '../providers/copart.js';
-import { extractItems, mapMobileItem, mobileApiUrl, mobileMakeId, MobileDeReference, mobileSearchUrl, type RefQuery } from '../providers/mobilede.js';
+import { extractItems, mapMobileItem, mobileApiUrl, mobileMakeId, MobileDeReference, mobileSearchUrl, mobileSeoUrl, type RefQuery } from '../providers/mobilede.js';
 import { bucketKey, kmBandFor, kmWindow, summarize, titleMatches } from '../services/reference.js';
 import { yearBand } from '../domain/generations.js';
 import type { Fuel } from '../domain/types.js';
@@ -23,6 +23,8 @@ import type { Fuel } from '../domain/types.js';
  *   npm run probe -- sauto
  *   npm run probe -- mobile BMW 320d 2019 Diesel [km]   (Vergleichspreise DE: beide mobile.de-Modi, Rohantwort, Stichproben, km-Fenster)
  *   npm run probe -- mobile Mercedes-Benz "S350 W221" 2013 Diesel   (Baureihen-Code → Bauzeitraum 2005–2013 statt Baujahr ±1)
+ *   npm run probe -- mobile Mercedes-Benz "S350 W221" 2013 Diesel 80000 "S-Class"   (Modell-ID über die SEO-Modellseite statt Freitext)
+ *   npm run probe -- mobile-model BMW "3 Series"   (nur die Modell-ID auflösen)
  *   npm run probe -- copart                        (Copart-Suchendpunkt: Rohantwort des ersten Loses, Zuordnung)
  *   npm run probe -- url <URL> [Header:Wert …]     (beliebige Adresse: Status, Content-Type, Anfang der Antwort – für neue Quellen)
  *   npm run probe -- <provider> (jeder andere Provider: fetchAll mit Ausgabe der ersten 3 Inserate)
@@ -284,14 +286,30 @@ async function probeSauto() {
   }
 }
 
-/** Vergleichspreise DE: `probe mobile <Marke> <Beschreibung> [Baujahr] [Petrol|Diesel|Hybrid|Electric] [km]` */
-async function probeMobile(make: string, description: string, year: number, fuel: Fuel | null, km: number) {
+/** Modell-ID von mobile.de über die SEO-Modellseite: `probe mobile-model Mercedes-Benz "S-Class"` */
+async function probeMobileModel(make: string, model: string): Promise<number | null> {
+  const src = new MobileDeReference();
+  console.log(`\n=== mobile.de Modell-ID · ${make} "${model}" → ${mobileSeoUrl(make, model)}`);
+  try {
+    const r = await src.resolveModel(make, model);
+    console.log(`  ${r.modelId != null ? '✔' : '✖'} make=${r.makeId ?? '–'} model=${r.modelId ?? '–'} modelGroup=${r.modelGroupId ?? '–'} · Bezeichnung "${r.label || '–'}"`);
+    if (r.modelId == null) console.log('  Kein Modell erkannt – Slug prüfen: im Browser suchen.mobile.de → Marke/Modell wählen → Adresse /auto/<marke>-<modell>.html vergleichen');
+    return r.modelId;
+  } catch (e) {
+    console.log('  ✖', e instanceof Error ? e.message.slice(0, 200) : String(e));
+    return null;
+  }
+}
+
+/** Vergleichspreise DE: `probe mobile <Marke> <Beschreibung> [Baujahr] [Petrol|Diesel|Hybrid|Electric] [km] [Modellname]` */
+async function probeMobile(make: string, description: string, year: number, fuel: Fuel | null, km: number, model: string | null) {
   // Beschreibung darf einen Baureihen-Code enthalten ("S350 W221") → Bauzeitraum statt Baujahr ±1
   const band = yearBand({ make, model: description, trim: description, year }, config.reference.yearSpan);
   const cleanDesc = band.generation ? description.replace(new RegExp(`\\s*\\b${band.generation}\\b\\s*`, 'i'), ' ').trim() : description;
-  const q: RefQuery = { make, description: cleanDesc, yearFrom: band.from, yearTo: band.to, fuel, generation: band.generation, kmTo: kmBandFor(km) };
+  const modelId = model ? await probeMobileModel(make, model) : null;
+  const q: RefQuery = { make, description: cleanDesc, yearFrom: band.from, yearTo: band.to, fuel, generation: band.generation, kmTo: kmBandFor(km), modelId, model: model ?? undefined };
   const src = new MobileDeReference();
-  console.log(`\n=== mobile.de · ${make} (ID ${mobileMakeId(make) ?? 'UNBEKANNT → REFERENCE_MAKE_IDS'}) · "${cleanDesc}" · ${q.yearFrom}–${q.yearTo}${band.generation ? ` (Baureihe ${band.generation})` : ''} · ${fuel ?? 'alle Kraftstoffe'} · ${km} km → Suche bis ${q.kmTo ?? 'unbegrenzt'} km`);
+  console.log(`\n=== mobile.de · ${make} (ID ${mobileMakeId(make) ?? 'UNBEKANNT → REFERENCE_MAKE_IDS'}) · "${cleanDesc}"${modelId ? ` · Modell-ID ${modelId} statt Freitext` : ''} · ${q.yearFrom}–${q.yearTo}${band.generation ? ` (Baureihe ${band.generation})` : ''} · ${fuel ?? 'alle Kraftstoffe'} · ${km} km → Suche bis ${q.kmTo ?? 'unbegrenzt'} km`);
   console.log('Such-URL (Browser):', mobileSearchUrl(q));
   let got: Awaited<ReturnType<typeof src.fetchPage>> | null = null;
   for (const mode of ['query', 'url'] as const) {
@@ -311,10 +329,7 @@ async function probeMobile(make: string, description: string, year: number, fuel
   }
   const raw = got.raw as Record<string, unknown>;
   console.log('Schlüssel der Antwort:', Object.keys(raw).join(', '));
-  // Filterdaten der Antwort: enthalten vermutlich die Modell-Liste der Marke mit IDs (für ms=<make>;<model>;; statt Freitext)
-  console.log('filters (gekürzt):', short(raw.filters, 6000));
-  console.log('aggregations (gekürzt):', short(raw.aggregations, 1500));
-  console.log('chips (gekürzt):', short(raw.chips, 800));
+  console.log('filters.ms:', short((raw.filters as Record<string, unknown> | undefined)?.ms, 400));
   const items = extractItems(raw);
   console.log(`Trefferliste: ${items.length} Einträge · erster Eintrag (gekürzt):`, short(items[0], 2500));
   for (const s of got.items.slice(0, 8)) console.log(`  ✔ ${s.year} · ${s.km} km · ${s.priceEur} € · ${s.kw ?? '?'} kW · ${s.ccm ?? '?'} cm³ · ${s.title} · ${s.url ?? ''}`);
@@ -370,8 +385,9 @@ try {
   if (name === 'mobile') {
     const fuelArg = process.argv[6] ?? '';
     const fuel = (['Petrol', 'Diesel', 'Hybrid', 'Electric'] as Fuel[]).find((f) => f.toLowerCase() === fuelArg.toLowerCase()) ?? null;
-    await probeMobile(process.argv[3] ?? 'BMW', process.argv[4] ?? '320d', Number(process.argv[5] ?? 2019), fuel, Number(process.argv[7] ?? 80000));
-  } else if (name === 'copart') await probeCopart();
+    await probeMobile(process.argv[3] ?? 'BMW', process.argv[4] ?? '320d', Number(process.argv[5] ?? 2019), fuel, Number(process.argv[7] ?? 80000), process.argv[8] ?? null);
+  } else if (name === 'mobile-model') await probeMobileModel(process.argv[3] ?? 'Mercedes-Benz', process.argv[4] ?? 'S-Class');
+  else if (name === 'copart') await probeCopart();
   else if (name === 'url') await probeUrl(process.argv[3] ?? '', process.argv.slice(4));
   else if (name === 'olx') await probeOlx();
   else if (name === 'olx-scan') {

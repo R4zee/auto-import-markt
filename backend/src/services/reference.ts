@@ -123,7 +123,43 @@ export function bucketQuery(l: Pick<Listing, 'make' | 'model' | 'trim' | 'year' 
   if (!description) return null;
   const band = yearBand(l, config.reference.yearSpan);
   const kmTo = l.kmBand !== undefined ? l.kmBand : kmBandFor(l.km);
-  return { make: l.make, description, yearFrom: band.from, yearTo: band.to, fuel: (l.fuel as Fuel) ?? null, generation: band.generation, kmTo };
+  const model = l.model.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  return { make: l.make, description, yearFrom: band.from, yearTo: band.to, fuel: (l.fuel as Fuel) ?? null, generation: band.generation, kmTo, model };
+}
+
+// --- Modell-IDs von mobile.de (SEO-Modellseite → filters.ms[0].model), Cache in `meta` ------------------------------
+
+const MODEL_TTL_MS = 30 * 86400000;
+const modelMemo = new Map<string, number | null>();
+
+/**
+ * mobile.de-Modell-ID für Marke + Modellname (z. B. "S-Class" → S-Klasse). Ergebnis (auch „unbekannt“) liegt 30 Tage
+ * in `meta`, damit je Modell nur eine Anfrage anfällt. Baureihen-Codes im Modellnamen ("S-Class W221") werden entfernt.
+ */
+export async function modelIdFor(make: string, model: string): Promise<number | null> {
+  const clean = model.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\b[A-Z]{1,2}\d{2,3}\b/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!clean) return null;
+  const key = `mobile_model|${makeKey(make)}|${clean.toLowerCase()}`;
+  if (modelMemo.has(key)) return modelMemo.get(key) ?? null;
+  const row = await one<{ value: string }>('SELECT value FROM meta WHERE key = ?', [key]);
+  if (row) {
+    try {
+      const v = JSON.parse(row.value) as { modelId: number | null; at: string };
+      if (Date.now() - new Date(v.at).getTime() < MODEL_TTL_MS) { modelMemo.set(key, v.modelId); return v.modelId; }
+    } catch { /* neu auflösen */ }
+  }
+  let modelId: number | null = null;
+  try {
+    const r = await source.resolveModel(make, clean);
+    // Nur übernehmen, wenn mobile.de auch die Marke erkannt hat (sonst war es eine generische Seite)
+    modelId = r.makeId != null && r.modelId != null ? r.modelId : null;
+  } catch (e) {
+    if (e instanceof HttpError && (e.status === 403 || e.status === 429)) throw e;
+    modelId = null;
+  }
+  await run("INSERT INTO meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [key, JSON.stringify({ modelId, at: new Date().toISOString() })]);
+  modelMemo.set(key, modelId);
+  return modelId;
 }
 
 export function bucketKey(q: RefQuery): string {
@@ -272,11 +308,16 @@ export async function attachReferences(items: DecoratedListing[]): Promise<void>
   }
 }
 
-/** Bucket live holen und speichern (Refresh-Job und Detailansicht); Treffer anderer Modelle (unscharfe Suche) fliegen gleich raus */
+/**
+ * Bucket live holen und speichern (Refresh-Job und Detailansicht). Mit bekannter Modell-ID sucht mobile.de nur dieses
+ * Modell (ms=<make>;<model>;;), sonst per Beschreibung; Treffer anderer Modelle (unscharfe Suche) fliegen gleich raus.
+ */
 export async function fetchBucket(q: RefQuery): Promise<RefBucket> {
-  const r = await source.fetchSamples(q);
+  const modelId = q.modelId !== undefined ? q.modelId : q.model ? await modelIdFor(q.make, q.model) : null;
+  const query: RefQuery = { ...q, modelId };
+  const r = await source.fetchSamples(query);
   const matching = r.samples.filter((s) => titleMatches(q.description, s));
-  const b: RefBucket = { key: bucketKey(q), source: source.id, query: q, samples: matching.slice(0, 80), total: r.total, url: r.url, fetchedAt: new Date().toISOString() };
+  const b: RefBucket = { key: bucketKey(q), source: source.id, query, samples: matching.slice(0, 80), total: r.total, url: r.url, fetchedAt: new Date().toISOString() };
   await referenceRepo.save(b);
   return b;
 }
@@ -337,7 +378,7 @@ export async function refreshReferenceBuckets(opts: { limit?: number; log?: (lin
       const b = await fetchBucket(q);
       report.fetched++;
       report.samples += b.samples.length;
-      log(`  ✔ ${q.make} ${q.description} ${q.fuel ?? ''} ${q.yearFrom}–${q.yearTo}${q.kmTo ? ` ≤${q.kmTo} km` : ''} (${n} Inserate) → ${b.samples.length} passende${b.total != null ? ` von ${b.total}` : ''}, ab ${b.samples[0]?.priceEur ?? '–'} €`);
+      log(`  ✔ ${q.make} ${q.description} ${q.fuel ?? ''} ${q.yearFrom}–${q.yearTo}${q.kmTo ? ` ≤${q.kmTo} km` : ''}${b.query.modelId ? ` [Modell ${b.query.modelId}]` : ''} (${n} Inserate) → ${b.samples.length} passende${b.total != null ? ` von ${b.total}` : ''}, ab ${b.samples[0]?.priceEur ?? '–'} €`);
     } catch (e) {
       report.failed++;
       const msg = e instanceof Error ? e.message : String(e);

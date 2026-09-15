@@ -37,6 +37,44 @@ export interface RefQuery {
   kmTo?: number | null;
   /** mobile.de-Modell-ID (Parameter `ms=<make>;<model>;;`), sofern bekannt – sonst Beschreibungssuche */
   modelId?: number | null;
+  /** Modellname des Inserats (z. B. "S-Class", "3 Series", "Tucson") – Grundlage für die Modell-ID-Auflösung */
+  model?: string;
+}
+
+/**
+ * SEO-Adresse der Modellseite, z. B. https://suchen.mobile.de/auto/mercedes-benz-s-klasse.html. Der srp-Endpunkt
+ * versteht diese Adressen (Antwortfeld `isSeoSrp`) und liefert in `filters.ms[0]` die aufgelösten make/model-IDs.
+ * Englische Modellnamen der Quellen werden eingedeutscht (S-Class → s-klasse, 3 Series → 3er).
+ */
+export function mobileModelSlug(model: string): string {
+  let m = model.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+  m = m.replace(/[- ]?\b(class)\b/i, '-Klasse').replace(/\b(\d)\s*[- ]?(series|serie|reihe)\b/i, '$1er');
+  return m
+    .normalize('NFD').replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+export function mobileSeoUrl(make: string, model: string): string {
+  const makeSlug = make.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return `https://suchen.mobile.de/auto/${makeSlug}-${mobileModelSlug(model)}.html`;
+}
+
+export interface ResolvedModel { makeId: number | null; modelId: number | null; modelGroupId: number | null; label: string; url: string }
+
+/** Aufgelöste IDs aus `filters.ms[0]` und die Bezeichnung aus `chips.makeModel[0].label` lesen */
+export function extractResolvedModel(json: unknown, url: string): ResolvedModel {
+  const j = json as Record<string, unknown> | null;
+  const ms = ((j?.filters as Record<string, unknown> | undefined)?.ms as Array<Record<string, unknown>> | undefined)?.[0] ?? {};
+  const chips = ((j?.chips as Record<string, unknown> | undefined)?.makeModel as Array<Record<string, unknown>> | undefined)?.[0];
+  return {
+    makeId: num(ms.make),
+    modelId: num(ms.model),
+    modelGroupId: num(ms.modelGroup),
+    label: str(chips?.label),
+    url,
+  };
 }
 
 /** mobile.de-Marken-IDs (Parameter `ms=<id>;;;<Beschreibung>`), Schlüssel = makeKey des kanonischen Namens */
@@ -174,6 +212,19 @@ export class MobileDeReference {
     try { raw = JSON.parse(body); } catch { throw new Error(`mobile.de: keine JSON-Antwort (${body.slice(0, 80).replace(/\s+/g, ' ')})`); }
     const items = extractItems(raw).map(mapMobileItem).filter((s): s is RefSample => s !== null);
     return { items, raw, url, ...extractTotal(raw) };
+  }
+
+  /** Modell-ID über die SEO-Modellseite auflösen (eine Anfrage); modelId null = mobile.de kennt den Slug nicht */
+  async resolveModel(make: string, model: string): Promise<ResolvedModel> {
+    const seo = mobileSeoUrl(make, model);
+    const url = `https://www.mobile.de/consumer/api/search/srp?url=${encodeURIComponent(seo)}`;
+    const res = await robustFetch(url, { headers: mobileHeaders(), timeoutMs: 25000, proxyUrl: config.reference.proxyUrl || undefined, nodeOnly: true, tls: 'chrome' });
+    const body = await res.text();
+    if (res.status === 404) return { makeId: null, modelId: null, modelGroupId: null, label: '', url: seo };
+    if (!res.ok) throw new HttpError(res.status, url, body, null);
+    let raw: unknown;
+    try { raw = JSON.parse(body); } catch { throw new Error(`mobile.de: keine JSON-Antwort für ${seo}`); }
+    return extractResolvedModel(raw, seo);
   }
 
   /** Bis zu `pages` Seiten (günstigste zuerst); Stichproben preisaufsteigend */

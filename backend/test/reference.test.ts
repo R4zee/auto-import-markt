@@ -5,7 +5,7 @@ process.env.REFERENCE_ENABLED = 'true';
 process.env.REFERENCE_MAKE_IDS = '{"Hongqi": 99999}';
 
 const { copartBody, copartPhoto, copartSkipReason, mapCopart } = await import('../src/providers/copart.js');
-const { extractItems, firstInt, mapMobileItem, mobileApiUrl, mobileMakeId, mobileSearchParams } = await import('../src/providers/mobilede.js');
+const { extractItems, extractResolvedModel, firstInt, mapMobileItem, mobileApiUrl, mobileMakeId, mobileSearchParams, mobileSeoUrl } = await import('../src/providers/mobilede.js');
 const { bucketKey, bucketQuery, detailFrom, diffPct, engineMatches, kmBandFor, kmWindow, summarize, titleMatches, variantText } = await import('../src/services/reference.js');
 const { powerKwFromText } = await import('../src/providers/types.js');
 const { generationOf, yearBand } = await import('../src/domain/generations.js');
@@ -170,6 +170,19 @@ describe('mobile.de – URL und Antwort', () => {
     assert.equal(withBand.get('ml'), ':125000');
     assert.ok(mobileApiUrl({ make: 'BMW', description: '320d', yearFrom: 2018, yearTo: 2020, fuel: null }, 1, 'query').startsWith('https://www.mobile.de/consumer/api/search/srp?isSearchRequest=true'));
     assert.ok(mobileApiUrl({ make: 'BMW', description: '320d', yearFrom: 2018, yearTo: 2020, fuel: null }, 2, 'url').includes(encodeURIComponent('pageNumber=2')));
+  });
+
+  it('SEO-Modellseite: englische Modellnamen eingedeutscht, IDs aus filters.ms', () => {
+    assert.equal(mobileSeoUrl('Mercedes-Benz', 'S-Class'), 'https://suchen.mobile.de/auto/mercedes-benz-s-klasse.html');
+    assert.equal(mobileSeoUrl('Mercedes-Benz', 'E-Class (W213)'), 'https://suchen.mobile.de/auto/mercedes-benz-e-klasse.html');
+    assert.equal(mobileSeoUrl('BMW', '3 Series'), 'https://suchen.mobile.de/auto/bmw-3er.html');
+    assert.equal(mobileSeoUrl('BMW', '5 Series (G30)'), 'https://suchen.mobile.de/auto/bmw-5er.html');
+    assert.equal(mobileSeoUrl('Hyundai', 'Tucson'), 'https://suchen.mobile.de/auto/hyundai-tucson.html');
+    assert.equal(mobileSeoUrl('Škoda', 'Octavia'), 'https://suchen.mobile.de/auto/skoda-octavia.html');
+    assert.equal(mobileSeoUrl('Land Rover', 'Range Rover Sport'), 'https://suchen.mobile.de/auto/land-rover-range-rover-sport.html');
+    const r = extractResolvedModel({ filters: { ms: [{ make: '17200', model: '10', modelGroup: '', modelDescription: '' }] }, chips: { makeModel: [{ label: 'Mercedes-Benz S-Klasse' }] } }, 'u');
+    assert.deepEqual(r, { makeId: 17200, modelId: 10, modelGroupId: null, label: 'Mercedes-Benz S-Klasse', url: 'u' });
+    assert.equal(extractResolvedModel({ filters: {} }, 'u').modelId, null);
   });
 
   it('Zahlen aus Anzeigetexten', () => {
