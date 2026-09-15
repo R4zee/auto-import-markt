@@ -374,12 +374,11 @@ günstigsten Angebote in die Tabelle `ref_prices`; die API liest je Trefferseite
    (der Modus `query` liefert 400 und ist nur noch Rückfall).
    Zeigt die Probe „ID UNBEKANNT“, fehlt die mobile.de-Marken-ID → als Variable `REFERENCE_MAKE_IDS`
    ergänzen, z. B. `{"Genesis":8501}` (ID aus der mobile.de-Such-URL `ms=<id>;;;` ablesen).
-2. GitHub → Settings → Secrets and variables → Actions → Variables: `REFERENCE_ENABLED=true`
-   (optional `REFERENCE_MAX_PER_RUN`, Standard 1500 Buckets je Lauf ≈ 25 Minuten). Sperrt mobile.de die Runner-IP (403), als Secret
-   `REFERENCE_PROXY_URL` den Residential-Proxy eintragen.
-3. Vercel → Settings → Environment Variables: `REFERENCE_ENABLED=true` (sonst bleiben die Kacheln ohne
-   Vergleichspreis, obwohl Buckets vorliegen), dann Redeploy.
-4. Actions → Sync Listings → Run workflow. Der Schritt „Vergleichspreise DE“ meldet
+2. Die Funktion ist standardmäßig an (seit 15.09.2026). Abschalten: GitHub-Variable und Vercel-Variable
+   `REFERENCE_ENABLED=false`. Optional als GitHub-Variable `REFERENCE_MAX_PER_RUN` (Standard 1500 Buckets je Lauf
+   ≈ 25 Minuten). Sperrt mobile.de die Runner-IP (403), als Secret `REFERENCE_PROXY_URL` den Residential-Proxy eintragen.
+3. Vercel deployt `main` automatisch; ohne Buckets in `ref_prices` bleiben die Kacheln zunächst ohne Vergleichspreis.
+4. Actions → Sync Listings → Run workflow (der Schritt läuft auch, wenn der Sync rot endet). Der Schritt „Vergleichspreise DE“ meldet
    `✔ reference buckets=… · aktuell=… · Kandidaten=…`. Mit 1500 Buckets je Lauf und vier Läufen am Tag sind
    die häufigsten Kombinationen nach dem ersten Tag abgedeckt, der Rest folgt in den nächsten Tagen; danach
    werden Buckets alle 7 Tage (`REFERENCE_TTL_DAYS`) erneuert. Die Detailansicht lädt fehlende Buckets live nach

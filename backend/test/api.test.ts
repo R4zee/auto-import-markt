@@ -7,6 +7,8 @@ delete process.env.DATABASE_URL;
 process.env.ENABLE_MOCK_PROVIDER = 'true';
 process.env.ENCAR_ENABLED = 'false';
 process.env.CARAPIS_API_KEY = '';
+// Vergleichspreise sind standardmäßig an – hier den abgeschalteten Pfad prüfen (204, referenceAvailable=false)
+process.env.REFERENCE_ENABLED = 'false';
 process.env.SYNC_INTERVAL_MIN = '0';
 process.env.ADMIN_KEY = 'test-key';
 process.env.CRON_SECRET = 'cron-secret';
@@ -63,7 +65,7 @@ describe('API', async () => {
     assert.equal(res.json().items.length, 2);
   });
 
-  it('GET /api/listings/:id/reference ohne Carapis → 204', async () => {
+  it('GET /api/listings/:id/reference mit REFERENCE_ENABLED=false → 204', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/listings/mock:jp1/reference' });
     assert.equal(res.statusCode, 204);
   });

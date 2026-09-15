@@ -69,14 +69,14 @@ jobs:
           # weitere Provider-Keys hier ergänzen, z. B. APIBARA_API_KEY: ${{ secrets.APIBARA_API_KEY }}
         run: node --import tsx src/cli/sync.ts
       - name: Vergleichspreise DE (mobile.de) → Turso
-        # Läuft nur mit Variable REFERENCE_ENABLED=true; je Lauf höchstens REFERENCE_MAX_PER_RUN Buckets (Standard 1500).
+        # Standard an; Variable REFERENCE_ENABLED=false schaltet ab. Je Lauf höchstens REFERENCE_MAX_PER_RUN Buckets (Standard 1500).
         # always(): auch wenn der Sync rot endet (z. B. Encar 403), sonst blieben die Kacheln ohne Vergleichspreis
-        if: ${{ always() && vars.REFERENCE_ENABLED == 'true' }}
+        if: ${{ always() && vars.REFERENCE_ENABLED != 'false' }}
         working-directory: backend
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-          REFERENCE_ENABLED: 'true'
+          REFERENCE_ENABLED: ${{ vars.REFERENCE_ENABLED || 'true' }}
           REFERENCE_MOBILE_MODE: ${{ vars.REFERENCE_MOBILE_MODE || 'query' }}
           REFERENCE_MAX_PER_RUN: ${{ vars.REFERENCE_MAX_PER_RUN || '1500' }}
           REFERENCE_MAKE_IDS: ${{ vars.REFERENCE_MAKE_IDS }}
