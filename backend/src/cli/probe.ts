@@ -355,6 +355,13 @@ async function probeCopart() {
     console.log(`  ✔ ${r.lots.length} Lose · gesamt ${r.total ?? '?'}`);
     console.log('Schlüssel der Antwort:', Object.keys((r.raw as Record<string, unknown>) ?? {}).join(', '));
     console.log('content[0] (gekürzt):', short(r.lots[0], 3000));
+    // Wo beginnen die künftigen Termine? Je Seite (100 Lose) Termin des ersten und letzten Loses
+    const day = (ms: unknown) => { const n = Number(ms); return n > 0 ? new Date(n).toISOString().slice(0, 16) : '–'; };
+    for (const page of [0, 5, 10, 20, 40]) {
+      const pg = await p.fetchPage(page, 100);
+      const future = pg.lots.filter((l) => !copartSkipReason(l)).length;
+      console.log(`  Seite ${String(page).padStart(2)}: Termine ${day(pg.lots[0]?.ad)} … ${day(pg.lots[pg.lots.length - 1]?.ad)} · ${future} von ${pg.lots.length} übernehmbar`);
+    }
     for (const lot of r.lots) {
       const l = mapCopart(lot, fetchedAt);
       console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.offerType}${l.auction ? ` bis ${l.auction.endsAt}` : ''} · ${l.location} · ${l.photos.length} Fotos · ${l.url}` : `  – übersprungen (${copartSkipReason(lot) ?? 'unvollständig'}): ln=${lot.ln} ${lot.lcy} ${lot.mkn} ${lot.lmg ?? lot.lm} · hb=${lot.hb} bnp=${lot.bnp} ad=${lot.ad ? new Date(Number(lot.ad)).toISOString().slice(0, 10) : '–'}`);
