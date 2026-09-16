@@ -232,7 +232,7 @@ describe('Copart (USA) – Anfrage und Zuordnung', () => {
     const l = mapCopart({ ln: 55512345, mkn: 'BMW', lm: '330I', lmg: '3 SERIES', lcy: 2019, orr: 45210, ord: 'M', hb: 8200, bnp: 0, ad: future, yn: 'CA - LOS ANGELES', dd: 'FRONT END', ft: 'GAS', tmtp: 'AUTOMATIC', drv: 'Rear-wheel Drive', egn: '2.0L 4', cy: 4, tims: 'https://cs.copart.com/v1/AUTH_svc.pdoc00001/lpp/0925/abc_thb.jpg', tt: 'CLEAN TITLE', lcd: 'Run and Drive', hk: 'YES' }, NOW);
     assert.ok(l);
     assert.equal(l.id, 'copart:55512345');
-    assert.equal(l.make, 'BMW'); assert.equal(l.model, '3 SERIES');
+    assert.equal(l.make, 'BMW'); assert.equal(l.model, '3 Series');
     assert.equal(l.km, 72_758);
     assert.equal(l.price, 8200); assert.equal(l.currency, 'USD');
     assert.equal(l.offerType, 'auction');
@@ -265,7 +265,7 @@ describe('Copart (USA) – Anfrage und Zuordnung', () => {
     };
     const l = mapCopart(lot, NOW);
     assert.ok(l);
-    assert.equal(l.make, 'Kia'); assert.equal(l.model, 'FORTE');
+    assert.equal(l.make, 'Kia'); assert.equal(l.model, 'Forte');
     assert.equal(l.trim, 'GT · Title: SALVAGE TITLE · Damage: REAR END');
     assert.equal(l.location, 'SPANAWAY');
     assert.equal(l.url, 'https://www.copart.com/lot/73672065/salvage-2021-kia-forte-gt-wa-spanaway');

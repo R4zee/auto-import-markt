@@ -58,7 +58,8 @@ export function mapCopart(v: CopartLot, fetchedAt: string): Listing | null {
   const lot = str(v.ln);
   const year = num(v.lcy);
   const make = canonicalMake(str(v.mkn));
-  const model = str(v.lmg || v.lm);
+  // Copart schreibt Modelle in Großbuchstaben ("SILVERADO", "3 SERIES") → Wortanfang groß, Kürzel bis 3 Zeichen bleiben
+  const model = str(v.lmg || v.lm).split(' ').map((w) => (/^[A-Z0-9-]{1,3}$/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())).join(' ');
   if (!lot || !year || !make || !model) return null;
   if (copartSkipReason(v)) return null;
   const bid = num(v.hb) ?? 0;

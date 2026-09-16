@@ -247,7 +247,8 @@ export class MobileDeReference {
     }
     // Top-Anzeigen erscheinen auf mehreren Seiten erneut → je Inserat einmal
     const seen = new Set<string>();
-    const unique = samples.filter((s) => { const k = s.url ?? `${s.title}|${s.priceEur}|${s.km}`; if (seen.has(k)) return false; seen.add(k); return true; });
+    // Links tragen je Seite eine andere searchId → ohne Query-String vergleichen
+    const unique = samples.filter((s) => { const k = s.url ? s.url.split('?')[0] : `${s.title}|${s.priceEur}|${s.km}`; if (seen.has(k)) return false; seen.add(k); return true; });
     unique.sort((a, b) => a.priceEur - b.priceEur);
     return { samples: unique, total, url };
   }
