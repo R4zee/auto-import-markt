@@ -5,6 +5,7 @@ import { mapOlxOffer, olxHeaders, OlxProvider, type OlxFilterLevel } from '../pr
 import { mapSauto, SautoProvider } from '../providers/sauto.js';
 import { mapSubito, SubitoProvider } from '../providers/subito.js';
 import { CopartProvider, copartSkipReason, mapCopart } from '../providers/copart.js';
+import { DubizzleProvider, dubizzleSkipReason, initialBands, mapDubizzle } from '../providers/dubizzle.js';
 import { extractItems, mapMobileItem, mobileApiUrl, mobileMakeId, MobileDeReference, mobileSearchUrl, mobileSeoUrl, type RefQuery } from '../providers/mobilede.js';
 import { bucketKey, kmBandFor, kmWindow, summarize, titleMatches } from '../services/reference.js';
 import { yearBand } from '../domain/generations.js';
@@ -26,6 +27,7 @@ import type { Fuel } from '../domain/types.js';
  *   npm run probe -- mobile Mercedes-Benz "S350 W221" 2013 Diesel 80000 "S-Class"   (Modell-ID über die SEO-Modellseite statt Freitext)
  *   npm run probe -- mobile-model BMW "3 Series"   (nur die Modell-ID auflösen)
  *   npm run probe -- copart                        (Copart-Suchendpunkt: Rohantwort des ersten Loses, Zuordnung)
+ *   npm run probe -- dubizzle                      (Dubizzle-Algolia-Proxy: Gesamtzahl, Roh-Treffer, Zuordnung, Preisfenster)
  *   npm run probe -- url <URL> [Header:Wert …]     (beliebige Adresse: Status, Content-Type, Anfang der Antwort – für neue Quellen)
  *   npm run probe -- <provider> (jeder andere Provider: fetchAll mit Ausgabe der ersten 3 Inserate)
  */
@@ -372,6 +374,36 @@ async function probeCopart() {
   }
 }
 
+async function probeDubizzle() {
+  const p = new DubizzleProvider();
+  console.log('\n=== Dubizzle Motors (VAE) · POST algolia.dubizzle.com/1/indexes/*/queries · Index motors.com');
+  try {
+    const r = await p.fetchPage([0, null], 0, 5);
+    console.log(`  ✔ ${r.total} Gebrauchtwagen gesamt · ${r.hits.length} Treffer geholt`);
+    const hit = r.hits[0];
+    if (hit) {
+      console.log('Schlüssel des Treffers:', Object.keys(hit).join(', '));
+      console.log('details-Schlüssel:', Object.keys(hit.details ?? {}).join(', ') || '–', '· details_v2:', Object.keys(hit.details_v2 ?? {}).join(', ') || '–');
+      console.log('hits[0] (gekürzt):', short(hit, 3500));
+    }
+    for (const h of r.hits) {
+      const l = mapDubizzle(h, fetchedAt);
+      console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.powerKw ?? '–'} kW · ${l.transmission} · ${l.location} · ${l.photos.length}/${l.photoCount} Fotos · ${l.url}` : `  – übersprungen (${dubizzleSkipReason(h) ?? 'unvollständig'}): ${short(h.name, 80)} · price=${h.price}`);
+    }
+    // Wie verteilen sich die Treffer auf die Preisfenster? (Fenster > 1.000 werden im Sync halbiert)
+    const bands = initialBands(config.dubizzle.minPriceAed);
+    const counts: string[] = [];
+    for (const b of bands) {
+      const pg = await p.fetchPage(b, 0, 1);
+      counts.push(`${b[0] / 1000}k–${b[1] != null ? `${b[1] / 1000}k` : '∞'}: ${pg.total}`);
+    }
+    console.log('  Preisfenster (AED):', counts.join(' · '));
+  } catch (e) {
+    console.log('  ✖', e instanceof Error ? e.message.slice(0, 400) : String(e));
+    console.log('  Im Browser https://uae.dubizzle.com/motors/used-cars/ öffnen → Netzwerk-Tab → Aufruf "queries" (algolia.dubizzle.com) → Antwort hier einfügen.');
+  }
+}
+
 /** Beliebige Adresse anfragen: `probe url https://… Header:Wert …` */
 async function probeUrl(url: string, headerArgs: string[]) {
   const headers: Record<string, string> = { 'User-Agent': config.europe.userAgent, Accept: 'application/json, text/html;q=0.9, */*;q=0.8' };
@@ -397,6 +429,7 @@ try {
     await probeMobile(process.argv[3] ?? 'BMW', process.argv[4] ?? '320d', Number(process.argv[5] ?? 2019), fuel, Number(process.argv[7] ?? 80000), process.argv[8] ?? null);
   } else if (name === 'mobile-model') await probeMobileModel(process.argv[3] ?? 'Mercedes-Benz', process.argv[4] ?? 'S-Class');
   else if (name === 'copart') await probeCopart();
+  else if (name === 'dubizzle') await probeDubizzle();
   else if (name === 'url') await probeUrl(process.argv[3] ?? '', process.argv.slice(4));
   else if (name === 'olx') await probeOlx();
   else if (name === 'olx-scan') {

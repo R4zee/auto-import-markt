@@ -222,6 +222,19 @@ export const config = {
     delayMs: num(env.COPART_DELAY_MS, 800),
     proxyUrl: env.COPART_PROXY_URL || '',
   },
+  /** VAE: Dubizzle Motors über den Algolia-Proxy der Website (kein Key; Grauzone wie Encar). Aufrufe aus dem Netzwerk-Tab 16.09.2026. */
+  dubizzle: {
+    enabled: bool(env.DUBIZZLE_ENABLED, false),
+    /** Treffer je Anfrage (die Website nutzt selbst 1.000; Algolia-Obergrenze je Filter ebenfalls 1.000) */
+    hitsPerPage: num(env.DUBIZZLE_HITS_PER_PAGE, 1000),
+    /** Höchstens so viele Anfragen je Lauf (Preisfenster + Folgeseiten) */
+    maxRequests: num(env.DUBIZZLE_MAX_REQUESTS, 400),
+    /** Untergrenze der Preisfenster (AED); darunter liegt kaum Exportware */
+    minPriceAed: num(env.DUBIZZLE_MIN_PRICE_AED, 20000),
+    minYear: num(env.DUBIZZLE_MIN_YEAR, 2012),
+    delayMs: num(env.DUBIZZLE_DELAY_MS, 500),
+    proxyUrl: env.DUBIZZLE_PROXY_URL || '',
+  },
   olx: {
     enabled: bool(env.OLX_ENABLED, false),
     sites: olxSites().map((s) => ({ ...s, enabled: s.enabled && bool(env.OLX_ENABLED, false) })),
