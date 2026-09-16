@@ -39,10 +39,11 @@ export function copartSkipReason(v: CopartLot): string | null {
 export function copartBody(page: number, size: number, makes: string[] = []): Record<string, unknown> {
   const filter: Record<string, string[]> = { MISC: ['#VehicleTypeCode:VEHTYPE_V'] };
   if (makes.length) filter.MAKE = makes.map((m) => `#Make:${m.toUpperCase()}`);
-  // Nach Auktionstermin aufsteigend: die ersten Seiten sind die heute bereits gelaufenen Verkäufe (Lauf 26: 1.981 von
-  // 2.000 Losen mit zurückliegendem Termin) – fetchAll blättert weiter, bis genug künftige Termine beisammen sind
+  // Sortierung wie die Copart-Suche: laufende/nächste Auktionen zuerst. Gebote gibt es fast nur kurz vor und während
+  // der Auktion – reine Terminsortierung lieferte 7.895 von 8.000 Losen ohne Gebot (Lauf 29). Tagsüber liegen die ersten
+  // Seiten bereits hinter dem Termin, deshalb blättert fetchAll weiter, bis genug übernehmbare Lose beisammen sind.
   return {
-    query: ['*'], filter, sort: ['auction_date_utc asc'],
+    query: ['*'], filter, sort: ['auction_date_type desc', 'auction_date_utc asc'],
     page, size, start: page * size, watchListOnly: false, freeFormSearch: false, hideImages: false, defaultSort: false,
     specificRowProvided: false, displayName: '', searchName: '', backUrl: '', includeTagByField: {}, rawParams: {},
   };
