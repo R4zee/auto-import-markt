@@ -388,7 +388,7 @@ async function probeDubizzle() {
     }
     for (const h of r.hits) {
       const l = mapDubizzle(h, fetchedAt);
-      console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.powerKw ?? '–'} kW · ${l.transmission} · ${l.location} · ${l.photos.length}/${l.photoCount} Fotos · ${l.url}` : `  – übersprungen (${dubizzleSkipReason(h) ?? 'unvollständig'}): ${short(h.name, 80)} · price=${h.price}`);
+      console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.engine || '–'} · ${l.transmission} · ${l.location} · ${l.photos.length}/${l.photoCount} Fotos · ${l.url}` : `  – übersprungen (${dubizzleSkipReason(h) ?? 'unvollständig'}): ${short(h.name, 80)} · price=${h.price}`);
     }
     // Wie verteilen sich die Treffer auf die Preisfenster? (Fenster > 1.000 werden im Sync halbiert)
     const bands = initialBands(config.dubizzle.minPriceAed);

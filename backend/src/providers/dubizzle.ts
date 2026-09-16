@@ -17,10 +17,12 @@ import { listingId, normalizeFuel, normalizeTransmission, type MarketProvider, t
  * schickt die Seite leer mit. Die Website fragt selbst mit hitsPerPage=1000 an; Algolia liefert je Filter höchstens
  * 1.000 Treffer (paginationLimitedTo), deshalb Preisfenster in AED, die bei > 1.000 Treffern halbiert werden.
  *
- * Treffer (Algolia-Hit): objectID, uuid, name{en}, price (AED), is_price_hidden, absolute_url{en}, photos, photos_count,
- * location_list, added (Unix-Sekunden), seller_type, details{ Make, Model, Trim/„Motors Trim“, Year, Kilometers,
- * „Fuel Type“, „Transmission Type“, „Regional Specs“, Horsepower („300 - 399 HP“), „No. of Cylinders“, „Steering Side“,
- * „Body Type“ … je als { en: { value, slug? }, ar: {…} } }. Feldnamen mit `npm run probe -- dubizzle` gegenprüfen.
+ * Treffer (Algolia-Hit, Probe 16.09.2026: 41.253 Gebrauchtwagen): objectID, uuid, name{en}, price (AED), absolute_url{en}
+ * (dubai.dubizzle.com), photos, photo_thumbnails[] (alle Bilder, `?impolicy=lpv`), photos_count, location_list{en:[„UAE“,
+ * „Dubai“, Bezirk…]}, added (Unix-Sekunden), seller_type (DL Händler, OW privat), details{ Make, Model, Trim, Year, Kilometers,
+ * „Fuel Type“, „Transmission Type“, „Regional Specs“, Horsepower („300 - 399 HP“), „Engine Capacity (cc)“, „No. of Cylinders“,
+ * „Steering Side“, „Body Type“, Doors, Warranty … je als { en: { value }, ar } }, details_v2{ make_model_trim, primary,
+ * secondary, tertiary: [{ label{en}, value{en}, slug }] }.
  */
 export interface DubizzleHit {
   objectID?: string; id?: number | string; uuid?: string;
@@ -113,31 +115,44 @@ export function detailText(v: unknown): string {
   return '';
 }
 
-/** Detail nach einem von mehreren Schlüsseln (Groß-/Kleinschreibung, Leerzeichen und Unterstriche egal) */
+/**
+ * Detail nach einem von mehreren Schlüsseln (Groß-/Kleinschreibung, Leerzeichen, Klammern und Unterstriche egal).
+ * `details` ist { "Engine Capacity (cc)": { en: { value } } }, `details_v2` gruppiert Listen [{ label{en}, value{en}, slug }].
+ */
 export function detail(hit: DubizzleHit, ...keys: string[]): string {
-  const norm = (s: string) => s.toLowerCase().replace(/[\s_.-]+/g, '');
+  const norm = (s: string) => s.toLowerCase().replace(/[\s_.()-]+/g, '');
   const wanted = keys.map(norm);
   for (const bag of [hit.details, hit.details_v2]) {
     if (!bag) continue;
     for (const [k, v] of Object.entries(bag)) {
       if (wanted.includes(norm(k))) { const t = detailText(v).trim(); if (t) return t; }
+      if (Array.isArray(v)) {
+        for (const item of v as Array<{ label?: unknown; slug?: unknown; value?: unknown }>) {
+          if (!item || typeof item !== 'object') continue;
+          if (wanted.includes(norm(str(item.slug))) || wanted.includes(norm(detailText(item.label)))) { const t = detailText(item.value).trim(); if (t) return t; }
+        }
+      }
     }
   }
   return '';
 }
 
-/** Leistung aus „300 - 399 HP“ / „400+ HP“ / „250 HP“ → kW (Bereichsmitte; sehr breite Bereiche → null) */
-export function dubizzlePowerKw(text: string): number | null {
-  const nums = (text.match(/\d{2,4}/g) ?? []).map(Number).filter((n) => n >= 40 && n <= 1500);
+/** Zahl aus „2000 - 2499 cc“ / „1991 cc“ / „2000“ → Bereichsmitte bzw. Wert (Bereiche über 1.000 cc → null) */
+export function dubizzleCcm(text: string): number | null {
+  const nums = (text.match(/\d{3,5}/g) ?? []).map(Number).filter((n) => n >= 500 && n <= 9000);
   if (!nums.length) return null;
-  if (nums.length >= 2 && nums[1] - nums[0] > 150) return null;
-  const hp = nums.length >= 2 ? (nums[0] + nums[1]) / 2 : nums[0];
-  return Math.round(hp * 0.7457);
+  if (nums.length >= 2) return nums[1] - nums[0] > 1000 ? null : Math.round((nums[0] + nums[1]) / 2);
+  return nums[0];
 }
 
+/**
+ * Fotos: `photos` (Hauptbild, Form je Treffer verschieden) zuerst, dann `photo_thumbnails` (Liste aller Bilder mit
+ * `?impolicy=lpv`, Probe 16.09.2026). Dedupliziert über den Pfad ohne Query.
+ */
 export function dubizzlePhotos(hit: DubizzleHit): string[] {
   const out: string[] = [];
-  const push = (u: unknown) => { const s = str(u).trim(); if (/^https?:\/\//.test(s) && !out.includes(s)) out.push(s); };
+  const key = (s: string) => s.split('?')[0];
+  const push = (u: unknown) => { const s = str(u).trim(); if (/^https?:\/\//.test(s) && !out.some((x) => key(x) === key(s))) out.push(s); };
   const walk = (v: unknown, depth: number) => {
     if (v == null || depth > 3) return;
     if (typeof v === 'string') return push(v);
@@ -149,9 +164,11 @@ export function dubizzlePhotos(hit: DubizzleHit): string[] {
     }
   };
   walk(hit.photos, 0);
-  if (!out.length) walk(hit.photo_thumbnails, 0);
+  walk(hit.photo_thumbnails, 0);
   return out;
 }
+
+const SELLER_TYPES: Record<string, string> = { DL: 'Dealer', OW: 'Owner', AG: 'Agent', BR: 'Broker' };
 
 export function dubizzleUrl(hit: DubizzleHit): string | null {
   const abs = detailText(hit.absolute_url) || str(hit.permalink) || str(hit.short_url);
@@ -163,8 +180,8 @@ export function dubizzleUrl(hit: DubizzleHit): string | null {
 export function dubizzleLocation(hit: DubizzleHit): string {
   const v = hit.location_list as unknown;
   const list: unknown[] = Array.isArray(v) ? v : v && typeof v === 'object' && Array.isArray((v as { en?: unknown }).en) ? ((v as { en: unknown[] }).en) : v ? [v] : [];
-  const names = list.map((x) => detailText(x).trim()).filter(Boolean);
-  // Dubizzle führt Emirat/Stadt zuerst („Dubai“, „Al Quoz“) – Stadt reicht für die Kachel
+  // Reihenfolge Land → Emirat → Bezirk („UAE“, „Dubai“, „Ras Al Khor“, …; Probe 16.09.2026) – das Emirat reicht für die Kachel
+  const names = list.map((x) => detailText(x).trim()).filter((n) => n && !/^(uae|united arab emirates)$/i.test(n));
   return names[0] ?? 'Dubai';
 }
 
@@ -193,9 +210,11 @@ export function mapDubizzle(hit: DubizzleHit, fetchedAt: string): Listing | null
   const gear = detail(hit, 'Transmission Type', 'transmission_type', 'transmission');
   const cylinders = num(detail(hit, 'No. of Cylinders', 'cylinders', 'no_of_cylinders'));
   const steeringText = detail(hit, 'Steering Side', 'steering_side', 'steering').toLowerCase();
-  const powerText = detail(hit, 'Horsepower', 'horsepower', 'hp');
+  // Leistung („300 - 399 HP“) ist eine grobe Verkäuferangabe in Bereichen – nicht für den Motorisierungsabgleich geeignet
+  const ccm = fuel === 'Electric' ? null : dubizzleCcm(detail(hit, 'Engine Capacity (cc)', 'engine_capacity_cc', 'engine_capacity', 'engine_size'));
   const bodyType = detail(hit, 'Body Type', 'body_type');
-  const seller = str(hit.seller_type).trim();
+  const sellerRaw = str(hit.seller_type).trim();
+  const seller = SELLER_TYPES[sellerRaw.toUpperCase()] ?? sellerRaw;
   const photos = dubizzlePhotos(hit);
   const km = Math.round(num(detail(hit, 'Kilometers', 'kilometers', 'Mileage', 'mileage', 'km')) ?? 0);
 
@@ -213,9 +232,9 @@ export function mapDubizzle(hit: DubizzleHit, fetchedAt: string): Listing | null
     model,
     trim: [trimText, specs ? `${specs} spec` : null, bodyType || null, seller ? `Seller: ${seller}` : null].filter(Boolean).join(' · ').slice(0, 160),
     km,
-    engine: fuel === 'Electric' ? 'EV' : cylinders ? `${cylinders}-cyl` : '',
-    engineCcm: null,
-    powerKw: dubizzlePowerKw(powerText),
+    engine: fuel === 'Electric' ? 'EV' : [ccm ? `${(ccm / 1000).toFixed(1)} L` : '', cylinders ? `${cylinders}-cyl` : ''].filter(Boolean).join(' '),
+    engineCcm: ccm,
+    powerKw: null,
     co2Gkm: null,
     transmission: /manual/i.test(gear) ? 'Manual' : normalizeTransmission(gear || 'automatic'),
     drive: encarDrive(`${title} ${trimText}`, make),
