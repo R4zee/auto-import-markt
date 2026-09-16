@@ -75,6 +75,9 @@ jobs:
           COPART_ENABLED: ${{ vars.COPART_ENABLED || 'false' }}
           COPART_MAKES: ${{ vars.COPART_MAKES }}
           COPART_PROXY_URL: ${{ secrets.COPART_PROXY_URL }}
+          # VAE: Dubizzle-Algolia-Proxy (kein Key) – einschalten, sobald `npm run probe -- dubizzle` ihn bestätigt hat
+          DUBIZZLE_ENABLED: ${{ vars.DUBIZZLE_ENABLED || 'false' }}
+          DUBIZZLE_PROXY_URL: ${{ secrets.DUBIZZLE_PROXY_URL }}
           # weitere Provider-Keys hier ergänzen, z. B. APIBARA_API_KEY: ${{ secrets.APIBARA_API_KEY }}
         run: node --import tsx src/cli/sync.ts
       - name: Vergleichspreise DE (mobile.de) → Turso

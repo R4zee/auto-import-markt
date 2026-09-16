@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { mapApibara } from '../src/providers/apibara.js';
 import { mapAutoApi } from '../src/providers/autoapi.js';
+import { ALGOLIA_HIT_LIMIT, detail, dubizzleBody, dubizzleFilters, dubizzlePowerKw, dubizzleSkipReason, initialBands, mapDubizzle, splitBand } from '../src/providers/dubizzle.js';
 import { encarDrive, encarFuel, encarTrim, gradeFromDetail, mapEncar } from '../src/providers/encar.js';
 import { mapXapi } from '../src/providers/xapikorea.js';
 
@@ -117,6 +118,90 @@ describe('auto-api.com mapping (Dubizzle)', () => {
   it('markiert Rechtslenker (werden im Sync verworfen)', () => {
     const l = mapAutoApi({ inner_id: 'x', mark: 'Toyota', model: 'Land Cruiser', year: 2020, price: 1000, extra: { steering: 'Right Hand' } }, 'dubicars', NOW);
     assert.equal(l?.steering, 'RHD');
+  });
+});
+
+describe('Dubizzle (Algolia-Proxy) mapping', () => {
+  const hit = {
+    objectID: '123456', uuid: '9e4d59ce561747d7b86392fb9d3b4a46', name: { en: 'Mercedes-Benz S-Class S 500 2021', ar: 'مرسيدس' },
+    price: 250000, is_price_hidden: false, absolute_url: { en: '/motors/used-cars/mercedes-benz/s-class/2026/9/1/s-500-2-ABC/', ar: '/ar/…' },
+    photos: [{ main: 'https://dbz-images.dubizzle.com/images/2026/09/01/a.jpeg', thumbnail: 'https://dbz-images.dubizzle.com/images/2026/09/01/a-thumb.jpeg' }, { main: 'https://dbz-images.dubizzle.com/images/2026/09/01/b.jpeg' }],
+    photos_count: 12, location_list: { en: ['Dubai', 'Al Quoz'], ar: ['دبي'] }, added: 1758000000, seller_type: 'Dealer',
+    details: {
+      Make: { en: { slug: 'mercedes-benz', value: 'Mercedes-Benz' } }, Model: { en: { slug: 's-class', value: 'S-Class' } }, Trim: { en: { value: 'S 500' } },
+      Year: { en: { value: '2021' } }, Kilometers: { en: { value: '25000' } }, 'Fuel Type': { en: { value: 'Petrol' } }, 'Transmission Type': { en: { value: 'Automatic Transmission' } },
+      'Regional Specs': { en: { value: 'GCC Specs' } }, Horsepower: { en: { value: '400 - 499 HP' } }, 'No. of Cylinders': { en: { value: '8' } },
+      'Steering Side': { en: { value: 'Left Hand Side' } }, 'Body Type': { en: { value: 'Sedan' } },
+    },
+  };
+
+  it('bildet einen Treffer als Festpreis in AED mit Marke, Modell, Baujahr, km und Leistung ab', () => {
+    const l = mapDubizzle(hit, NOW);
+    assert.ok(l);
+    assert.equal(l.id, 'dubizzle:9e4d59ce561747d7b86392fb9d3b4a46');
+    assert.equal(l.market, 'GCC');
+    assert.equal(l.country, 'ae');
+    assert.equal(l.currency, 'AED');
+    assert.equal(l.price, 250000);
+    assert.equal(l.make, 'Mercedes-Benz');
+    assert.equal(l.model, 'S-Class');
+    assert.equal(l.year, 2021);
+    assert.equal(l.km, 25000);
+    assert.equal(l.fuel, 'Petrol');
+    assert.equal(l.transmission, 'Automatic');
+    assert.equal(l.steering, 'LHD');
+    assert.equal(l.location, 'Dubai');
+    assert.equal(l.engine, '8-cyl');
+    assert.equal(l.powerKw, Math.round(449.5 * 0.7457));
+    assert.match(l.trim, /^S 500 · GCC spec · Sedan · Seller: Dealer$/);
+    assert.equal(l.url, 'https://uae.dubizzle.com/motors/used-cars/mercedes-benz/s-class/2026/9/1/s-500-2-ABC/');
+    assert.deepEqual(l.photos, ['https://dbz-images.dubizzle.com/images/2026/09/01/a.jpeg', 'https://dbz-images.dubizzle.com/images/2026/09/01/b.jpeg']);
+    assert.equal(l.photoCount, 12);
+    assert.equal(l.partnerId, 'gulfbridge');
+  });
+
+  it('liest Details auch in flacher Schreibweise (details_v2) und markiert Rechtslenker', () => {
+    const l = mapDubizzle({ uuid: 'x', name: 'Toyota Land Cruiser', price: 90000, details_v2: { make: 'Toyota', model: 'Land Cruiser', year: 2019, kilometers: '80,000', steering_side: 'Right Hand Side', transmission_type: 'Manual Transmission' } }, NOW);
+    assert.ok(l);
+    assert.equal(l.make, 'Toyota');
+    assert.equal(l.km, 80000);
+    assert.equal(l.steering, 'RHD');
+    assert.equal(l.transmission, 'Manual');
+    assert.equal(detail({ details: { 'No. of Cylinders': { en: { value: '6' } } } }, 'cylinders', 'no_of_cylinders'), '6');
+  });
+
+  it('überspringt Preis auf Anfrage, reservierte und unvollständige Treffer', () => {
+    assert.equal(dubizzleSkipReason({ price: 50000, is_price_hidden: true }), 'Preis auf Anfrage');
+    assert.equal(dubizzleSkipReason({ price: 50000, is_reserved: true }), 'reserviert');
+    assert.equal(dubizzleSkipReason({ price: 0 }), 'kein Preis');
+    assert.equal(dubizzleSkipReason({ price: 50000 }), null);
+    assert.equal(mapDubizzle({ uuid: 'y', price: 50000, details: { Make: { en: { value: 'BMW' } } } }, NOW), null);
+  });
+
+  it('rechnet Leistungsbereiche in kW um, sehr breite Bereiche nicht', () => {
+    assert.equal(dubizzlePowerKw('300 - 399 HP'), Math.round(349.5 * 0.7457));
+    assert.equal(dubizzlePowerKw('250 HP'), Math.round(250 * 0.7457));
+    assert.equal(dubizzlePowerKw('100 - 300 HP'), null);
+    assert.equal(dubizzlePowerKw(''), null);
+  });
+
+  it('baut Kategorie- und Preisfilter wie die Website und halbiert Fenster über der 1.000er-Grenze', () => {
+    assert.equal(dubizzleFilters([20000, 30000]), '("category_v2.slug_paths":"motors/used-cars") AND price >= 20000 AND price < 30000');
+    assert.equal(dubizzleFilters([0, null]), '("category_v2.slug_paths":"motors/used-cars")');
+    const body = JSON.parse(dubizzleBody([20000, 30000], 0, 1000)) as { requests: Array<{ indexName: string; params: string }> };
+    assert.equal(body.requests[0].indexName, 'motors.com');
+    const params = new URLSearchParams(body.requests[0].params);
+    assert.equal(params.get('hitsPerPage'), '1000');
+    assert.equal(params.get('filters'), dubizzleFilters([20000, 30000]));
+    assert.ok(JSON.parse(params.get('attributesToRetrieve')!).includes('details'));
+    const bands = initialBands(20000);
+    assert.deepEqual(bands[0], [20000, 30000]);
+    assert.equal(bands[bands.length - 1][1], null);
+    for (let i = 1; i < bands.length; i++) assert.equal(bands[i][0], bands[i - 1][1]);
+    assert.deepEqual(splitBand([20000, 30000]), [[20000, 25000], [25000, 30000]]);
+    assert.deepEqual(splitBand([1_000_000, null]), [[1_000_000, 1_500_000], [1_500_000, null]]);
+    assert.equal(splitBand([20000, 20100]), null);
+    assert.equal(ALGOLIA_HIT_LIMIT, 1000);
   });
 });
 

@@ -91,7 +91,8 @@ Lokal reproduzieren: `backend/test/search.test.ts` prüft Pfade und Facetten; ei
 | `copart` | **USA** – Copart-Suchendpunkt der Website `POST /public/lots/search-results`, keyless, kostenlos (Grauzone wie Encar); live bestätigt 15.09.2026 (385.803 Lose) | `COPART_ENABLED=true`, optional `COPART_MAKES` |
 | `encar` | **Südkorea (Hauptquelle)** – Encar direkt, Vollabgleich (~150.000 Inserate) | `ENCAR_ENABLED=true` + `ENCAR_PROXY_URL` (Residential-Proxy); läuft per GitHub Actions alle 6 h, Teilabfragen < 10.000, Übersetzungs-Cache `encar_grades` |
 | `xapikorea` | Südkorea (Fallback, Encar-Wrapper mit englischen Feldern) | `XAPIKOREA_API_KEY` (Free 500 Req/Monat) |
-| `autoapi` | VAE (Dubizzle, Dubicars) | `AUTOAPI_ACCESS_NAME`, `AUTOAPI_API_KEY` (Zugang via access@auto-api.com) |
+| `dubizzle` | **VAE** – Dubizzle Motors über den Algolia-Proxy der Website (`POST algolia.dubizzle.com/1/indexes/*/queries`, Index `motors.com`), keyless, kostenlos (Grauzone wie Encar); Vollabgleich über Preisfenster | `DUBIZZLE_ENABLED=true` |
+| `autoapi` | VAE (Dubizzle, Dubicars – lizenzierter Feed, Alternative) | `AUTOAPI_ACCESS_NAME`, `AUTOAPI_API_KEY` (Zugang via access@auto-api.com) |
 | `olx` (Quellen `olx-pl`, `olx-ro`, `olx-bg`, `olx-pt`) | **Osteuropa/Portugal** – OLX-Frontend-Endpunkt `/api/v1/offers/`, keyless, kostenlos; PL live bestätigt (14.09.2026) | `OLX_ENABLED=true`; Pkw-Kategorien vorbelegt (PL 84, RO 84, BG 1117, PT 378), `OLX_SITES` nur zum Übersteuern |
 | `subito` | **Italien** – Subito.it JSON-Suche `hades.subito.it/v1/search/items` (c=2 Auto), keyless, kostenlos; live bestätigt | `SUBITO_ENABLED=true` |
 | `sauto` | **Tschechien** – Sauto.cz `/api/v1/items/search` (Kategorie 838), keyless, kostenlos; live bestätigt | `SAUTO_ENABLED=true` |

@@ -2,6 +2,7 @@ import { config } from '../config.js';
 import { ApibaraProvider } from './apibara.js';
 import { AutoApiProvider } from './autoapi.js';
 import { CopartProvider } from './copart.js';
+import { DubizzleProvider } from './dubizzle.js';
 import { EbayMotorsProvider } from './ebay.js';
 import { EncarProvider } from './encar.js';
 import { feedProviders } from './feed.js';
@@ -23,6 +24,8 @@ const ALL: MarketProvider[] = [
   // USA: Copart-Suchendpunkt der Website (kein Key; Grauzone wie Encar, schaltbar)
   new CopartProvider(),
   new AutoApiProvider(),
+  // VAE: Algolia-Proxy der Dubizzle-Website (kein Key; Grauzone wie Encar, schaltbar)
+  new DubizzleProvider(),
   // Süd-/Osteuropa: keyless Frontend-Endpunkte (Grauzone wie Encar, je Seite schaltbar)
   new OlxProvider(),
   new SubitoProvider(),
