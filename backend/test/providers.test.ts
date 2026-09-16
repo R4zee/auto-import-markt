@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { mapApibara } from '../src/providers/apibara.js';
 import { mapAutoApi } from '../src/providers/autoapi.js';
-import { ALGOLIA_HIT_LIMIT, detail, dubizzleBody, dubizzleFilters, dubizzlePowerKw, dubizzleSkipReason, initialBands, mapDubizzle, splitBand } from '../src/providers/dubizzle.js';
+import { ALGOLIA_HIT_LIMIT, detail, dubizzleBody, dubizzleCcm, dubizzleFilters, dubizzleSkipReason, initialBands, mapDubizzle, splitBand } from '../src/providers/dubizzle.js';
 import { encarDrive, encarFuel, encarTrim, gradeFromDetail, mapEncar } from '../src/providers/encar.js';
 import { mapXapi } from '../src/providers/xapikorea.js';
 
@@ -125,14 +125,16 @@ describe('Dubizzle (Algolia-Proxy) mapping', () => {
   const hit = {
     objectID: '123456', uuid: '9e4d59ce561747d7b86392fb9d3b4a46', name: { en: 'Mercedes-Benz S-Class S 500 2021', ar: 'مرسيدس' },
     price: 250000, is_price_hidden: false, absolute_url: { en: '/motors/used-cars/mercedes-benz/s-class/2026/9/1/s-500-2-ABC/', ar: '/ar/…' },
-    photos: [{ main: 'https://dbz-images.dubizzle.com/images/2026/09/01/a.jpeg', thumbnail: 'https://dbz-images.dubizzle.com/images/2026/09/01/a-thumb.jpeg' }, { main: 'https://dbz-images.dubizzle.com/images/2026/09/01/b.jpeg' }],
-    photos_count: 12, location_list: { en: ['Dubai', 'Al Quoz'], ar: ['دبي'] }, added: 1758000000, seller_type: 'Dealer',
+    photos: { main: 'https://dbz-images.dubizzle.com/images/2026/09/01/a-.jpg' },
+    photo_thumbnails: ['https://dbz-images.dubizzle.com/images/2026/09/01/a-.jpg?impolicy=lpv', 'https://dbz-images.dubizzle.com/images/2026/09/01/b-.jpg?impolicy=lpv'],
+    photos_count: 12, location_list: { en: ['UAE', 'Dubai', 'Al Quoz'], ar: ['دبي'], ids: [0, 199, 92] }, added: 1758000000, seller_type: 'DL',
     details: {
       Make: { en: { slug: 'mercedes-benz', value: 'Mercedes-Benz' } }, Model: { en: { slug: 's-class', value: 'S-Class' } }, Trim: { en: { value: 'S 500' } },
       Year: { en: { value: '2021' } }, Kilometers: { en: { value: '25000' } }, 'Fuel Type': { en: { value: 'Petrol' } }, 'Transmission Type': { en: { value: 'Automatic Transmission' } },
       'Regional Specs': { en: { value: 'GCC Specs' } }, Horsepower: { en: { value: '400 - 499 HP' } }, 'No. of Cylinders': { en: { value: '8' } },
-      'Steering Side': { en: { value: 'Left Hand Side' } }, 'Body Type': { en: { value: 'Sedan' } },
+      'Engine Capacity (cc)': { en: { value: '3000 - 3499 cc' } }, 'Steering Side': { en: { value: 'Left Hand Side' } }, 'Body Type': { en: { value: 'Sedan' } },
     },
+    details_v2: { primary: [{ label: { en: 'Trim' }, value: { en: 'S 500' }, slug: 'motors_trim' }] },
   };
 
   it('bildet einen Treffer als Festpreis in AED mit Marke, Modell, Baujahr, km und Leistung ab', () => {
@@ -151,11 +153,13 @@ describe('Dubizzle (Algolia-Proxy) mapping', () => {
     assert.equal(l.transmission, 'Automatic');
     assert.equal(l.steering, 'LHD');
     assert.equal(l.location, 'Dubai');
-    assert.equal(l.engine, '8-cyl');
-    assert.equal(l.powerKw, Math.round(449.5 * 0.7457));
+    assert.equal(l.engine, '3.3 L 8-cyl');
+    assert.equal(l.engineCcm, 3250);
+    // Leistungsbereiche („400 - 499 HP“) sind Verkäuferangaben – kein Wert für den Motorisierungsabgleich
+    assert.equal(l.powerKw, null);
     assert.match(l.trim, /^S 500 · GCC spec · Sedan · Seller: Dealer$/);
     assert.equal(l.url, 'https://uae.dubizzle.com/motors/used-cars/mercedes-benz/s-class/2026/9/1/s-500-2-ABC/');
-    assert.deepEqual(l.photos, ['https://dbz-images.dubizzle.com/images/2026/09/01/a.jpeg', 'https://dbz-images.dubizzle.com/images/2026/09/01/b.jpeg']);
+    assert.deepEqual(l.photos, ['https://dbz-images.dubizzle.com/images/2026/09/01/a-.jpg', 'https://dbz-images.dubizzle.com/images/2026/09/01/b-.jpg?impolicy=lpv']);
     assert.equal(l.photoCount, 12);
     assert.equal(l.partnerId, 'gulfbridge');
   });
@@ -168,6 +172,18 @@ describe('Dubizzle (Algolia-Proxy) mapping', () => {
     assert.equal(l.steering, 'RHD');
     assert.equal(l.transmission, 'Manual');
     assert.equal(detail({ details: { 'No. of Cylinders': { en: { value: '6' } } } }, 'cylinders', 'no_of_cylinders'), '6');
+    // details_v2-Listen über slug bzw. Label
+    const v2 = { details_v2: { primary: [{ label: { en: 'Steering Side' }, value: { en: 'Right Hand' }, slug: 'steering_side' }, { label: { en: 'Engine Capacity (cc)' }, value: { en: '1991 cc' }, slug: 'engine_capacity_cc' }] } };
+    assert.equal(detail(v2, 'steering_side'), 'Right Hand');
+    assert.equal(detail(v2, 'Engine Capacity (cc)'), '1991 cc');
+    assert.equal(mapDubizzle({ uuid: 'e', name: 'Tesla Model 3', price: 90000, details: { Make: 'Tesla', Model: 'Model 3', Year: '2022', 'Fuel Type': 'Electric', 'Engine Capacity (cc)': '2000 - 2499 cc' } }, NOW)?.engine, 'EV');
+  });
+
+  it('liest den Hubraum aus Bereichen und Einzelwerten', () => {
+    assert.equal(dubizzleCcm('2000 - 2499 cc'), 2250);
+    assert.equal(dubizzleCcm('1991 cc'), 1991);
+    assert.equal(dubizzleCcm('1000 - 2999 cc'), null);
+    assert.equal(dubizzleCcm(''), null);
   });
 
   it('überspringt Preis auf Anfrage, reservierte und unvollständige Treffer', () => {
@@ -176,13 +192,6 @@ describe('Dubizzle (Algolia-Proxy) mapping', () => {
     assert.equal(dubizzleSkipReason({ price: 0 }), 'kein Preis');
     assert.equal(dubizzleSkipReason({ price: 50000 }), null);
     assert.equal(mapDubizzle({ uuid: 'y', price: 50000, details: { Make: { en: { value: 'BMW' } } } }, NOW), null);
-  });
-
-  it('rechnet Leistungsbereiche in kW um, sehr breite Bereiche nicht', () => {
-    assert.equal(dubizzlePowerKw('300 - 399 HP'), Math.round(349.5 * 0.7457));
-    assert.equal(dubizzlePowerKw('250 HP'), Math.round(250 * 0.7457));
-    assert.equal(dubizzlePowerKw('100 - 300 HP'), null);
-    assert.equal(dubizzlePowerKw(''), null);
   });
 
   it('baut Kategorie- und Preisfilter wie die Website und halbiert Fenster über der 1.000er-Grenze', () => {
