@@ -39,8 +39,10 @@ export function copartSkipReason(v: CopartLot): string | null {
 export function copartBody(page: number, size: number, makes: string[] = []): Record<string, unknown> {
   const filter: Record<string, string[]> = { MISC: ['#VehicleTypeCode:VEHTYPE_V'] };
   if (makes.length) filter.MAKE = makes.map((m) => `#Make:${m.toUpperCase()}`);
+  // Nach Auktionstermin aufsteigend: die ersten Seiten sind die heute bereits gelaufenen Verkäufe (Lauf 26: 1.981 von
+  // 2.000 Losen mit zurückliegendem Termin) – fetchAll blättert weiter, bis genug künftige Termine beisammen sind
   return {
-    query: ['*'], filter, sort: ['auction_date_type desc', 'auction_date_utc asc'],
+    query: ['*'], filter, sort: ['auction_date_utc asc'],
     page, size, start: page * size, watchListOnly: false, freeFormSearch: false, hideImages: false, defaultSort: false,
     specificRowProvided: false, displayName: '', searchName: '', backUrl: '', includeTagByField: {}, rawParams: {},
   };
@@ -163,8 +165,10 @@ export class CopartProvider implements MarketProvider {
     const seen = new Set<string>();
     const skipped = new Map<string, number>();
     let total: number | null = null;
-    for (let page = 0; page < config.copart.pages; page++) {
+    let pages = 0;
+    for (let page = 0; page < config.copart.pages && listings.length < config.copart.maxLots; page++) {
       const r = await this.fetchPage(page);
+      pages++;
       total = r.total;
       for (const lot of r.lots) {
         const reason = copartSkipReason(lot);
@@ -178,6 +182,6 @@ export class CopartProvider implements MarketProvider {
       await sleep(config.copart.delayMs);
     }
     const skipInfo = [...skipped.entries()].map(([k, n]) => `${n}× ${k}`).join(', ');
-    return { listings, complete: false, warnings: [`${listings.length} Lose${total != null ? ` von ${total}` : ''} übernommen${skipInfo ? ` · übersprungen: ${skipInfo}` : ''}`] };
+    return { listings, complete: false, warnings: [`${listings.length} Lose${total != null ? ` von ${total}` : ''} aus ${pages} Seiten übernommen${skipInfo ? ` · übersprungen: ${skipInfo}` : ''}`] };
   }
 }

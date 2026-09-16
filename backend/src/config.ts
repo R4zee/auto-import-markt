@@ -210,9 +210,11 @@ export const config = {
   /** USA: Copart-Suchendpunkt der Website (kein Login, kein Key; Grauzone wie Encar). Live bestätigt 15.09.2026: 385.803 Lose. */
   copart: {
     enabled: bool(env.COPART_ENABLED, false),
-    /** Seiten × pageSize Lose je Lauf, nach Auktionstermin sortiert (nächste zuerst) */
-    pages: num(env.COPART_PAGES, 20),
+    /** Höchstens so viele Seiten je Lauf (nach Auktionstermin aufsteigend; die ersten Seiten sind meist schon gelaufen) */
+    pages: num(env.COPART_PAGES, 80),
     pageSize: num(env.COPART_PAGE_SIZE, 100),
+    /** Abbruch, sobald so viele Lose mit künftigem Termin oder Sofortkauf beisammen sind */
+    maxLots: num(env.COPART_MAX_LOTS, 2000),
     /** Optional auf Marken einschränken (Copart-Schreibweise, z. B. BMW,MERCEDES-BENZ) */
     makes: list(env.COPART_MAKES),
     minYear: num(env.COPART_MIN_YEAR, 2012),

@@ -1,0 +1,47 @@
+name: Reference Prices
+
+# Vergleichspreise DE (mobile.de) alle zwei Stunden nachladen – zusätzlich zum Schritt im Sync-Workflow, damit die
+# rund 29.000 Buckets des Bestands in wenigen Tagen statt Wochen gefüllt sind. Danach erneuert der Job Buckets,
+# die älter als REFERENCE_TTL_DAYS sind. Abschalten: Variable REFERENCE_ENABLED=false.
+on:
+  schedule:
+    - cron: '45 1,3,5,7,9,11,13,15,17,19,21,23 * * *'
+  workflow_dispatch:
+    inputs:
+      reference_max_per_run:
+        description: 'Buckets je Lauf (leer = Variable bzw. 1500)'
+        required: false
+        default: ''
+      reference_max_minutes:
+        description: 'Zeitbudget in Minuten (leer = Variable bzw. 50)'
+        required: false
+        default: ''
+
+concurrency:
+  group: reference-prices
+  cancel-in-progress: false
+
+jobs:
+  reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    if: ${{ vars.REFERENCE_ENABLED != 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Vergleichspreise DE (mobile.de) → Turso
+        working-directory: backend
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          REFERENCE_ENABLED: 'true'
+          REFERENCE_MOBILE_MODE: ${{ vars.REFERENCE_MOBILE_MODE || 'url' }}
+          REFERENCE_MAX_PER_RUN: ${{ github.event.inputs.reference_max_per_run || vars.REFERENCE_MAX_PER_RUN || '1500' }}
+          REFERENCE_MAX_MINUTES: ${{ github.event.inputs.reference_max_minutes || vars.REFERENCE_MAX_MINUTES || '50' }}
+          REFERENCE_MAKE_IDS: ${{ vars.REFERENCE_MAKE_IDS }}
+          REFERENCE_PROXY_URL: ${{ secrets.REFERENCE_PROXY_URL }}
+        run: node --import tsx src/cli/reference.ts
