@@ -178,6 +178,10 @@ function buildWhere(q: ListingQuery, dest: DestCode): { whereSql: string; args: 
   }
   if (q.cocOnly) where.push('coc = 1');
   if (q.maxLandedEur != null) { where.push(`+${LANDED_COL[dest]} <= ?`); args.push(q.maxLandedEur); }
+  // Abgelaufene Auktionen ausblenden: Quellen ohne Vollabgleich (Copart) melden das Ende nicht, der Sync deaktiviert
+  // sie erst beim nächsten Lauf. Spalte liegt im abdeckenden Index, der Vergleich kostet keine Zeilenzugriffe.
+  where.push('(auction_ends_at IS NULL OR auction_ends_at > ?)');
+  args.push(new Date().toISOString());
   const text = (q.q ?? '').trim().toLowerCase();
   if (text) {
     // search_text liegt im abdeckenden Index → Volltextsuche als Indexscan ohne Zeilenzugriffe
@@ -233,6 +237,15 @@ export const listingsRepo = {
       await db().batch(stale.slice(i, i + 500).map((id) => ({ sql: 'UPDATE listings SET active = 0 WHERE id = ?', args: [id] })), 'write');
     }
     return stale.length;
+  },
+
+  /**
+   * Auktionen mit abgelaufenem Termin deaktivieren – für Quellen ohne Vollabgleich (Copart liefert je Lauf nur
+   * einen Ausschnitt, dort bleibt sonst jedes beendete Los stehen). Liefert die Zahl der deaktivierten Inserate.
+   */
+  async deactivateEndedAuctions(now = new Date()): Promise<number> {
+    const r = await run("UPDATE listings SET active = 0 WHERE active = 1 AND offer_type = 'auction' AND auction_ends_at IS NOT NULL AND auction_ends_at <= ?", [now.toISOString()]);
+    return r.rowsAffected;
   },
 
   /** Nur IDs (und Preis/km) einer Quelle – für Abgleiche ohne den ganzen Datensatz zu laden. */

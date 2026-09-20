@@ -112,6 +112,10 @@ export async function syncAll(): Promise<SyncReport[]> {
   for (const [source, n] of Object.entries(orphans)) {
     if (n > 0) reports.push({ provider: source, status: 'ok', upserted: 0, deactivated: n, warnings: ['Quelle ohne aktiven Provider – Bestand deaktiviert'], durationMs: 0 });
   }
+  // Beendete Auktionen (Copart & Co. ohne Vollabgleich) aus dem aktiven Bestand nehmen
+  const ta = Date.now();
+  const ended = await listingsRepo.deactivateEndedAuctions();
+  if (ended > 0) reports.push({ provider: 'auctions', status: 'ok', upserted: 0, deactivated: ended, warnings: ['Auktionen mit abgelaufenem Termin deaktiviert'], durationMs: Date.now() - ta });
   const tm = Date.now();
   const canon = await canonicalizeStoredMakes();
   if (canon.listings > 0) reports.push({ provider: 'makes', status: 'ok', upserted: canon.listings, deactivated: 0, warnings: [`${canon.makes} Markenschreibweisen vereinheitlicht`], durationMs: Date.now() - tm });
