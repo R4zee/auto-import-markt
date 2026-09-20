@@ -228,6 +228,8 @@ async function heavyMigrations(c: Client): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_listings_active_refdiff_pl ON listings(active, ref_diff_pl);
     -- Inserate eines Buckets finden (Vergleichspreis-Job schreibt nach jedem Bucket dessen Inserate fort)
     CREATE INDEX IF NOT EXISTS idx_listings_ref_key ON listings(ref_key);
+    -- Teilindex: Inserate, deren Vergleichspreis noch nie berechnet wurde (Nachzug im Job ohne Vollscan)
+    CREATE INDEX IF NOT EXISTS idx_listings_ref_pending ON listings(ref_key) WHERE ref_min_eur IS NULL AND active = 1;
     -- Abdeckender Suchindex v2: wie v1 plus Referenzabstände, damit auch die Sortierung nach Abstand im Index läuft
     CREATE INDEX IF NOT EXISTS idx_listings_search_v2 ON listings(
       active, make, model, year, km, landed_de, landed_at, landed_nl, landed_pl, price_eur,
