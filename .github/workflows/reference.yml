@@ -23,7 +23,8 @@ concurrency:
 
 jobs:
   reference:
-    runs-on: ubuntu-latest
+    # Variable RUNNER=self-hosted → eigener Runner (Teil L in docs/deployment.md), sonst GitHub-Runner (Minutenkontingent)
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 120
     if: ${{ vars.REFERENCE_ENABLED != 'false' }}
     steps:
