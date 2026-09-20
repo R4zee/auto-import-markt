@@ -219,6 +219,9 @@ async function migrate(): Promise<void> {
   if (!isServerless) await heavyMigrations(c);
 }
 
+/** Stand der Bucket-Logik für listings.ref_key (Änderung → Spalten werden im Job neu berechnet) */
+const REF_KEY_VERSION = '2';
+
 async function heavyMigrations(c: Client): Promise<void> {
   await c.executeMultiple(`
     -- Sortierung nach Abstand zum DE-Vergleichspreis: geordneter Lauf mit frühem Abbruch je Zielland
@@ -238,6 +241,13 @@ async function heavyMigrations(c: Client): Promise<void> {
     );
     DROP INDEX IF EXISTS idx_listings_search_v1;
   `);
+  // Bucket-Logik geändert (Baureihe aus Modellfamilie + Baujahr, 20.09.2026) → Schlüssel und Vergleichspreis-Spalten
+  // zurücksetzen, der Vergleichspreis-Job trägt sie neu ein. Version hochzählen, wenn sich bucketQuery/yearBand ändern.
+  const refVersion = await c.execute("SELECT value FROM meta WHERE key = 'ref_key_version'");
+  if (refVersion.rows[0]?.value !== REF_KEY_VERSION) {
+    await c.execute('UPDATE listings SET ref_key = NULL, ref_min_eur = NULL, ref_diff_de = NULL, ref_diff_at = NULL, ref_diff_nl = NULL, ref_diff_pl = NULL WHERE ref_key IS NOT NULL');
+    await c.execute("INSERT INTO meta(key, value) VALUES ('ref_key_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [REF_KEY_VERSION]);
+  }
   // Partner Japan/Korea zusammengeführt zu „Far East Imports“ (einmalig, Merker in meta)
   const partners = await c.execute("SELECT value FROM meta WHERE key = 'partners_fareast'");
   if (!partners.rows.length) {

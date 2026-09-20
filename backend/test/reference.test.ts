@@ -42,10 +42,14 @@ describe('Vergleichspreise DE – Suchtext und Fenster', () => {
   });
 
   it('Bucket: Baujahr ±1 ohne Baureihe, Kraftstoff, km-Band, Marken-ID nötig; Überschreibung per REFERENCE_MAKE_IDS', () => {
-    const q = bucketQuery({ make: 'BMW', model: '3 Series', trim: '320d', year: 2019, fuel: 'Diesel', km: 80_000 });
+    // Kia Sportage: keine Baureihen-Familie hinterlegt → Baujahr ±1
+    const q = bucketQuery({ make: 'Kia', model: 'Sportage', trim: '2.0 CRDi', year: 2019, fuel: 'Diesel', km: 80_000 });
     assert.ok(q);
-    assert.equal(q.yearFrom, 2018); assert.equal(q.yearTo, 2020); assert.equal(q.description, '320d'); assert.equal(q.generation, null); assert.equal(q.kmTo, 125_000);
-    assert.equal(bucketKey(q), 'mobilede|bmw|320d|Diesel|2018-2020|km125000');
+    assert.equal(q.yearFrom, 2018); assert.equal(q.yearTo, 2020); assert.equal(q.description, 'Sportage'); assert.equal(q.generation, null); assert.equal(q.kmTo, 125_000);
+    assert.equal(bucketKey(q), 'mobilede|kia|sportage|Diesel|2018-2020|km125000');
+    // BMW 320d 2019 ohne Code: Familie 3er → F30 (2012–2019, Wechseljahr → auslaufende Reihe)
+    const f30 = bucketQuery({ make: 'BMW', model: '3 Series', trim: '320d', year: 2019, fuel: 'Diesel', km: 80_000 });
+    assert.equal(f30?.generation, 'F30'); assert.equal(f30?.yearFrom, 2012); assert.equal(f30?.yearTo, 2019);
     assert.equal(bucketQuery({ make: 'BMW', model: '3 Series', trim: '320d', year: 2019, fuel: 'Diesel', km: 0, kmBand: 125_000 })?.kmTo, 125_000, 'Refresh-Job übergibt das Band aus SQL');
     assert.equal(bucketQuery({ make: 'Unbekannt', model: 'X', trim: '', year: 2019, fuel: 'Petrol', km: 1 }), null);
     assert.equal(mobileMakeId('Hongqi'), 99999);
@@ -68,6 +72,31 @@ describe('Vergleichspreise DE – Suchtext und Fenster', () => {
     assert.equal(generationOf({ make: 'Hyundai', model: 'Tucson', trim: 'C7', year: 2015 }), null, 'Audi-Codes nur bei Audi');
     const running = yearBand({ make: 'Porsche', model: '911 (992)', trim: 'Carrera S', year: 2021 }, 1, 2026);
     assert.deepEqual(running, { from: 2019, to: 2026, generation: '992' });
+  });
+
+  it('ohne Code: Baureihe aus Modellfamilie + Baujahr, im Wechseljahr die auslaufende Reihe', () => {
+    // 2020er Maybach S 650 → W222 (2013–2020), nicht Baujahr ±1 – der 2018er S 650 auf mobile.de zählt mit
+    const maybach = bucketQuery({ make: 'Mercedes-Benz', model: 'Maybach S-Class', trim: 'S650', year: 2020, fuel: 'Petrol', km: 73_488 });
+    assert.equal(maybach?.generation, 'W222'); assert.equal(maybach?.yearFrom, 2013); assert.equal(maybach?.yearTo, 2020); assert.equal(maybach?.description, 'S 650');
+    assert.equal(yearBand({ make: 'Mercedes-Benz', model: 'S-Class', trim: 'S 500 4MATIC', year: 2021 }, 1, 2026).generation, 'W223');
+    assert.equal(yearBand({ make: 'Mercedes-Benz', model: 'E-Class', trim: 'E220d', year: 2018 }, 1, 2026).generation, 'W213');
+    assert.equal(yearBand({ make: 'Mercedes-Benz', model: 'E 63 AMG', trim: '4MATIC+', year: 2017 }, 1, 2026).generation, 'W213');
+    // GLS/CLS treffen die S-Klasse nicht (Wortgrenze), GLS hat keine Familie → Baujahr ±1
+    assert.deepEqual(yearBand({ make: 'Mercedes-Benz', model: 'GLS', trim: 'GLS 450', year: 2019 }, 1, 2026), { from: 2018, to: 2020, generation: null });
+    assert.equal(yearBand({ make: 'Mercedes-Benz', model: 'CLS', trim: 'CLS 350 d', year: 2019 }, 1, 2026).generation, 'C257');
+    assert.equal(yearBand({ make: 'BMW', model: '5 Series', trim: '530d xDrive', year: 2018 }, 1, 2026).generation, 'G30');
+    assert.equal(yearBand({ make: 'BMW', model: '5 Series', trim: '530d', year: 2017 }, 1, 2026).generation, 'F10', 'Wechseljahr → auslaufende Reihe');
+    assert.equal(yearBand({ make: 'BMW', model: 'X5', trim: 'xDrive40d', year: 2016 }, 1, 2026).generation, 'F15');
+    assert.equal(yearBand({ make: 'Porsche', model: 'Cayenne', trim: 'Turbo', year: 2019 }, 1, 2026).generation, '9Y0');
+    assert.equal(yearBand({ make: 'Audi', model: 'A6', trim: '3.0 TDI quattro', year: 2016 }, 1, 2026).generation, 'C7');
+    assert.equal(yearBand({ make: 'Volkswagen', model: 'Golf', trim: '2.0 TSI GTI', year: 2020 }, 1, 2026).generation, 'Golf 7');
+    assert.equal(yearBand({ make: 'Land Rover', model: 'Range Rover Sport', trim: '3.0 SDV6', year: 2015 }, 1, 2026).generation, 'L494');
+    assert.equal(yearBand({ make: 'Land Rover', model: 'Range Rover', trim: '4.4 SDV8', year: 2015 }, 1, 2026).generation, 'L405');
+    // Baujahr vor der ersten bekannten Reihe oder fremde Marke → Baujahr ±1
+    assert.equal(yearBand({ make: 'BMW', model: '3 Series', trim: '318i', year: 1988 }, 1, 2026).generation, null);
+    assert.deepEqual(yearBand({ make: 'Hyundai', model: 'Tucson', trim: '2.0 CRDi', year: 2019 }, 1, 2026), { from: 2018, to: 2020, generation: null });
+    // expliziter Code gewinnt vor der Familie
+    assert.equal(yearBand({ make: 'BMW', model: '3 Series (E93)', trim: '320i', year: 2012 }, 1, 2026).generation, 'E93');
   });
 
   it('Motorisierung: Hubraum ±12 %, unbekannter Hubraum schließt nicht aus', () => {
