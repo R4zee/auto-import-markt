@@ -351,14 +351,17 @@ interface RefListingRow extends Row {
 }
 const REF_LISTING_COLS = 'id, km, engine_ccm, power_kw, landed_de, landed_at, landed_nl, landed_pl';
 
-/** UPDATE-Anweisungen: günstigstes vergleichbares Angebot und Abstand je Zielland für die Inserate eines Buckets */
+/**
+ * UPDATE-Anweisungen: günstigstes vergleichbares Angebot und Abstand je Zielland für die Inserate eines Buckets.
+ * ref_min_eur = 0 heißt „geprüft, kein vergleichbares Angebot“ (Abstände NULL) – NULL heißt „noch nicht berechnet“.
+ */
 function referenceUpdates(rows: RefListingRow[], b: RefBucket): InStatement[] {
   return rows.map((r) => {
     const l = { km: Number(r.km), engineCcm: r.engine_ccm == null ? null : Number(r.engine_ccm), powerKw: r.power_kw == null ? null : Number(r.power_kw) };
-    const min = comparable(l, b).samples[0]?.priceEur ?? null;
+    const min = comparable(l, b).samples[0]?.priceEur ?? 0;
     const diff = (dest: DestCode): number | null => {
       const landed = r[`landed_${dest.toLowerCase()}` as keyof RefListingRow];
-      return min != null && landed != null ? diffPct(Number(landed), min) : null;
+      return min > 0 && landed != null ? diffPct(Number(landed), min) : null;
     };
     return { sql: 'UPDATE listings SET ref_min_eur = ?, ref_diff_de = ?, ref_diff_at = ?, ref_diff_nl = ?, ref_diff_pl = ? WHERE id = ?', args: [min, ...DEST_CODES.map(diff), r.id] };
   });
@@ -368,45 +371,52 @@ async function writeBatches(stmts: InStatement[]): Promise<void> {
   for (let i = 0; i < stmts.length; i += 300) await db().batch(stmts.slice(i, i + 300), 'write');
 }
 
-/** Nach dem Laden eines Buckets: Vergleichspreis-Spalten aller aktiven Inserate mit diesem ref_key neu setzen */
+/**
+ * Nach dem Laden eines Buckets: Vergleichspreis-Spalten aller aktiven Inserate mit diesem ref_key neu setzen.
+ * `+active`: der Planer soll den Index auf ref_key nehmen, nicht einen (active, …)-Index über den ganzen Bestand
+ * (Lauf 28: rund 10 s je Bucket statt 3 s).
+ */
 export async function applyBucketToListings(b: RefBucket): Promise<number> {
-  const rows = await query<RefListingRow>(`SELECT ${REF_LISTING_COLS} FROM listings WHERE ref_key = ? AND active = 1`, [b.key]);
+  const rows = await query<RefListingRow>(`SELECT ${REF_LISTING_COLS} FROM listings WHERE ref_key = ? AND +active = 1`, [b.key]);
   if (rows.length) await writeBatches(referenceUpdates(rows, b));
   return rows.length;
 }
 
-export interface BackfillReport { keyed: number; updated: number; buckets: number; stopped: string | null }
+export interface BackfillReport { keyed: number; pending: number; updated: number; buckets: number; stopped: string | null }
 
 /**
- * Inserate ohne Bucket-Schlüssel (Bestand von vor der Spalte, Markenvereinheitlichung) nachtragen und – wo der Bucket
- * schon vorliegt – die Vergleichspreis-Spalten setzen. Läuft im Vergleichspreis-Job vor dem Nachladen der Buckets;
- * blockweise, mit Zeitbudget, der Rest folgt im nächsten Lauf.
+ * Sortierspalten nachziehen: (1) Inserate ohne Bucket-Schlüssel (Bestand von vor der Spalte, Markenvereinheitlichung)
+ * bekommen ihren Schlüssel; (2) Inserate mit Schlüssel, deren Vergleichspreis noch nie berechnet wurde (ref_min_eur NULL),
+ * werden mit bereits vorhandenen Buckets versorgt – Buckets, die noch fehlen, folgen beim Nachladen. Läuft im
+ * Vergleichspreis-Job vor dem Nachladen; blockweise, mit Zeitbudget, der Rest folgt im nächsten Lauf.
  */
 export async function backfillReferenceColumns(opts: { maxMs?: number; log?: (line: string) => void } = {}): Promise<BackfillReport> {
   const started = Date.now();
   const maxMs = opts.maxMs ?? 20 * 60000;
   const log = opts.log ?? (() => undefined);
-  const report: BackfillReport = { keyed: 0, updated: 0, buckets: 0, stopped: null };
-  const byKey = new Map<string, RefListingRow[]>();
+  const report: BackfillReport = { keyed: 0, pending: 0, updated: 0, buckets: 0, stopped: null };
   for (;;) {
     if (Date.now() - started > maxMs) { report.stopped = `Zeitbudget von ${Math.round(maxMs / 60000)} min erreicht`; return report; }
-    const rows = await query<RefListingRow & { make: string; model: string; trim: string; year: number; fuel: string }>(
-      `SELECT ${REF_LISTING_COLS}, make, model, trim, year, fuel FROM listings WHERE ref_key IS NULL AND active = 1 LIMIT 5000`,
+    const rows = await query<{ id: string; make: string; model: string; trim: string; year: number; fuel: string; km: number }>(
+      'SELECT id, make, model, trim, year, fuel, km FROM listings WHERE ref_key IS NULL AND active = 1 LIMIT 5000',
     );
     if (!rows.length) break;
-    const stmts: InStatement[] = rows.map((r) => {
-      const key = refKeyFor({ make: r.make, model: r.model, trim: r.trim, year: Number(r.year), fuel: r.fuel as Fuel, km: Number(r.km) });
-      if (key) { const list = byKey.get(key); if (list) list.push(r); else byKey.set(key, [r]); }
-      return { sql: 'UPDATE listings SET ref_key = ? WHERE id = ?', args: [key, r.id] };
-    });
-    await writeBatches(stmts);
+    await writeBatches(rows.map((r) => ({
+      sql: 'UPDATE listings SET ref_key = ? WHERE id = ?',
+      args: [refKeyFor({ make: r.make, model: r.model, trim: r.trim, year: Number(r.year), fuel: r.fuel as Fuel, km: Number(r.km) }), r.id],
+    })));
     report.keyed += rows.length;
     if (report.keyed % 25000 < 5000) log(`  … ${report.keyed} Inserate mit Bucket-Schlüssel · ${Math.round((Date.now() - started) / 60000)} min`);
   }
+  // Offene Inserate (Teilindex idx_listings_ref_pending: ref_min_eur IS NULL AND active = 1) nach Bucket gruppieren
+  const pending = await query<RefListingRow & { ref_key: string }>(`SELECT ${REF_LISTING_COLS}, ref_key FROM listings WHERE ref_min_eur IS NULL AND active = 1 AND ref_key <> ''`);
+  report.pending = pending.length;
+  const byKey = new Map<string, RefListingRow[]>();
+  for (const r of pending) { const list = byKey.get(r.ref_key); if (list) list.push(r); else byKey.set(r.ref_key, [r]); }
   if (!byKey.size) return report;
-  // Vorhandene Buckets auf die eben zugeordneten Inserate anwenden (Buckets, die noch fehlen, folgen beim Nachladen)
   const existing = await referenceRepo.fetchedAt();
   const keys = [...byKey.keys()].filter((k) => existing.has(k));
+  log(`  offen: ${pending.length} Inserate in ${byKey.size} Buckets, davon ${keys.length} Buckets bereits geladen`);
   for (let i = 0; i < keys.length; i += 100) {
     if (Date.now() - started > maxMs) { report.stopped = `Zeitbudget von ${Math.round(maxMs / 60000)} min erreicht (${keys.length - i} Buckets offen)`; break; }
     const buckets = await referenceRepo.byKeys(keys.slice(i, i + 100));
