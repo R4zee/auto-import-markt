@@ -6,6 +6,7 @@ import { DubizzleProvider } from './dubizzle.js';
 import { EbayMotorsProvider } from './ebay.js';
 import { EncarProvider } from './encar.js';
 import { feedProviders } from './feed.js';
+import { JapCarzProvider } from './japcarz.js';
 import { MarketCheckProvider } from './marketcheck.js';
 import { MockProvider } from './mock.js';
 import { OlxProvider } from './olx.js';
@@ -16,6 +17,8 @@ import { XapiKoreaProvider } from './xapikorea.js';
 
 const ALL: MarketProvider[] = [
   new MockProvider(),
+  // Japan: JSON-API der Jap-Carz-Website (kein Key), Vollabgleich über alle Seiten
+  new JapCarzProvider(),
   new EncarProvider(),
   new XapiKoreaProvider(),
   new MarketCheckProvider(),

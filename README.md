@@ -89,6 +89,7 @@ Lokal reproduzieren: `backend/test/search.test.ts` prüft Pfade und Facetten; ei
 | `ebay` | USA (eBay Motors, Auktion + Festpreis) | `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET` |
 | `apibara` | USA (Copart/IAAI-Auktionen) | `APIBARA_API_KEY` (Test-Plan kostenlos, 100 Req/Monat) |
 | `copart` | **USA** – Copart-Suchendpunkt der Website `POST /public/lots/search-results`, keyless, kostenlos (Grauzone wie Encar); live bestätigt 15.09.2026 (385.803 Lose) | `COPART_ENABLED=true`, optional `COPART_MAKES` |
+| `japcarz` | **Japan** – Jap Carz JSON-API der Website (`GET jap-carz.com/api/listings/?sort=upcoming_auctions&per_page=30&page=N`), keyless, kostenlos; Probe 20.09.2026 (475 Fahrzeuge); Vollabgleich, Auktionen mit Startgebot in JPY | `JAPCARZ_ENABLED=true` (im Workflow Standard an) |
 | `encar` | **Südkorea (Hauptquelle)** – Encar direkt, Vollabgleich (~150.000 Inserate) | `ENCAR_ENABLED=true` + `ENCAR_PROXY_URL` (Residential-Proxy); läuft per GitHub Actions alle 6 h, Teilabfragen < 10.000, Übersetzungs-Cache `encar_grades` |
 | `xapikorea` | Südkorea (Fallback, Encar-Wrapper mit englischen Feldern) | `XAPIKOREA_API_KEY` (Free 500 Req/Monat) |
 | `dubizzle` | **VAE** – Dubizzle Motors über den Algolia-Proxy der Website (`POST algolia.dubizzle.com/1/indexes/*/queries`, Index `motors.com`), keyless, kostenlos (Grauzone wie Encar); live bestätigt 16.09.2026 (41.253 Gebrauchtwagen); Vollabgleich über Preisfenster | `DUBIZZLE_ENABLED=true` |

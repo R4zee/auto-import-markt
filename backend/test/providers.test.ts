@@ -252,3 +252,63 @@ describe('xapikorea mapping', () => {
     assert.equal(l?.engineCcm, null);
   });
 });
+
+describe('Jap Carz mapping', async () => {
+  const { japcarzEndsAt, japcarzModel, japcarzSkipReason, japcarzUrl, mapJapCarz } = await import('../src/providers/japcarz.js');
+  const future = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
+  const item = {
+    lot: '30016', hash: '41dff98d', slug: '41dff98df95b18e5', title: 'BMW 3 SERIES 325I M-SPORT PACKAGE', subtitle: '3 SERIES 4D 325I M-SPORT PACKAGE',
+    make: { name: 'BMW', slug: 'bmw' }, model: { name: '3 SERIES 325I M-SPORT PACKAGE 3 SERIES 4D 325I M-SPORT PACKAGE', slug: 'x' }, year: 2012,
+    parsed_mileage: '288000 km', parsed_displacement: '3000', parsed_transmission: 'AT', parsed_starting_bid: '80000', parsed_final_price: null,
+    steering_wheel: 'lhd', auction_date: future, auction_time: '08:00', auction_result: 'non Auction', site: 'R-Nagoya', grade_label: '4',
+    cover: '/images/41dff98df95b18e5/30016-01.webp', preview_images: ['/images/41dff98df95b18e5/30016-01.webp', '/images/41dff98df95b18e5/30016-02.webp'], photo_count: 7, hasSunroof: true,
+  };
+
+  it('bildet ein Auktionslos mit Startgebot in JPY, Modell/Ausstattung aus dem Titel und Termin in japanischer Zeit ab', () => {
+    const l = mapJapCarz(item, NOW);
+    assert.ok(l);
+    assert.equal(l.id, 'japcarz:41dff98df95b18e5');
+    assert.equal(l.market, 'JP');
+    assert.equal(l.currency, 'JPY');
+    assert.equal(l.price, 80000);
+    assert.equal(l.offerType, 'auction');
+    assert.equal(l.make, 'BMW');
+    assert.equal(l.model, '3 Series');
+    assert.match(l.trim, /^325I M-sport Package · Sunroof$/i);
+    assert.equal(l.km, 288000);
+    assert.equal(l.engineCcm, 3000);
+    assert.equal(l.engine, '3.0 L');
+    assert.equal(l.transmission, 'Automatic');
+    assert.equal(l.location, 'Nagoya');
+    assert.equal(l.auction?.house, 'Jap Carz · R-Nagoya');
+    assert.equal(l.auction?.lot, '30016');
+    assert.equal(l.auction?.grade, '4');
+    assert.equal(l.auction?.endsAt, new Date(`${future}T08:00:00+09:00`).toISOString());
+    assert.deepEqual(l.photos, ['https://jap-carz.com/images/41dff98df95b18e5/30016-01.webp', 'https://jap-carz.com/images/41dff98df95b18e5/30016-02.webp']);
+    assert.equal(l.photoCount, 7);
+    assert.equal(l.url, 'https://jap-carz.com/listings/41dff98df95b18e5');
+    assert.equal(l.partnerId, 'fareast');
+  });
+
+  it('überspringt Rechtslenker, versteigerte Lose und zurückliegende Termine', () => {
+    assert.equal(japcarzSkipReason({ ...item, steering_wheel: 'rhd' }), 'Rechtslenker');
+    assert.equal(japcarzSkipReason({ ...item, parsed_final_price: '150000' }), 'bereits versteigert');
+    assert.equal(japcarzSkipReason({ ...item, auction_result: 'Sold' }), 'Auktion beendet (Sold)');
+    assert.equal(japcarzSkipReason({ ...item, auction_date: '2020-01-01' }), 'Auktionstermin liegt zurück');
+    assert.equal(japcarzSkipReason({ ...item, parsed_starting_bid: null }), 'kein Startgebot');
+    assert.equal(japcarzSkipReason(item), null);
+  });
+
+  it('trennt Modell und Ausstattung, erkennt Kraftstoff aus dem Titel', () => {
+    assert.deepEqual(japcarzModel('ALFA SPORTWAGON 2.5 V6 24V Q SYSTEM', 'ALFA-ROMEO'), { model: 'Alfa Sportwagon', trim: '2.5 V6 24V Q System' });
+    assert.deepEqual(japcarzModel('E CLASS E220 CDI'), { model: 'E Class', trim: 'E220 CDI' });
+    assert.deepEqual(japcarzModel('CAYENNE TURBO'), { model: 'Cayenne', trim: 'Turbo' });
+    const diesel = mapJapCarz({ ...item, title: 'MERCEDES-BENZ E CLASS E220 CDI', make: { name: 'MERCEDES-BENZ' } }, NOW);
+    assert.equal(diesel?.make, 'Mercedes-Benz');
+    assert.equal(diesel?.model, 'E Class');
+    assert.equal(diesel?.fuel, 'Diesel');
+    assert.equal(japcarzEndsAt('2026-09-22', '8:00')?.toISOString(), '2026-09-21T23:00:00.000Z');
+    assert.equal(japcarzEndsAt('', ''), null);
+    assert.equal(japcarzUrl(2, 30, 'upcoming_auctions'), 'https://jap-carz.com/api/listings/?sort=upcoming_auctions&per_page=30&page=2');
+  });
+});
