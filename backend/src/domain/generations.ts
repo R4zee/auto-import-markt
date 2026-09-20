@@ -61,9 +61,9 @@ const ROWS: Row[] = [
   ['Audi', '8R', 2008, 2017], ['Audi', 'FY', 2017, null], ['Audi', '4L', 2005, 2015], ['Audi', '4M', 2015, null],
   ['Audi', '8N', 1998, 2006], ['Audi', '8J', 2006, 2014], ['Audi', '8S', 2014, 2023], ['Audi', '8U', 2011, 2018], ['Audi', 'F3', 2018, null],
   ['Audi', '4F', 2004, 2011], ['Audi', '4G', 2011, 2018], ['Audi', '4K', 2018, null], ['Audi', '4H', 2010, 2017], ['Audi', '4N', 2017, null],
-  // Volkswagen (Golf-Generationen als Ziffer/Römisch im Modellnamen)
-  ['Volkswagen', 'Golf 4 Golf IV Mk4', 1997, 2003], ['Volkswagen', 'Golf 5 Golf V Mk5', 2003, 2008], ['Volkswagen', 'Golf 6 Golf VI Mk6', 2008, 2012],
-  ['Volkswagen', 'Golf 7 Golf VII Mk7', 2012, 2020], ['Volkswagen', 'Golf 8 Golf VIII Mk8', 2019, null],
+  // Volkswagen (Golf-Generationen als Ziffer/Römisch im Modellnamen; Codes mit Leerzeichen durch | getrennt)
+  ['Volkswagen', 'Golf 4|Golf IV|Mk4', 1997, 2003], ['Volkswagen', 'Golf 5|Golf V|Mk5', 2003, 2008], ['Volkswagen', 'Golf 6|Golf VI|Mk6', 2008, 2012],
+  ['Volkswagen', 'Golf 7|Golf VII|Mk7', 2012, 2020], ['Volkswagen', 'Golf 8|Golf VIII|Mk8', 2019, null],
   ['Volkswagen', 'B6 3C', 2005, 2010], ['Volkswagen', 'B7', 2010, 2014], ['Volkswagen', 'B8 3G', 2014, null],
   // Land Rover
   ['Land Rover', 'L322', 2002, 2012], ['Land Rover', 'L405', 2012, 2022], ['Land Rover', 'L460', 2022, null],
@@ -75,8 +75,76 @@ const INDEX = new Map<string, Generation[]>();
 for (const [make, codes, from, to] of ROWS) {
   const key = makeKey(make);
   const list = INDEX.get(key) ?? [];
-  for (const code of codes.split(' ')) list.push({ make, code, from, to });
+  // Codes durch Leerzeichen getrennt; enthält ein Code selbst Leerzeichen ("Golf 7"), trennt |
+  for (const code of codes.split(codes.includes('|') ? '|' : ' ')) list.push({ make, code, from, to });
   INDEX.set(key, list);
+}
+
+/**
+ * Modellfamilien → Folge der Baureihen (Hauptcode je Zeile aus ROWS). Nennt das Inserat keinen Code, wird die
+ * Baureihe aus Modell/Variante und Baujahr bestimmt: „Maybach S 650, 2020“ → W222 (2013–2020). Liegt das Baujahr im
+ * Wechseljahr zweier Baureihen, gilt die auslaufende – im Wechseljahr sind die meisten Fahrzeuge noch die alte Reihe.
+ * Die Muster prüfen Wortgrenzen: „S 650“ trifft die S-Klasse, „GLS 450“ oder „CLS 350“ nicht.
+ */
+type Family = [make: string, pattern: RegExp, codes: string[]];
+const FAMILIES: Family[] = [
+  // Mercedes-Benz (Variante mit 2–3 Ziffern: „S 650“, „E 220 d“, „C 300“, „A 45“)
+  ['Mercedes-Benz', /\bmaybach\b|\bs[- ]?(class|klasse)\b|\bs ?\d{2,3}\b/i, ['W220', 'W221', 'W222', 'W223']],
+  ['Mercedes-Benz', /\be[- ]?(class|klasse)\b|\be ?\d{2,3}\b/i, ['W210', 'W211', 'W212', 'W213', 'W214']],
+  ['Mercedes-Benz', /\bc[- ]?(class|klasse)\b|\bc ?\d{2,3}\b/i, ['W202', 'W203', 'W204', 'W205', 'W206']],
+  ['Mercedes-Benz', /\ba[- ]?(class|klasse)\b|\ba ?\d{2,3}\b/i, ['W168', 'W169', 'W176', 'W177']],
+  ['Mercedes-Benz', /\bb[- ]?(class|klasse)\b|\bb ?\d{3}\b/i, ['W245', 'W246', 'W247']],
+  ['Mercedes-Benz', /\bg[- ]?(class|klasse)\b|\bg ?\d{3}\b/i, ['W463', 'W464']],
+  ['Mercedes-Benz', /\bgle\b|\bm[- ]?(class|klasse)\b|\bml ?\d{3}\b/i, ['W163', 'W164', 'W166', 'V167']],
+  ['Mercedes-Benz', /\bglk\b/i, ['X204']], ['Mercedes-Benz', /\bglc\b/i, ['X253', 'X254']],
+  ['Mercedes-Benz', /\bgla\b/i, ['X156', 'H247']], ['Mercedes-Benz', /\bglb\b/i, ['X247']],
+  ['Mercedes-Benz', /\bcla\b/i, ['C117', 'C118']], ['Mercedes-Benz', /\bcls\b/i, ['C219', 'C218', 'C257']], ['Mercedes-Benz', /\bclk\b/i, ['C209']],
+  ['Mercedes-Benz', /\bsl\b|\bsl ?\d{2,3}\b/i, ['R230', 'R231', 'R232']], ['Mercedes-Benz', /\bslk\b|\bslc\b/i, ['R170', 'R171', 'R172']],
+  ['Mercedes-Benz', /\bv[- ]?(class|klasse)\b|\bvito\b|\bviano\b|\bv ?\d{3}\b/i, ['W639', 'W447']],
+  // BMW („3 Series“, „3er“, „320d“, „X5“ …)
+  ['BMW', /\b1[- ]?(series|er|reihe)\b|\b1\d{2}[dié]?\b/i, ['E87', 'F20', 'F40']],
+  ['BMW', /\b2[- ]?(series|er|reihe)\b|\b2\d{2}[dié]?\b/i, ['F22', 'G42']],
+  ['BMW', /\b3[- ]?(series|er|reihe)\b|\b3\d{2}[dié]?\b/i, ['E36', 'E46', 'E90', 'F30', 'G20']],
+  ['BMW', /\b4[- ]?(series|er|reihe)\b|\b4\d{2}[dié]?\b/i, ['F32', 'G22']],
+  ['BMW', /\b5[- ]?(series|er|reihe)\b|\b5\d{2}[dié]?\b/i, ['E39', 'E60', 'F10', 'G30', 'G60']],
+  ['BMW', /\b6[- ]?(series|er|reihe)\b|\b6\d{2}[dié]?\b/i, ['E63', 'F06', 'G32']],
+  ['BMW', /\b7[- ]?(series|er|reihe)\b|\b7\d{2}[dié]?\b/i, ['E38', 'E65', 'F01', 'G11', 'G70']],
+  ['BMW', /\b8[- ]?(series|er|reihe)\b|\b8\d{2}[dié]?\b/i, ['G14']],
+  ['BMW', /\bx1\b/i, ['E84', 'F48', 'U11']], ['BMW', /\bx2\b/i, ['F39', 'U10']], ['BMW', /\bx3\b/i, ['E83', 'F25', 'G01']],
+  ['BMW', /\bx4\b/i, ['F26', 'G02']], ['BMW', /\bx5\b/i, ['E53', 'E70', 'F15', 'G05']], ['BMW', /\bx6\b/i, ['E71', 'F16', 'G06']], ['BMW', /\bx7\b/i, ['G07']],
+  ['BMW', /\bz4\b/i, ['E85', 'E89', 'G29']], ['BMW', /\bi3\b/i, ['I01']], ['BMW', /\bi8\b/i, ['I12']], ['BMW', /\bi4\b/i, ['G26']], ['BMW', /\bix3\b/i, ['G08']],
+  // Porsche
+  ['Porsche', /\b911\b|\bcarrera\b|\btarga\b/i, ['993', '996', '997', '991', '992']],
+  ['Porsche', /\bboxster\b|\bcayman\b|\b718\b/i, ['986', '987', '981', '982']],
+  ['Porsche', /\bcayenne\b/i, ['955', '957', '958', '9Y0']], ['Porsche', /\bmacan\b/i, ['95B']], ['Porsche', /\bpanamera\b/i, ['970', '971']], ['Porsche', /\btaycan\b/i, ['J1']],
+  // Audi
+  ['Audi', /\b(a|s|rs ?)4\b/i, ['B5', 'B6', 'B7', 'B8', 'B9']], ['Audi', /\b(a|s|rs ?)6\b/i, ['C5', 'C6', 'C7', 'C8']],
+  ['Audi', /\b(a|s|rs ?)7\b/i, ['4G', '4K']], ['Audi', /\b(a|s)8\b/i, ['D2', 'D3', 'D4', 'D5']],
+  ['Audi', /\b(a|s|rs ?)3\b/i, ['8L', '8P', '8V', '8Y']], ['Audi', /\b(s?q)5\b/i, ['8R', 'FY']], ['Audi', /\b(s?q)7\b/i, ['4L', '4M']],
+  ['Audi', /\b(rs ?)?q3\b/i, ['8U', 'F3']], ['Audi', /\btt ?(rs|s)?\b/i, ['8N', '8J', '8S']],
+  // Volkswagen
+  ['Volkswagen', /\bgolf\b/i, ['Golf 4', 'Golf 5', 'Golf 6', 'Golf 7', 'Golf 8']], ['Volkswagen', /\bpassat\b/i, ['B6', 'B7', 'B8']],
+  // Land Rover
+  ['Land Rover', /\brange rover\b(?!\s*(sport|evoque|velar))/i, ['L322', 'L405', 'L460']],
+  ['Land Rover', /\brange rover sport\b/i, ['L320', 'L494', 'L461']], ['Land Rover', /\bevoque\b/i, ['L538', 'L551']],
+  ['Land Rover', /\bdiscovery\b(?!\s*sport)/i, ['L319', 'L462']], ['Land Rover', /\bdefender\b/i, ['L663']],
+];
+
+/** Baureihe aus Modellfamilie + Baujahr (ohne Code im Inserat) – null, wenn keine Familie passt oder das Baujahr vor der ersten Reihe liegt */
+export function familyGenerationOf(l: { make: string; model: string; trim: string; year: number }): Generation | null {
+  const list = INDEX.get(makeKey(l.make));
+  if (!list?.length) return null;
+  const text = ` ${l.model} ${l.trim} `.replace(/[()[\]/,·|]/g, ' ').replace(/\s+/g, ' ');
+  const key = makeKey(l.make);
+  for (const [make, pattern, codes] of FAMILIES) {
+    if (makeKey(make) !== key || !pattern.test(text)) continue;
+    const gens = codes.map((c) => list.find((g) => g.code === c)).filter((g): g is Generation => !!g);
+    // im Wechseljahr (Baujahr in zwei Zeiträumen) die auslaufende Reihe: die Liste ist chronologisch, der erste Treffer ist die ältere
+    const hit = gens.find((g) => l.year >= g.from && l.year <= (g.to ?? 9999));
+    if (hit) return hit;
+    return null;
+  }
+  return null;
 }
 
 /** Alle bekannten Codes einer Marke (für Tests/Doku) */
@@ -106,9 +174,9 @@ export function generationOf(l: { make: string; model: string; trim: string; yea
   return hits[0];
 }
 
-/** Baujahrband für den Vergleich: Bauzeitraum der Baureihe, sonst Baujahr ± span */
+/** Baujahrband für den Vergleich: Bauzeitraum der Baureihe (Code im Inserat, sonst Modellfamilie + Baujahr), sonst Baujahr ± span */
 export function yearBand(l: { make: string; model: string; trim: string; year: number }, span: number, now = new Date().getFullYear()): { from: number; to: number; generation: string | null } {
-  const g = generationOf(l);
+  const g = generationOf(l) ?? familyGenerationOf(l);
   if (g) return { from: g.from, to: g.to ?? now, generation: g.code };
   return { from: l.year - span, to: l.year + span, generation: null };
 }
