@@ -18,9 +18,10 @@ if (!config.reference.enabled) {
 }
 await ready();
 // Sortierspalten (ref_key, ref_min_eur, ref_diff_*) für Inserate ohne Schlüssel nachtragen – normalerweise nur die
-// seit dem letzten Lauf neu hinzugekommenen; beim ersten Lauf der ganze Bestand (blockweise, Zeitbudget 25 min)
+// seit dem letzten Lauf neu hinzugekommenen; beim ersten Lauf der ganze Bestand (blockweise, Zeitbudget höchstens
+// 25 min bzw. die Hälfte von REFERENCE_MAX_MINUTES – ein kurzer Testlauf bleibt so kurz)
 const tb = Date.now();
-const bf = await backfillReferenceColumns({ maxMs: 25 * 60000, log: console.log });
+const bf = await backfillReferenceColumns({ maxMs: Math.min(25, config.reference.maxMinutes / 2) * 60000, log: console.log });
 if (bf.keyed || bf.updated) console.log(`✔ columns      ${bf.keyed} Inserate mit Bucket-Schlüssel · ${bf.updated} mit Vergleichspreis aus ${bf.buckets} Buckets · ${Date.now() - tb} ms${bf.stopped ? `  ⚠ ${bf.stopped}` : ''}`);
 const before = await referenceRepo.count();
 const t0 = Date.now();

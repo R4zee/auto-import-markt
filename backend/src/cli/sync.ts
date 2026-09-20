@@ -27,9 +27,13 @@ if (only.length) {
   if (missing.length) console.log(`Nicht aktiv oder unbekannt: ${missing.join(', ')} (aktiv: ${activeProviders().map((p) => p.id).join(', ') || '–'})`);
   reports = [];
   for (const p of chosen) reports.push(await syncProvider(p));
-  // Markenschreibweisen im Bestand vereinheitlichen (billig: nur DISTINCT-Marken), dann Filterlisten neu aufbauen
+  // Markenschreibweisen im Bestand vereinheitlichen (billig: nur DISTINCT-Marken), beendete Auktionen deaktivieren
+  // (Copart & Co. ohne Vollabgleich), dann Filterlisten neu aufbauen
   const canon = await canonicalizeStoredMakes();
   if (canon.listings > 0) reports.push({ provider: 'makes', status: 'ok', upserted: canon.listings, deactivated: 0, warnings: [`${canon.makes} Markenschreibweisen vereinheitlicht`], durationMs: 0 });
+  const ta = Date.now();
+  const ended = await listingsRepo.deactivateEndedAuctions();
+  if (ended > 0) reports.push({ provider: 'auctions', status: 'ok', upserted: 0, deactivated: ended, warnings: ['Auktionen mit abgelaufenem Termin deaktiviert'], durationMs: Date.now() - ta });
   await refreshFacets();
 } else {
   reports = await syncAll();
