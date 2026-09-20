@@ -27,6 +27,14 @@ select.input option { background: var(--color-surface); color: var(--color-text)
 .aim-ref-good { color: var(--color-accent-100, #d7f5e3); background: color-mix(in srgb, var(--color-accent) 28%, transparent); }
 .aim-ref-bad { color: var(--color-neutral-200); background: color-mix(in srgb, #e5484d 26%, transparent); }
 
+/* Markenfilter mit Suchfeld: Liste unter dem Feld, beliebte Marken zuerst */
+.aim-makepicker { position: relative; }
+.aim-makepicker-list { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 40; max-height: 340px; overflow-y: auto; padding: 4px; border: 1px solid var(--color-divider); border-radius: var(--radius-md); background: var(--color-surface); display: flex; flex-direction: column; }
+.aim-makepicker-group { padding: 8px 8px 4px; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-neutral-500); }
+.aim-makepicker-item { text-align: left; border: 0; background: transparent; color: var(--color-text); font: inherit; font-size: 12.5px; padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer; }
+.aim-makepicker-item:hover { background: color-mix(in srgb, var(--color-accent) 14%, transparent); }
+.aim-makepicker-item.is-active { color: var(--color-accent); }
+
 /* Segment-Schalter: der Rahmen der aktiven Option folgt den abgerundeten Ecken des Containers,
    statt an ihnen abgeschnitten zu werden (Container hat overflow: hidden). */
 .seg .seg-opt:first-child { border-top-left-radius: inherit; border-bottom-left-radius: inherit; }

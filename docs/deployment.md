@@ -384,6 +384,16 @@ günstigsten Angebote in die Tabelle `ref_prices`; die API liest je Trefferseite
    werden Buckets alle 7 Tage (`REFERENCE_TTL_DAYS`) erneuert. Die Detailansicht lädt fehlende Buckets live nach
    (`REFERENCE_LIVE_LOOKUP`, eine mobile.de-Anfrage).
 
+**Sortierung nach Abstand (seit 20.09.2026):** Die Trefferliste kann nach dem Abstand zum DE-Vergleichspreis sortieren
+(auf- und absteigend, Inserate ohne Vergleichspreis zuletzt). Dafür trägt jedes Inserat vorberechnete Spalten:
+`ref_key` (Bucket-Schlüssel, beim Upsert gesetzt), `ref_min_eur` (günstigstes vergleichbares DE-Angebot) und
+`ref_diff_de/at/nl/pl` (Abstand des Endpreises je Zielland in Prozent). Der Job `reference.ts` trägt zuerst fehlende
+Schlüssel nach (erster Lauf: ganzer Bestand, blockweise mit 25 min Budget, Meldung `✔ columns …`) und schreibt nach jedem
+geladenen Bucket dessen Inserate fort; Kursänderungen ziehen die Abstände in `recomputeDerived` nach. Die dafür nötigen
+Indizes (`idx_listings_search_v2`, `idx_listings_active_refdiff_*`, `idx_listings_ref_key`) legt nur der Job an, nicht
+die Vercel-Function – bis zum ersten Job-Lauf nach dem Deploy ist diese eine Sortierung langsamer. Referenz ist immer
+das günstigste Angebot, kein Median: Importe liegen erfahrungsgemäß unter dem heimischen Angebot.
+
 Kosten: der Job läuft auf GitHub Actions – im privaten Repository zählt er gegen das Minutenkontingent (Teil L);
 Turso liest je Trefferseite bis zu 48 kleine Zeilen mehr. Auf Vercel entsteht keine zusätzliche externe Anfrage
 außer in der Detailansicht.

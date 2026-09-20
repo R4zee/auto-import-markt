@@ -48,13 +48,13 @@ Alternativ über die Claude-Code-Vorschau: `.claude/launch.json` enthält die Ko
 | `GET /api/listings/batch?ids=` | Merkliste/Vergleich |
 | `POST /api/calc/landed-cost` | Freie Kalkulation (Markt, Preis, Währung, Oldtimer, Präferenzursprung, Fahrzeugdaten) |
 | `POST /api/enquiries`, `POST /api/enquiries/bulk` | Anfrage an den Partner-Importeur / Sammelanfrage je Partner |
-| `GET /api/listings/:id/reference?dest=` | Vergleichspreise DE (mobile.de-Web-App-Endpunkt): günstigstes vergleichbares Angebot, Median, Spanne, Laufleistungsfenster, Abstand des Endpreises in Prozent; mit `REFERENCE_ENABLED=false` → 204. Die Trefferliste trägt je Inserat `reference` (Mindestpreis + Abstand) aus dem Bucket-Cache `ref_prices` |
+| `GET /api/listings/:id/reference?dest=` | Vergleichspreise DE (mobile.de-Web-App-Endpunkt): Referenz ist immer das **günstigste** vergleichbare Angebot (kein Median), dazu Spanne, Laufleistungsfenster, Abstand des Endpreises in Prozent und Link zum Angebot; mit `REFERENCE_ENABLED=false` → 204. Die Trefferliste trägt je Inserat `reference` (Mindestpreis + Abstand) aus dem Bucket-Cache `ref_prices`; `sort=ref-asc|ref-desc` sortiert nach dem Abstand (vorberechnete Spalten `ref_min_eur`, `ref_diff_<Zielland>`, Inserate ohne Vergleichspreis zuletzt) |
 | `GET /api/cron/sync` | Vercel-Cron (Header `Authorization: Bearer CRON_SECRET`) |
 | `GET /api/partners` | Partner-Importeure |
 | `POST /api/admin/sync`, `POST /api/admin/cleanup`, `POST /api/admin/facets`, `GET /api/admin/status`, `GET /api/admin/enquiries` | Admin (Header `x-admin-key`); `cleanup` deaktiviert Bestände entfernter Anbieter, `facets` berechnet die Filterlisten neu |
 
 Filter-Parameter: `q, offer, markets, make, model, location, yearFrom, yearTo, maxKm, fuels,
-transmissions, cocOnly, maxLanded, dest, sort (landed-asc|landed-desc|year-desc|km-asc|ending), page, pageSize`.
+transmissions, cocOnly, maxLanded, dest, sort (landed-asc|landed-desc|year-desc|km-asc|ending|ref-asc|ref-desc), page, pageSize`.
 
 ### Abfrage-Performance und Vercel-Kosten
 

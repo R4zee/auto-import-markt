@@ -104,7 +104,8 @@ export interface ListingQuery {
   /** Max. Endpreis in EUR (nach Landed-Cost-Berechnung) */
   maxLandedEur?: number;
   dest?: DestCode;
-  sort?: 'landed-asc' | 'landed-desc' | 'year-desc' | 'km-asc' | 'ending';
+  /** ref-asc/ref-desc: Abstand des Endpreises zum günstigsten DE-Angebot (Inserate ohne Vergleichspreis zuletzt) */
+  sort?: 'landed-asc' | 'landed-desc' | 'year-desc' | 'km-asc' | 'ending' | 'ref-asc' | 'ref-desc';
   page?: number;
   pageSize?: number;
 }

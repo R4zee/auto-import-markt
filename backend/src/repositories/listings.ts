@@ -1,9 +1,10 @@
 import type { InStatement, InValue } from '@libsql/client';
-import { db, one, query, run, type Row } from '../db.js';
+import { db, one, query, refDiffSql, run, type Row } from '../db.js';
 import { calcLandedCost } from '../domain/landedCost.js';
 import { DEST_CODES } from '../domain/markets.js';
 import type { DestCode, Listing, ListingQuery, Partner } from '../domain/types.js';
 import { fxSync } from '../services/fx.js';
+import { refKeyFor } from '../services/reference.js';
 
 interface ListingRow extends Row {
   id: string; source: string; external_id: string; market: string; country: string; location: string;
@@ -78,8 +79,8 @@ INSERT INTO listings (
   id, source, external_id, market, country, location, offer_type, url, year, make, model, trim, km, engine,
   engine_ccm, co2_gkm, transmission, drive, fuel, price, currency, steering, auction_json, coc, classic,
   duty_rate_override, origin_proof, resale_eur, partner_id, photos_json, photo_count, damage_json, fetched_at, active,
-  price_eur, landed_de, landed_at, landed_nl, landed_pl, auction_ends_at, search_text, power_kw
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+  price_eur, landed_de, landed_at, landed_nl, landed_pl, auction_ends_at, search_text, power_kw, ref_key
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   market = excluded.market, country = excluded.country, location = excluded.location, offer_type = excluded.offer_type,
   url = excluded.url, year = excluded.year, make = excluded.make, model = excluded.model, trim = excluded.trim,
@@ -91,7 +92,12 @@ ON CONFLICT(id) DO UPDATE SET
   photo_count = excluded.photo_count, damage_json = excluded.damage_json, fetched_at = excluded.fetched_at, active = 1,
   price_eur = excluded.price_eur, landed_de = excluded.landed_de, landed_at = excluded.landed_at,
   landed_nl = excluded.landed_nl, landed_pl = excluded.landed_pl, auction_ends_at = excluded.auction_ends_at,
-  search_text = excluded.search_text, power_kw = excluded.power_kw
+  search_text = excluded.search_text, power_kw = excluded.power_kw,
+  -- Vergleichspreis-Spalten: bleibt der Bucket gleich, Abstände mit dem neuen Endpreis nachziehen; sonst bis zum
+  -- nächsten Vergleichspreis-Lauf leer (IS vergleicht NULL-sicher)
+  ref_key = excluded.ref_key,
+  ref_min_eur = CASE WHEN excluded.ref_key IS listings.ref_key THEN listings.ref_min_eur ELSE NULL END,
+  ${DEST_CODES.map((d) => `ref_diff_${d.toLowerCase()} = CASE WHEN excluded.ref_key IS listings.ref_key THEN ${refDiffSql(`excluded.landed_${d.toLowerCase()}`, 'listings.ref_min_eur')} ELSE NULL END`).join(',\n  ')}
 `;
 
 function upsertStatement(l: Listing): InStatement {
@@ -103,13 +109,15 @@ function upsertStatement(l: Listing): InStatement {
       l.km, l.engine, l.engineCcm, l.co2Gkm, l.transmission, l.drive, l.fuel, l.price, l.currency, l.steering,
       l.auction ? JSON.stringify(l.auction) : null, l.coc ? 1 : 0, l.classic ? 1 : 0, l.dutyRateOverride,
       l.originProof ? 1 : 0, l.resaleEur, l.partnerId, JSON.stringify(l.photos), l.photoCount, JSON.stringify(l.damage), l.fetchedAt,
-      pre.priceEur, pre.landed.DE, pre.landed.AT, pre.landed.NL, pre.landed.PL, l.auction?.endsAt ?? null, searchText(l), l.powerKw ?? null,
+      pre.priceEur, pre.landed.DE, pre.landed.AT, pre.landed.NL, pre.landed.PL, l.auction?.endsAt ?? null, searchText(l), l.powerKw ?? null, refKeyFor(l),
     ],
   };
 }
 
 const AUTOMATIC_LIKE = ['Automatic', 'PDK', 'Single speed'];
 const LANDED_COL: Record<DestCode, string> = { DE: 'landed_de', AT: 'landed_at', NL: 'landed_nl', PL: 'landed_pl' };
+/** Abstand des Endpreises zum günstigsten DE-Vergleichsangebot (Prozent) je Zielland – schreibt der Vergleichspreis-Job */
+const REF_DIFF_COL: Record<DestCode, string> = { DE: 'ref_diff_de', AT: 'ref_diff_at', NL: 'ref_diff_nl', PL: 'ref_diff_pl' };
 
 /**
  * Spalten der Trefferliste: alles außer der vollen Fotoliste – die Karte zeigt nur das erste Foto,
@@ -182,12 +190,16 @@ function buildWhere(q: ListingQuery, dest: DestCode): { whereSql: string; args: 
 
 function orderBy(sort: ListingQuery['sort'], dest: DestCode, alias = ''): string {
   const landedCol = `${alias}${LANDED_COL[dest]}`;
+  const refCol = `${alias}${REF_DIFF_COL[dest]}`;
   return {
     'landed-asc': `${landedCol} ASC NULLS LAST, ${alias}price_eur ASC`,
     'landed-desc': `${landedCol} DESC NULLS LAST, ${alias}price_eur DESC`,
     'year-desc': `${alias}year DESC, ${alias}km ASC`,
     'km-asc': `${alias}km ASC, ${alias}year DESC`,
     'ending': `CASE WHEN ${alias}auction_ends_at IS NULL THEN 1 ELSE 0 END, ${alias}auction_ends_at ASC, ${alias}landed_de ASC`,
+    // Inserate ohne Vergleichspreis zuletzt (NULLS LAST wie beim Endpreis; DESC stellt NULL in SQLite ohnehin nach hinten)
+    'ref-asc': `${refCol} ASC NULLS LAST, ${landedCol} ASC`,
+    'ref-desc': `${refCol} DESC NULLS LAST, ${landedCol} ASC`,
   }[sort ?? 'landed-asc'];
 }
 
@@ -325,7 +337,11 @@ export const listingsRepo = {
           dutyRateOverride: r.duty_rate_override == null ? null : Number(r.duty_rate_override), originProof: !!r.origin_proof,
         });
         n++;
-        return { sql: 'UPDATE listings SET price_eur = ?, landed_de = ?, landed_at = ?, landed_nl = ?, landed_pl = ? WHERE id = ?', args: [pre.priceEur, pre.landed.DE, pre.landed.AT, pre.landed.NL, pre.landed.PL, r.id] };
+        // Referenzabstände mit dem neuen Endpreis nachziehen (ref_min_eur ist im SET noch der alte, unveränderte Wert)
+        return {
+          sql: `UPDATE listings SET price_eur = ?, landed_de = ?, landed_at = ?, landed_nl = ?, landed_pl = ?, ${DEST_CODES.map((d) => `ref_diff_${d.toLowerCase()} = ${refDiffSql('?')}`).join(', ')} WHERE id = ?`,
+          args: [pre.priceEur, pre.landed.DE, pre.landed.AT, pre.landed.NL, pre.landed.PL, ...DEST_CODES.flatMap((d) => [pre.landed[d], pre.landed[d]]), r.id],
+        };
       });
       await db().batch(stmts, 'write');
     }

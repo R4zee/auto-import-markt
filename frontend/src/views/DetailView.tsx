@@ -103,6 +103,11 @@ export function DetailView({ id }: { id: string }) {
             </div>
             <h2 style={{ fontSize: 34, margin: 0 }}>{name}</h2>
             <div style={{ fontSize: 15, color: 'var(--color-neutral-400)', marginTop: 4 }}>{sel.trim} · {km(sel.km)} · {sel.engine}</div>
+            {sel.url && (
+              <a className="btn btn-secondary" href={sel.url} target="_blank" rel="noopener noreferrer" style={{ marginTop: 12, height: 32, fontSize: 12.5, display: 'inline-flex' }}>
+                <i className="ph ph-arrow-square-out" style={{ fontSize: 14 }} />{t('openOriginal')} · {sel.location || marketLabel(sel.market)}
+              </a>
+            )}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(104px,132px)', gap: 10 }}>
@@ -219,14 +224,27 @@ export function DetailView({ id }: { id: string }) {
               <div className="card-kicker">{t('refTitle', { source: ref && ref !== 'loading' ? refSourceLabel(ref.source) : 'mobile.de' })}</div>
               {ref === 'loading' && <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>{t('refLoading')}</div>}
               {ref !== 'loading' && (!ref || ref.count === 0) && <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>{t('refNone')}</div>}
-              {ref && ref !== 'loading' && ref.count > 0 && (
+              {ref && ref !== 'loading' && ref.count > 0 && ref.minEur != null && (
                 <>
-                  <div className="tabular" style={{ fontFamily: 'var(--font-heading)', fontSize: 28, lineHeight: 1, letterSpacing: '-0.02em' }}>{ref.medianEur != null ? money(ref.medianEur) : '—'}</div>
-                  <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', marginTop: -2 }}>{t('refMedian')} · {t('refLine', { n: ref.count, yearFrom: ref.yearFrom, yearTo: ref.yearTo })}</div>
+                  {/* Referenz ist immer das günstigste vergleichbare DE-Angebot – kein Median, kein Durchschnitt */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <div className="tabular" style={{ fontFamily: 'var(--font-heading)', fontSize: 28, lineHeight: 1, letterSpacing: '-0.02em' }}>{money(ref.minEur)}</div>
+                    {ref.diffPct != null && (
+                      <span className={`tabular aim-ref-diff ${ref.diffPct <= 0 ? 'aim-ref-good' : 'aim-ref-bad'}`} style={{ fontSize: 13 }}>
+                        {(ref.diffPct > 0 ? '+' : '−') + Math.abs(ref.diffPct).toLocaleString('de-DE', { maximumFractionDigits: 0 })} %
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', marginTop: -2 }}>{t('refMin')} · {t('refLine', { n: ref.count, yearFrom: ref.yearFrom, yearTo: ref.yearTo })}</div>
                   <div style={{ height: 1, background: 'var(--color-divider)' }} />
-                  <div className="tabular" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span style={{ color: 'var(--color-neutral-400)' }}>{t('refRange')}</span><span>{ref.minEur != null && ref.maxEur != null ? `${money(ref.minEur)} – ${money(ref.maxEur)}` : '—'}</span></div>
-                  {ref.medianKm != null && <div className="tabular" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span style={{ color: 'var(--color-neutral-400)' }}>{t('refKm')}</span><span>{km(ref.medianKm)}</span></div>}
-                  <div className="tabular" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span style={{ color: 'var(--color-neutral-400)' }}>{t('totalLanded')}</span><span style={{ color: ref.medianEur != null && sel.landed.totalEur <= ref.medianEur ? 'var(--color-accent-300)' : 'var(--color-text)' }}>{money(sel.landed.totalEur)}</span></div>
+                  <div className="tabular" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span style={{ color: 'var(--color-neutral-400)' }}>{t('refWindow', { kmTo: ref.kmTo.toLocaleString('de-DE'), years: `${ref.generation ? ref.generation + ' ' : ''}${ref.yearFrom}–${ref.yearTo}` })}</span></div>
+                  <div className="tabular" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span style={{ color: 'var(--color-neutral-400)' }}>{t('refRange')}</span><span>{ref.maxEur != null ? `${money(ref.minEur)} – ${money(ref.maxEur)}` : money(ref.minEur)}</span></div>
+                  <div className="tabular" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span style={{ color: 'var(--color-neutral-400)' }}>{t('totalLanded')}</span><span style={{ color: sel.landed.totalEur <= ref.minEur ? 'var(--color-accent-300)' : 'var(--color-text)' }}>{money(sel.landed.totalEur)}</span></div>
+                  {ref.url && (
+                    <a className="btn btn-secondary" href={ref.url} target="_blank" rel="noopener noreferrer" style={{ height: 30, fontSize: 12, justifyContent: 'center' }}>
+                      <i className="ph ph-arrow-square-out" style={{ fontSize: 13 }} />{t('openRefOffer')} · {refSourceLabel(ref.source)}
+                    </a>
+                  )}
                   <div style={{ fontSize: 11, color: 'var(--color-neutral-600)', lineHeight: 1.5 }}>{t('refNote')}</div>
                 </>
               )}

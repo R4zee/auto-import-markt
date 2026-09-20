@@ -49,7 +49,6 @@ export function Header({ view, onLang, onDest, onCcy }: Props) {
     <div className="aim-header">
       <div className="aim-wrap" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 28, rowGap: 10, padding: '12px 28px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 8, cursor: 'pointer' }} onClick={() => navigate({ view: 'search' })}>
-          <div style={{ width: 9, height: 22, background: 'var(--color-accent)', borderRadius: 2 }} />
           <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
             <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 500, fontSize: 17, letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}>auto import markt</span>
           </div>
