@@ -28,6 +28,7 @@ import type { Fuel } from '../domain/types.js';
  *   npm run probe -- mobile-model BMW "3 Series"   (nur die Modell-ID auflösen)
  *   npm run probe -- copart                        (Copart-Suchendpunkt: Rohantwort des ersten Loses, Zuordnung)
  *   npm run probe -- dubizzle                      (Dubizzle-Algolia-Proxy: Gesamtzahl, Roh-Treffer, Zuordnung, Preisfenster)
+ *   npm run probe -- japcarz [sort] [page]         (Jap Carz JSON-API /api/listings/: Schlüssel, Paginierung, erstes Fahrzeug roh)
  *   npm run probe -- url <URL> [Header:Wert …]     (beliebige Adresse: Status, Content-Type, Anfang der Antwort – für neue Quellen)
  *   npm run probe -- <provider> (jeder andere Provider: fetchAll mit Ausgabe der ersten 3 Inserate)
  */
@@ -404,6 +405,39 @@ async function probeDubizzle() {
   }
 }
 
+/**
+ * Jap Carz (Japan, jap-carz.com): JSON-API der Website `GET /api/listings/?sort=upcoming_auctions&per_page=30&page=1`
+ * (Netzwerk-Tab 20.09.2026). Zeigt Antwortstruktur und das erste Fahrzeug roh – Grundlage für den Adapter.
+ */
+async function probeJapCarz(sort = 'upcoming_auctions', page = 1) {
+  const url = `https://jap-carz.com/api/listings/?sort=${encodeURIComponent(sort)}&per_page=30&page=${page}`;
+  console.log(`\n=== Jap Carz · ${url}`);
+  const headers = { Accept: '*/*', 'Accept-Language': 'en-US,en;q=0.9', Referer: 'https://jap-carz.com/', 'User-Agent': config.europe.userAgent };
+  const t0 = Date.now();
+  try {
+    const res = await robustFetch(url, { headers, timeoutMs: 30000, proxyUrl, nodeOnly: true, tls: 'chrome' });
+    const body = await res.text();
+    console.log(`  HTTP ${res.status} · ${Date.now() - t0} ms · ${res.headers.get('content-type') ?? '?'} · ${(body.length / 1024).toFixed(1)} KB`);
+    let json: unknown;
+    try { json = JSON.parse(body); } catch { console.log('  keine JSON-Antwort:', body.slice(0, 1500)); return; }
+    const obj = json as Record<string, unknown>;
+    console.log('  JSON-Schlüssel:', Array.isArray(json) ? `Array[${json.length}]` : Object.keys(obj).join(', '));
+    // Trefferliste finden (Array unter einem der üblichen Schlüssel oder das erste Array-Feld)
+    const listKey = Array.isArray(json) ? null : ['listings', 'results', 'items', 'data', 'cars', 'vehicles'].find((k) => Array.isArray(obj[k])) ?? Object.keys(obj).find((k) => Array.isArray(obj[k]));
+    const list = (Array.isArray(json) ? json : listKey ? obj[listKey] : []) as unknown[];
+    const meta = Array.isArray(json) ? {} : Object.fromEntries(Object.entries(obj).filter(([k]) => k !== listKey));
+    console.log(`  Liste unter "${listKey ?? '(Array)'}": ${list.length} Einträge · übrige Felder:`, short(meta, 800));
+    if (list[0]) {
+      console.log('  Schlüssel des ersten Fahrzeugs:', Object.keys(list[0] as Record<string, unknown>).join(', '));
+      console.log('  listings[0] (roh, gekürzt):', short(list[0], 4000));
+    }
+    if (list[1]) console.log('  listings[1] (roh, gekürzt):', short(list[1], 1500));
+  } catch (e) {
+    console.log('  ✖', e instanceof Error ? e.message.slice(0, 300) : String(e));
+    console.log('  Braucht der Endpunkt das Session-Cookie? Dann im Browser die Antwort des Aufrufs "api/listings" (Reiter Antwort) kopieren und hier einfügen.');
+  }
+}
+
 /** Beliebige Adresse anfragen: `probe url https://… Header:Wert …` */
 async function probeUrl(url: string, headerArgs: string[]) {
   const headers: Record<string, string> = { 'User-Agent': config.europe.userAgent, Accept: 'application/json, text/html;q=0.9, */*;q=0.8' };
@@ -430,6 +464,7 @@ try {
   } else if (name === 'mobile-model') await probeMobileModel(process.argv[3] ?? 'Mercedes-Benz', process.argv[4] ?? 'S-Class');
   else if (name === 'copart') await probeCopart();
   else if (name === 'dubizzle') await probeDubizzle();
+  else if (name === 'japcarz') await probeJapCarz(process.argv[3] || 'upcoming_auctions', Number(process.argv[4] ?? 1));
   else if (name === 'url') await probeUrl(process.argv[3] ?? '', process.argv.slice(4));
   else if (name === 'olx') await probeOlx();
   else if (name === 'olx-scan') {
