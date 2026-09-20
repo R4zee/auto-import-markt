@@ -30,7 +30,9 @@ concurrency:
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    # Variable RUNNER=self-hosted verlegt den Lauf auf einen eigenen Runner (Teil L in docs/deployment.md): im privaten
+    # Repository sind GitHub-Runner auf 2.000 Minuten je Monat begrenzt – Sync + Vergleichspreise brauchen ~900 am Tag
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     # Sync (Encar 10–70 min mit Wiederholungen) + Vergleichspreise (Zeitbudget, manuell bis ~2 h); Lauf 25 lief mit 180 min ins Limit
     timeout-minutes: 240
     steps:

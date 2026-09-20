@@ -384,5 +384,47 @@ günstigsten Angebote in die Tabelle `ref_prices`; die API liest je Trefferseite
    werden Buckets alle 7 Tage (`REFERENCE_TTL_DAYS`) erneuert. Die Detailansicht lädt fehlende Buckets live nach
    (`REFERENCE_LIVE_LOOKUP`, eine mobile.de-Anfrage).
 
-Kosten: der Job läuft auf GitHub Actions (kostenlos im Kontingent); Turso liest je Trefferseite bis zu 48 kleine
-Zeilen mehr. Auf Vercel entsteht keine zusätzliche externe Anfrage außer in der Detailansicht.
+Kosten: der Job läuft auf GitHub Actions – im privaten Repository zählt er gegen das Minutenkontingent (Teil L);
+Turso liest je Trefferseite bis zu 48 kleine Zeilen mehr. Auf Vercel entsteht keine zusätzliche externe Anfrage
+außer in der Detailansicht.
+
+## Teil L – GitHub-Actions-Minuten: Läufe schlagen nach Sekunden fehl (Stand 20.09.2026)
+
+**Symptom:** Seit dem 18.09.2026 abends enden alle Läufe von „Sync Listings“ und „Reference Prices“ nach 3–40 Sekunden
+rot, ohne dass ein Schritt startet (kein Runner, kein Protokoll). In der Laufansicht steht als Hinweis sinngemäß
+„The job was not started because recent account payments have failed or your spending limit needs to be increased“.
+
+**Ursache:** Das Repository ist privat. GitHub-Runner sind dort auf **2.000 Minuten je Monat** (Free) bzw. 3.000 (Pro)
+begrenzt; öffentliche Repositories haben kein Limit. Seit dem 16.09. laufen je Tag vier Sync-Läufe à 60–85 Minuten
+(≈ 300 min) und zwölf Vergleichspreis-Läufe à 50 Minuten (600 min), zusammen **≈ 900 Minuten am Tag** – das
+Kontingent war nach gut zwei Tagen aufgebraucht. Nachsehen: Profil → Settings → Billing and plans → Plans and usage
+→ „Actions“. Das Kontingent setzt sich zum Beginn des Abrechnungsmonats zurück; bis dahin startet kein Lauf.
+
+**Lösungen** (eine reicht):
+
+1. **Eigener Runner (empfohlen, ~4 €/Monat).** Selbst gehostete Runner sind bei GitHub auch im privaten Repository
+   kostenlos und ohne Minutenlimit. Ein kleiner Linux-Server genügt (z. B. Hetzner CX22, 2 vCPU/4 GB, Ubuntu 24.04;
+   alternativ der eigene PC unter WSL2, der dann aber durchlaufen muss).
+   - Auf dem Server: `sudo apt install -y curl git` (Node lädt `actions/setup-node` selbst).
+   - GitHub: Repository → Settings → Actions → Runners → **New self-hosted runner** → Linux x64. Die dort angezeigten
+     Befehle (Download, `./config.sh --url … --token …`) auf dem Server ausführen; als Name z. B. `hetzner-1`, Labels
+     bei `self-hosted,Linux,X64` belassen.
+   - Als Dienst einrichten, damit er Neustarts überlebt: `sudo ./svc.sh install && sudo ./svc.sh start`.
+   - Repository → Settings → Secrets and variables → Actions → Variables → **`RUNNER` = `self-hosted`**. Beide
+     Workflows lesen `runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}`; Variable löschen = zurück auf GitHub-Runner.
+   - Actions → Sync Listings → Run workflow. Läuft ein Schritt mit 403 (mobile.de, OLX, Copart sperren Hosting-IPs
+     mitunter), als Secret `REFERENCE_PROXY_URL` bzw. `EUROPE_PROXY_URL`/`COPART_PROXY_URL` den Residential-Proxy
+     eintragen; Encar läuft ohnehin über `ENCAR_PROXY_URL`.
+   - Sicherheit: Der Runner führt nur Workflows dieses Repositories aus. Settings → Actions → General → „Fork pull
+     request workflows“ auf „Require approval for all outside collaborators“ lassen.
+2. **Repository öffentlich stellen.** Settings → General → Danger Zone → Change visibility → Public. Dann laufen
+   GitHub-Runner ohne Limit. Secrets bleiben geheim; der Code (inklusive der Grauzonen-Adapter für Encar,
+   mobile.de, Dubizzle, Copart) ist dann einsehbar.
+3. **Bezahlen.** Settings → Billing → Spending limit für Actions erhöhen. Linux-Minuten kosten 0,008 USD; bei
+   900 Minuten am Tag sind das ≈ 7 USD am Tag bzw. ≈ 220 USD im Monat – nicht sinnvoll.
+4. **Nur drosseln reicht nicht.** Selbst ein Sync am Tag (≈ 70 min) plus zwei Vergleichspreis-Läufe (100 min)
+   ergeben ≈ 5.000 Minuten im Monat, mehr als das doppelte Kontingent. Das Free-Kontingent passt zu diesem
+   Arbeitsumfang nicht.
+
+Solange nichts davon greift, bleiben Bestand und Vergleichspreise auf dem Stand vom 18.09.; die Website läuft
+unverändert weiter (Vercel und Turso sind nicht betroffen).
