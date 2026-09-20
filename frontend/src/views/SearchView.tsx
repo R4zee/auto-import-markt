@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, PAGE_SIZE, type Fuel, type MarketCode, type OfferType, type SearchResult, type SortKey } from '../api';
 import { CarCard } from '../components/CarCard';
 import { Flag } from '../components/Flag';
+import { MakePicker } from '../components/MakePicker';
 import { useApp } from '../context';
 import { km } from '../format';
 import { useDebounced } from '../hooks';
@@ -140,10 +141,7 @@ export function SearchView({ filters, setFilters }: { filters: Filters; setFilte
 
           <div>
             <div style={{ fontSize: 12, color: 'var(--color-neutral-400)', marginBottom: 7 }}>{t('make')}</div>
-            <select className="input" value={f.make} onChange={(e) => set({ make: e.target.value, model: '' })} style={{ minHeight: 32, fontSize: 12.5 }}>
-              <option value="">{t('allMakes')}</option>
-              {result?.facets.makes.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
+            <MakePicker value={f.make} makes={result?.facets.makes ?? []} onChange={(make) => set({ make, model: '' })} />
           </div>
           <div>
             <div style={{ fontSize: 12, color: 'var(--color-neutral-400)', marginBottom: 7 }}>{t('model')}</div>
@@ -228,6 +226,8 @@ export function SearchView({ filters, setFilters }: { filters: Filters; setFilte
                 <option value="year-desc">{t('sortNewest')}</option>
                 <option value="km-asc">{t('sortKm')}</option>
                 <option value="ending">{t('sortEnding')}</option>
+                <option value="ref-asc">{t('sortRefAsc')}</option>
+                <option value="ref-desc">{t('sortRefDesc')}</option>
               </select>
             </div>
           </div>

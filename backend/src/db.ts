@@ -1,7 +1,7 @@
 import { createClient, type Client, type InValue } from '@libsql/client';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { config } from './config.js';
+import { config, isServerless } from './config.js';
 
 let client: Client | null = null;
 let migration: Promise<void> | null = null;
@@ -186,6 +186,11 @@ async function migrate(): Promise<void> {
   await ensureColumn(c, 'listings', 'power_kw', 'INTEGER');
   // Volltext-Hilfsspalte (klein geschrieben: Marke Modell Ausstattung Standort Losnummer) – wird beim Upsert gesetzt
   await ensureColumn(c, 'listings', 'search_text', 'TEXT');
+  // Vergleichspreis je Inserat für Sortierung/Filter: Bucket-Schlüssel (ref_prices.key; '' = kein Bucket möglich),
+  // günstigstes vergleichbares DE-Angebot und Abstand des Endpreises je Zielland in Prozent (Job cli/reference.ts)
+  await ensureColumn(c, 'listings', 'ref_key', 'TEXT');
+  await ensureColumn(c, 'listings', 'ref_min_eur', 'REAL');
+  for (const d of ['de', 'at', 'nl', 'pl']) await ensureColumn(c, 'listings', `ref_diff_${d}`, 'REAL');
   // Einmaliges Nachfüllen für Bestände von vor dieser Spalte – mit Merker in `meta`, damit nicht jeder Kaltstart
   // die Tabelle nach NULL-Werten durchsucht (auf Turso zählt jede gelesene Zeile)
   const backfilled = await c.execute("SELECT value FROM meta WHERE key = 'search_text_backfilled'");
@@ -202,11 +207,50 @@ async function migrate(): Promise<void> {
     -- Abdeckender Suchindex: Zählen, Filtern und Sortieren laufen komplett im Index, Zeilen werden nur für die
     -- ausgelieferte Seite gelesen (150.000 Inserate: Zählung je Marke < 5 ms statt Vollscan über alle Zeilen).
     -- Bei geänderter Spaltenliste den Namen hochzählen (IF NOT EXISTS ersetzt keine bestehende Definition).
+    -- v1 wird außerhalb der Function durch v2 (mit Referenzabständen) ersetzt; auf Vercel bleibt v1 bis dahin bestehen
     CREATE INDEX IF NOT EXISTS idx_listings_search_v1 ON listings(
       active, make, model, year, km, landed_de, landed_at, landed_nl, landed_pl, price_eur,
       market, offer_type, fuel, transmission, coc, location, auction_ends_at, search_text
     );
   `);
+  // Aufwändige Schritte (Indexaufbau über den ganzen Bestand, Massen-UPDATEs) nur außerhalb der Function: dort laufen
+  // sie einmal im Sync- bzw. Vergleichspreis-Job; auf Vercel würden sie den Kaltstart um viele Sekunden verzögern.
+  // Bis dahin nutzt die API die vorhandenen Indizes (nur die Sortierung nach Referenzabstand ist vorübergehend langsamer).
+  if (!isServerless) await heavyMigrations(c);
+}
+
+async function heavyMigrations(c: Client): Promise<void> {
+  await c.executeMultiple(`
+    -- Sortierung nach Abstand zum DE-Vergleichspreis: geordneter Lauf mit frühem Abbruch je Zielland
+    CREATE INDEX IF NOT EXISTS idx_listings_active_refdiff_de ON listings(active, ref_diff_de);
+    CREATE INDEX IF NOT EXISTS idx_listings_active_refdiff_at ON listings(active, ref_diff_at);
+    CREATE INDEX IF NOT EXISTS idx_listings_active_refdiff_nl ON listings(active, ref_diff_nl);
+    CREATE INDEX IF NOT EXISTS idx_listings_active_refdiff_pl ON listings(active, ref_diff_pl);
+    -- Inserate eines Buckets finden (Vergleichspreis-Job schreibt nach jedem Bucket dessen Inserate fort)
+    CREATE INDEX IF NOT EXISTS idx_listings_ref_key ON listings(ref_key);
+    -- Abdeckender Suchindex v2: wie v1 plus Referenzabstände, damit auch die Sortierung nach Abstand im Index läuft
+    CREATE INDEX IF NOT EXISTS idx_listings_search_v2 ON listings(
+      active, make, model, year, km, landed_de, landed_at, landed_nl, landed_pl, price_eur,
+      market, offer_type, fuel, transmission, coc, location, auction_ends_at, search_text,
+      ref_diff_de, ref_diff_at, ref_diff_nl, ref_diff_pl
+    );
+    DROP INDEX IF EXISTS idx_listings_search_v1;
+  `);
+  // Partner Japan/Korea zusammengeführt zu „Far East Imports“ (einmalig, Merker in meta)
+  const partners = await c.execute("SELECT value FROM meta WHERE key = 'partners_fareast'");
+  if (!partners.rows.length) {
+    await c.execute("UPDATE listings SET partner_id = 'fareast' WHERE partner_id IN ('kaido', 'hanbit')");
+    await c.execute("DELETE FROM partners WHERE id IN ('kaido', 'hanbit')");
+    await c.execute("INSERT INTO meta(key, value) VALUES ('partners_fareast', '1') ON CONFLICT(key) DO NOTHING");
+  }
+}
+
+/**
+ * Abstand des Endpreises zum günstigsten vergleichbaren DE-Angebot in Prozent (eine Nachkommastelle) – identisch zu
+ * diffPct() in services/reference.ts. `landedExpr` ist die Endpreis-Spalte bzw. ein Platzhalter, `refExpr` der Vergleichspreis.
+ */
+export function refDiffSql(landedExpr: string, refExpr = 'ref_min_eur'): string {
+  return `CASE WHEN ${refExpr} > 0 AND ${landedExpr} IS NOT NULL THEN ROUND((${landedExpr} - ${refExpr}) * 1000.0 / ${refExpr}) / 10.0 ELSE NULL END`;
 }
 
 /**

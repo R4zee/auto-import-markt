@@ -72,7 +72,7 @@ export function publicConfig() {
       };
     }),
     destinations: Object.values(DESTINATIONS),
-    sortOptions: ['landed-asc', 'landed-desc', 'year-desc', 'km-asc', 'ending'],
+    sortOptions: ['landed-asc', 'landed-desc', 'year-desc', 'km-asc', 'ending', 'ref-asc', 'ref-desc'],
     fuels: ['Petrol', 'Diesel', 'Hybrid', 'Electric'],
     transmissions: ['Automatic', 'Manual'],
     displayCurrencies: ['EUR', 'USD', 'GBP', 'CHF'],

@@ -25,7 +25,7 @@ const querySchema = z.object({
   cocOnly: z.enum(['true', 'false', '1', '0']).optional(),
   maxLanded: z.coerce.number().min(0).optional(),
   dest: z.string().optional(),
-  sort: z.enum(['landed-asc', 'landed-desc', 'year-desc', 'km-asc', 'ending']).optional(),
+  sort: z.enum(['landed-asc', 'landed-desc', 'year-desc', 'km-asc', 'ending', 'ref-asc', 'ref-desc']).optional(),
   page: z.coerce.number().int().min(1).optional(),
   pageSize: z.coerce.number().int().min(1).max(200).optional(),
 });

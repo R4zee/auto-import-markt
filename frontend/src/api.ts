@@ -2,7 +2,7 @@ export type MarketCode = 'JP' | 'KR' | 'US' | 'GCC' | 'SE' | 'EE';
 export type DestCode = 'DE' | 'AT' | 'NL' | 'PL';
 export type OfferType = 'auction' | 'fixed';
 export type Fuel = 'Petrol' | 'Diesel' | 'Hybrid' | 'Electric';
-export type SortKey = 'landed-asc' | 'landed-desc' | 'year-desc' | 'km-asc' | 'ending';
+export type SortKey = 'landed-asc' | 'landed-desc' | 'year-desc' | 'km-asc' | 'ending' | 'ref-asc' | 'ref-desc';
 
 export interface CostLine { key: string; vars?: Record<string, string | number>; amountEur: number | null }
 

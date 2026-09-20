@@ -276,3 +276,18 @@ describe('Copart (USA) – Anfrage und Zuordnung', () => {
     assert.ok(notActual?.trim.endsWith('Odometer: NOT ACTUAL'));
   });
 });
+
+describe('Vergleichspreis-Spalten je Inserat', async () => {
+  const { refKeyFor } = await import('../src/services/reference.js');
+  const { refDiffSql } = await import('../src/db.js');
+  it('ref_key entspricht dem Bucket-Schlüssel, leer ohne bekannte Marke', () => {
+    const key = refKeyFor({ make: 'BMW', model: '3 Series', trim: '320d M Sport', year: 2019, fuel: 'Diesel', km: 80000 });
+    assert.match(key, /^mobilede\|bmw\|320d\|Diesel\|\d{4}-\d{4}\|km\d+$/);
+    assert.equal(refKeyFor({ make: 'Unbekannte Marke XY', model: 'Z', trim: '', year: 2019, fuel: 'Petrol', km: 1000 }), '');
+  });
+  it('SQL-Abstand rechnet wie diffPct()', () => {
+    const sql = refDiffSql('20000', '17900');
+    assert.match(sql, /ROUND\(\(20000 - 17900\) \* 1000\.0 \/ 17900\) \/ 10\.0/);
+    assert.match(refDiffSql('excluded.landed_de', 'listings.ref_min_eur'), /listings\.ref_min_eur > 0 AND excluded\.landed_de IS NOT NULL/);
+  });
+});

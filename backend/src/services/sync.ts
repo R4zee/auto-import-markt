@@ -97,7 +97,8 @@ export async function canonicalizeStoredMakes(): Promise<{ listings: number; mak
   for (const { make } of rows) {
     const canon = canonicalMake(make);
     if (!canon || canon === make) continue;
-    const r = await run(`UPDATE listings SET make = ?, search_text = ${searchTextSql('?')} WHERE make = ?`, [canon, canon, make]);
+    // ref_key leeren: der Bucket-Schlüssel enthält die Marke; der Vergleichspreis-Job trägt ihn neu ein
+    const r = await run(`UPDATE listings SET make = ?, search_text = ${searchTextSql('?')}, ref_key = NULL WHERE make = ?`, [canon, canon, make]);
     listings += r.rowsAffected;
     makes++;
   }

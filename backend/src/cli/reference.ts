@@ -1,6 +1,6 @@
 import { config } from '../config.js';
 import { closeDb, ready } from '../db.js';
-import { referenceRepo, refreshReferenceBuckets } from '../services/reference.js';
+import { backfillReferenceColumns, referenceRepo, refreshReferenceBuckets } from '../services/reference.js';
 
 /**
  * Vergleichspreise DE (mobile.de) für die Buckets aller aktiven Inserate nachladen – läuft per GitHub Actions
@@ -17,6 +17,11 @@ if (!config.reference.enabled) {
   process.exit(0);
 }
 await ready();
+// Sortierspalten (ref_key, ref_min_eur, ref_diff_*) für Inserate ohne Schlüssel nachtragen – normalerweise nur die
+// seit dem letzten Lauf neu hinzugekommenen; beim ersten Lauf der ganze Bestand (blockweise, Zeitbudget 25 min)
+const tb = Date.now();
+const bf = await backfillReferenceColumns({ maxMs: 25 * 60000, log: console.log });
+if (bf.keyed || bf.updated) console.log(`✔ columns      ${bf.keyed} Inserate mit Bucket-Schlüssel · ${bf.updated} mit Vergleichspreis aus ${bf.buckets} Buckets · ${Date.now() - tb} ms${bf.stopped ? `  ⚠ ${bf.stopped}` : ''}`);
 const before = await referenceRepo.count();
 const t0 = Date.now();
 const r = await refreshReferenceBuckets({ log: console.log });

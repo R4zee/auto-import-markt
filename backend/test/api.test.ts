@@ -38,6 +38,29 @@ describe('API', async () => {
     assert.equal(body.marketCounts.JP, 3);
   });
 
+  it('sortiert nach Abstand zum DE-Vergleichspreis (ohne Vergleichspreise: alle Inserate, Reihenfolge nach Endpreis)', async () => {
+    for (const sort of ['ref-asc', 'ref-desc']) {
+      const res = await app.inject({ method: 'GET', url: `/api/listings?dest=DE&sort=${sort}` });
+      assert.equal(res.statusCode, 200, sort);
+      const body = res.json();
+      assert.equal(body.total, 14);
+      assert.equal(body.items.length, 14);
+    }
+    const bad = await app.inject({ method: 'GET', url: '/api/listings?dest=DE&sort=nope' });
+    assert.equal(bad.statusCode, 400);
+  });
+
+  it('Japan und Korea haben denselben Partner (Far East Imports)', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/partners' });
+    const partners = res.json() as Array<{ id: string; markets: string[] }>;
+    const fe = partners.find((p) => p.id === 'fareast');
+    assert.ok(fe);
+    assert.deepEqual([...fe.markets].sort(), ['JP', 'KR']);
+    assert.ok(!partners.some((p) => p.id === 'kaido' || p.id === 'hanbit'));
+    const list = await app.inject({ method: 'GET', url: '/api/listings?dest=DE&markets=JP,KR' });
+    for (const it of list.json().items as Array<{ partnerId: string }>) assert.equal(it.partnerId, 'fareast');
+  });
+
   it('Filter: nur Auktionen aus Japan', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/listings?offer=auction&markets=JP' });
     const body = res.json();
@@ -54,7 +77,7 @@ describe('API', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/listings/mock:jp1?dest=AT' });
     assert.equal(res.statusCode, 200);
     const body = res.json();
-    assert.equal(body.partner.name, 'Kaido Trading GmbH');
+    assert.equal(body.partner.name, 'Far East Imports');
     assert.equal(body.listing.landed.vatRate, 0.2);
     assert.equal(body.referenceAvailable, false);
   });
@@ -95,7 +118,8 @@ describe('API', async () => {
   it('POST /api/enquiries/bulk teilt nach Partner auf', async () => {
     const res = await app.inject({
       method: 'POST', url: '/api/enquiries/bulk',
-      payload: { listingIds: ['mock:jp1', 'mock:jp2', 'mock:kr1'], name: 'Test Person', email: 'test@example.com' },
+      // Japan und Korea teilen sich einen Partner (Far East Imports), die USA einen anderen → zwei Anfragen
+      payload: { listingIds: ['mock:jp1', 'mock:kr1', 'mock:us1'], name: 'Test Person', email: 'test@example.com' },
     });
     assert.equal(res.statusCode, 201);
     assert.equal(res.json().enquiries.length, 2);
