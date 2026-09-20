@@ -6,6 +6,7 @@ import { mapSauto, SautoProvider } from '../providers/sauto.js';
 import { mapSubito, SubitoProvider } from '../providers/subito.js';
 import { CopartProvider, copartSkipReason, mapCopart } from '../providers/copart.js';
 import { DubizzleProvider, dubizzleSkipReason, initialBands, mapDubizzle } from '../providers/dubizzle.js';
+import { japcarzSkipReason, mapJapCarz, type JapCarzItem } from '../providers/japcarz.js';
 import { extractItems, mapMobileItem, mobileApiUrl, mobileMakeId, MobileDeReference, mobileSearchUrl, mobileSeoUrl, type RefQuery } from '../providers/mobilede.js';
 import { bucketKey, kmBandFor, kmWindow, summarize, titleMatches } from '../services/reference.js';
 import { yearBand } from '../domain/generations.js';
@@ -429,9 +430,15 @@ async function probeJapCarz(sort = 'upcoming_auctions', page = 1) {
     console.log(`  Liste unter "${listKey ?? '(Array)'}": ${list.length} Einträge · übrige Felder:`, short(meta, 800));
     if (list[0]) {
       console.log('  Schlüssel des ersten Fahrzeugs:', Object.keys(list[0] as Record<string, unknown>).join(', '));
-      console.log('  listings[0] (roh, gekürzt):', short(list[0], 4000));
+      console.log('  listings[0] (roh, gekürzt):', short(list[0], 2500));
     }
-    if (list[1]) console.log('  listings[1] (roh, gekürzt):', short(list[1], 1500));
+    // Zuordnung aller Fahrzeuge der Seite
+    for (const item of list as JapCarzItem[]) {
+      const l = mapJapCarz(item, fetchedAt);
+      console.log(l
+        ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.engine || '–'} · ${l.transmission} · ${l.fuel} · Start ${l.price} ${l.currency} · ${l.auction?.house} bis ${l.auction?.endsAt.slice(0, 16)} · ${l.photos.length}/${l.photoCount} Fotos · ${l.url}`
+        : `  – übersprungen (${japcarzSkipReason(item) ?? 'unvollständig'}): ${item.year} ${short(item.title, 60)} · ${item.steering_wheel} · Start ${item.parsed_starting_bid} · ${item.auction_result}`);
+    }
   } catch (e) {
     console.log('  ✖', e instanceof Error ? e.message.slice(0, 300) : String(e));
     console.log('  Braucht der Endpunkt das Session-Cookie? Dann im Browser die Antwort des Aufrufs "api/listings" (Reiter Antwort) kopieren und hier einfügen.');

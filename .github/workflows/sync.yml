@@ -77,6 +77,9 @@ jobs:
           COPART_ENABLED: ${{ vars.COPART_ENABLED || 'false' }}
           COPART_MAKES: ${{ vars.COPART_MAKES }}
           COPART_PROXY_URL: ${{ secrets.COPART_PROXY_URL }}
+          # Japan: Jap Carz JSON-API (kein Key, Probe 20.09.2026 bestätigt) – Standard an, Variable JAPCARZ_ENABLED=false schaltet ab
+          JAPCARZ_ENABLED: ${{ vars.JAPCARZ_ENABLED || 'true' }}
+          JAPCARZ_PROXY_URL: ${{ secrets.JAPCARZ_PROXY_URL }}
           # VAE: Dubizzle-Algolia-Proxy (kein Key) – einschalten, sobald `npm run probe -- dubizzle` ihn bestätigt hat
           DUBIZZLE_ENABLED: ${{ vars.DUBIZZLE_ENABLED || 'false' }}
           DUBIZZLE_PROXY_URL: ${{ secrets.DUBIZZLE_PROXY_URL }}

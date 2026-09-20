@@ -235,6 +235,18 @@ export const config = {
     delayMs: num(env.DUBIZZLE_DELAY_MS, 500),
     proxyUrl: env.DUBIZZLE_PROXY_URL || '',
   },
+  /** Japan: Jap Carz JSON-API der Website (kein Key; Probe 20.09.2026: 475 Fahrzeuge, 16 Seiten) */
+  japcarz: {
+    enabled: bool(env.JAPCARZ_ENABLED, false),
+    sort: env.JAPCARZ_SORT || 'upcoming_auctions',
+    perPage: num(env.JAPCARZ_PER_PAGE, 30),
+    maxPages: num(env.JAPCARZ_MAX_PAGES, 60),
+    minYear: num(env.JAPCARZ_MIN_YEAR, 1985),
+    delayMs: num(env.JAPCARZ_DELAY_MS, 400),
+    /** Pfad der Detailseite; {slug} wird ersetzt */
+    detailPath: env.JAPCARZ_DETAIL_PATH || '/listings/{slug}',
+    proxyUrl: env.JAPCARZ_PROXY_URL || '',
+  },
   olx: {
     enabled: bool(env.OLX_ENABLED, false),
     sites: olxSites().map((s) => ({ ...s, enabled: s.enabled && bool(env.OLX_ENABLED, false) })),
