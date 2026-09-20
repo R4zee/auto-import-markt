@@ -99,7 +99,8 @@ Lokal reproduzieren: `backend/test/search.test.ts` prüft Pfade und Facetten; ei
 | `feed-<id>` | beliebig – Partner-/Händler-Feeds (JSON), z. B. rumänischer oder italienischer Importeur | `PARTNER_FEEDS` (JSON-Array mit `id, url, mapping, country`; Markt aus dem Land) |
 | `jpfeed` | Japan (Einzel-Feed, Altvariante von `PARTNER_FEEDS`) | `JP_FEED_URL`, `JP_FEED_MAPPING` (Feldzuordnung, siehe `feed.ts`) |
 
-Marktplatzweit werden nur Linkslenker übernommen. Große Bestände synchronisiert der GitHub-Actions-Job
+Marktplatzweit werden nur Linkslenker übernommen. Auktionen mit abgelaufenem Termin blendet die Suche sofort aus
+und der Sync deaktiviert sie (nötig für Quellen ohne Vollabgleich wie Copart). Große Bestände synchronisiert der GitHub-Actions-Job
 `.github/workflows/sync.yml` direkt in Turso (Vercel liest nur). Lokal: `npm run sync` (Datei-DB) bzw. `npm run sync:turso`.
 Suche/Filter/Sortierung laufen in SQL mit vorberechneten Endpreisen je Zielland (`landed_de/at/nl/pl`).
 

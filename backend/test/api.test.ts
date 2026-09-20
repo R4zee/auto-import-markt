@@ -156,4 +156,19 @@ describe('API', async () => {
     assert.equal(ok.statusCode, 200);
     assert.equal(ok.json().reports[0].provider, 'mock');
   });
+
+  // zuletzt: verändert den Bestand
+  it('beendete Auktionen werden deaktiviert (Quellen ohne Vollabgleich wie Copart)', async () => {
+    const { listingsRepo } = await import('../src/repositories/listings.js');
+    const before = await app.inject({ method: 'GET', url: '/api/listings?offer=auction' });
+    assert.equal(before.json().total, 6);
+    // noch nichts abgelaufen (Mock-Termine liegen in der Zukunft)
+    assert.equal(await listingsRepo.deactivateEndedAuctions(), 0);
+    const n = await listingsRepo.deactivateEndedAuctions(new Date(Date.now() + 365 * 86400000));
+    assert.equal(n, 6);
+    const after = await app.inject({ method: 'GET', url: '/api/listings?offer=auction' });
+    assert.equal(after.json().total, 0);
+    const all = await app.inject({ method: 'GET', url: '/api/listings' });
+    assert.equal(all.json().total, 8);
+  });
 });
