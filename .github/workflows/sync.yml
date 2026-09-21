@@ -78,8 +78,8 @@ jobs:
           COPART_ENABLED: ${{ vars.COPART_ENABLED || 'false' }}
           COPART_MAKES: ${{ vars.COPART_MAKES }}
           COPART_PROXY_URL: ${{ secrets.COPART_PROXY_URL }}
-          # Kanada: derselbe Endpunkt auf copart.ca – einschalten, sobald `npm run probe -- copart ca` ihn bestätigt hat
-          COPART_CA_ENABLED: ${{ vars.COPART_CA_ENABLED || 'false' }}
+          # Kanada: derselbe Endpunkt auf copart.ca (Probe 21.09.2026: 2.839 Lose) – Standard an, Variable COPART_CA_ENABLED=false schaltet ab
+          COPART_CA_ENABLED: ${{ vars.COPART_CA_ENABLED || 'true' }}
           # Japan: Jap Carz JSON-API (kein Key, Probe 20.09.2026 bestätigt) – Standard an, Variable JAPCARZ_ENABLED=false schaltet ab
           JAPCARZ_ENABLED: ${{ vars.JAPCARZ_ENABLED || 'true' }}
           JAPCARZ_PROXY_URL: ${{ secrets.JAPCARZ_PROXY_URL }}

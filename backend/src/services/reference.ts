@@ -81,7 +81,44 @@ export function variantText(l: Pick<Listing, 'make' | 'model' | 'trim'>): string
     // "E220d" → "E 220 d", "GLC300" → "GLC 300", "AMG GT" bleibt
     text = text.replace(/^([A-Za-z]{1,3})(\d{2,3})([a-z]?)$/i, (_m, a: string, b: string, c: string) => `${a.toUpperCase()} ${b}${c ? ` ${c.toLowerCase()}` : ''}`);
   }
+  const special = specialVariant(l.make, `${l.model} ${l.trim}`);
+  if (special && !new RegExp(`(^|\\s)${special.token}(\\s|$)`, 'i').test(text)) text = `${text} ${special.token}`;
   return text.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Sondermodelle bei Exoten: mobile.de führt z. B. nur „Aventador“ als Modell, SV/SVJ/Performante stehen im Freitext.
+ * Ein 2016er Aventador Superveloce wurde sonst mit jedem Aventador ab 350.000 € verglichen (Superveloce ab 530.000 €).
+ * Liefert die Kennung in der gebräuchlichen Schreibweise (Superveloce → SV), damit Suche und Titelabgleich sie finden.
+ */
+const SPECIAL_VARIANTS: Array<[makes: string[], pattern: RegExp, token: string]> = [
+  [['lamborghini'], /\bsvj\b/i, 'SVJ'], [['lamborghini'], /\bsv\b|\bsuperveloce\b/i, 'SV'], [['lamborghini'], /\bperformante\b/i, 'Performante'],
+  [['lamborghini'], /\bsto\b/i, 'STO'], [['lamborghini'], /\btecnica\b/i, 'Tecnica'], [['lamborghini'], /\bultimae\b/i, 'Ultimae'],
+  [['ferrari'], /\bpista\b/i, 'Pista'], [['ferrari'], /\bspeciale\b/i, 'Speciale'], [['ferrari'], /\bscuderia\b/i, 'Scuderia'],
+  [['ferrari', 'maserati'], /\bcompetizione\b/i, 'Competizione'], [['ferrari'], /\btributo\b/i, 'Tributo'], [['ferrari'], /\bgts\b/i, 'GTS'],
+  [['porsche'], /\bgt3 ?rs\b/i, 'GT3 RS'], [['porsche'], /\bgt2 ?rs\b/i, 'GT2 RS'], [['porsche'], /\bgt3\b/i, 'GT3'], [['porsche'], /\bgt2\b/i, 'GT2'],
+  [['porsche'], /\bturbo s\b/i, 'Turbo S'], [['porsche'], /\bturbo\b/i, 'Turbo'], [['porsche'], /\bgts\b/i, 'GTS'], [['porsche'], /\btarga\b/i, 'Targa'],
+  [['mclaren'], /\b(765lt|675lt|600lt|765 lt|675 lt|600 lt)\b/i, 'LT'], [['mclaren'], /\bsenna\b/i, 'Senna'],
+  [['mercedesbenz', 'mercedesamg'], /\bblack series\b/i, 'Black Series'], [['maserati'], /\btrofeo\b/i, 'Trofeo'],
+  // Karosserievariante zuletzt: Leistungsvarianten (Pista Spider → Pista) haben Vorrang
+  [['lamborghini', 'ferrari', 'mclaren', 'porsche', 'astonmartin', 'maserati', 'bentley'], /\b(spyder|spider|roadster|volante)\b/i, 'Spyder'],
+];
+
+export function specialVariant(make: string, text: string): { token: string; pattern: RegExp } | null {
+  const key = makeKey(make);
+  for (const [makes, pattern, token] of SPECIAL_VARIANTS) {
+    if (makes.includes(key) && pattern.test(text)) return { token, pattern };
+  }
+  return null;
+}
+
+/** Endet die Beschreibung auf eine Sondermodell-Kennung, Basis und Kennung trennen ("Aventador SV" → "Aventador" + SV) */
+function splitSpecial(description: string): { base: string; special: { token: string; pattern: RegExp } | null } {
+  for (const [, pattern, token] of SPECIAL_VARIANTS) {
+    const re = new RegExp(`\\s${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    if (re.test(description)) return { base: description.replace(re, '').trim(), special: { token, pattern } };
+  }
+  return { base: description, special: null };
 }
 
 /**
@@ -205,7 +242,11 @@ export function engineMatches(l: Pick<Listing, 'engineCcm' | 'powerKw'>, s: RefS
  * angehängter Einzelbuchstabe (d/i) ist optional, damit "E 220 d" auch "E 220 CDI" findet.
  */
 export function titleMatches(description: string, s: Pick<RefSample, 'title' | 'model'>): boolean {
-  const groups = description.match(/\p{L}+|\p{N}+/gu) ?? [];
+  // Sondermodell-Kennung ("Aventador SV") getrennt prüfen: die Basis muss zusammenhängend vorkommen, die Kennung
+  // irgendwo im Titel in einer ihrer Schreibweisen (SV/Superveloce, Spyder/Roadster …)
+  const { base, special } = splitSpecial(description);
+  const groups = base.match(/\p{L}+|\p{N}+/gu) ?? [];
+  if (special && !special.pattern.test(`${s.model ?? ''} ${s.title}`)) return false;
   if (!groups.length) return true;
   const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const body = groups.map((g, i) => (i === groups.length - 1 && groups.length > 1 && /^\p{L}$/u.test(g) ? `(?:[\\s-]?${esc(g)})?` : (i ? '[\\s-]?' : '') + esc(g))).join('');

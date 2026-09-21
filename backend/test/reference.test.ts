@@ -25,6 +25,21 @@ describe('Vergleichspreise DE – Suchtext und Fenster', () => {
     assert.equal(variantText({ make: 'Hyundai', model: 'Ioniq 5', trim: 'Long Range AWD' }), 'Ioniq 5');
     assert.equal(variantText({ make: 'Volkswagen', model: 'Golf', trim: 'GTI' }), 'Golf');
     assert.equal(variantText({ make: 'Mercedes-Benz', model: 'C-Class', trim: 'Avantgarde' }), 'C');
+    // Sondermodelle bei Exoten stehen bei mobile.de im Freitext → Kennung anhängen (Superveloce → SV)
+    assert.equal(variantText({ make: 'Lamborghini', model: 'Aventador', trim: 'LP 750-4 Superveloce' }), 'Aventador SV');
+    assert.equal(variantText({ make: 'Lamborghini', model: 'Aventador SVJ', trim: 'Roadster' }), 'Aventador SVJ');
+    assert.equal(variantText({ make: 'Lamborghini', model: 'Huracan', trim: 'LP 640-4 Performante Spyder' }), 'Huracan Performante');
+    assert.equal(variantText({ make: 'Lamborghini', model: 'Aventador', trim: 'LP 700-4' }), 'Aventador');
+    assert.equal(variantText({ make: 'Porsche', model: '911', trim: 'GT3 RS Weissach' }), '911 GT3 RS');
+    assert.equal(variantText({ make: 'Porsche', model: '911', trim: 'Carrera S' }), '911');
+    assert.equal(variantText({ make: 'Ferrari', model: '488', trim: 'Pista Spider' }), '488 Pista');
+    // Titelabgleich: Basis zusammenhängend, Kennung irgendwo in einer ihrer Schreibweisen
+    assert.ok(titleMatches('Aventador SV', { model: 'Aventador', title: 'Lamborghini Aventador LP 750-4 Superveloce Roadster' }));
+    assert.ok(titleMatches('Aventador SV', { model: 'Aventador', title: 'Lamborghini Aventador SV LP750-4' }));
+    assert.ok(!titleMatches('Aventador SV', { model: 'Aventador', title: 'Lamborghini Aventador LP 700-4' }));
+    assert.ok(!titleMatches('Aventador SV', { model: 'Aventador', title: 'Lamborghini Aventador SVJ' }));
+    assert.ok(titleMatches('Aventador Spyder', { model: 'Aventador', title: 'Lamborghini Aventador S Roadster' }));
+    assert.ok(titleMatches('911 GT3 RS', { model: '911', title: 'Porsche 911 GT3RS Weissach' }));
   });
 
   it('Laufleistungsfenster: nur nach oben, +50 % unter 100.000 km, +30 % darüber', () => {
@@ -95,6 +110,11 @@ describe('Vergleichspreise DE – Suchtext und Fenster', () => {
     // Baujahr vor der ersten bekannten Reihe oder fremde Marke → Baujahr ±1
     assert.equal(yearBand({ make: 'BMW', model: '3 Series', trim: '318i', year: 1988 }, 1, 2026).generation, null);
     assert.deepEqual(yearBand({ make: 'Hyundai', model: 'Tucson', trim: '2.0 CRDi', year: 2019 }, 1, 2026), { from: 2018, to: 2020, generation: null });
+    // Exoten: das Modell ist die Baureihe
+    assert.deepEqual(yearBand({ make: 'Lamborghini', model: 'Aventador', trim: 'LP 750-4 Superveloce', year: 2016 }, 1, 2026), { from: 2011, to: 2022, generation: 'Aventador' });
+    assert.equal(yearBand({ make: 'Lamborghini', model: 'Huracán', trim: 'EVO', year: 2020 }, 1, 2026).generation, 'Huracán');
+    assert.equal(yearBand({ make: 'Ferrari', model: '488 GTB', trim: '', year: 2017 }, 1, 2026).generation, '488');
+    assert.equal(yearBand({ make: 'McLaren', model: '720S', trim: 'Performance', year: 2019 }, 1, 2026).generation, '720S');
     // expliziter Code gewinnt vor der Familie
     assert.equal(yearBand({ make: 'BMW', model: '3 Series (E93)', trim: '320i', year: 2012 }, 1, 2026).generation, 'E93');
   });

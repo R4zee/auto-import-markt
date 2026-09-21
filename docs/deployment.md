@@ -360,7 +360,10 @@ gleiche Marke, Modell bzw. Variantenkennung (z. B. „320d“, „E 220 d“), g
 Baureihe (nennt das Inserat einen Code wie W221, E93 oder F30, gilt deren Bauzeitraum aus
 `backend/src/domain/generations.ts` – eine 2011er W221 zählt zur 2013er W221, eine W222 nicht; ohne Code wird die
 Baureihe seit 20.09.2026 aus Modellfamilie und Baujahr bestimmt, z. B. „Maybach S 650, 2020“ → W222 2013–2020, im
-Wechseljahr die auslaufende Reihe; erst ohne bekannte Familie Baujahr ±1),
+Wechseljahr die auslaufende Reihe; bei Exoten ist das Modell selbst die Baureihe, z. B. Aventador 2011–2022; erst ohne
+bekannte Familie Baujahr ±1). Sondermodelle, die mobile.de nur im Freitext führt, wandern in den Suchtext: „Aventador
+Superveloce“ → „Aventador SV“, „911 GT3 RS“, „488 Pista“ – sonst wurde ein SV mit jedem Aventador ab 350.000 € verglichen. Wer
+solche Regeln ändert, zählt `REF_KEY_VERSION` in `db.ts` hoch; der Job setzt die Sortierspalten dann neu,
 Laufleistung höchstens +50 % unter 100.000 km bzw. +30 % darüber, mindestens aber bis 20.000 km (`REFERENCE_KM_FLOOR`;
 ein 1.600-km-Aventador fand sonst nur Angebote bis 2.400 km; nach unten offen), Hubraum ±12 % und Leistung
 ±15 % sofern beide Seiten die Werte kennen. Weil mobile.de die Beschreibung unscharf sucht („S350“ liefert auch
