@@ -298,7 +298,9 @@ async function heavyMigrations(c: Client): Promise<void> {
   // Auktionen ohne Abstand (21.09.2026): der Preis eines Loses ist das Start-/Höchstgebot, kein Kaufpreis – die
   // Sortierung nach Abstand zeigte Copart-Lose mit 175 $ Gebot als „−94 %“ ganz vorn. Bestehende Abstände einmalig
   // löschen (blockweise wie oben); Upsert, Job und Kursnachzug schreiben für Auktionen seither NULL.
-  const auctionDiff = await c.execute("SELECT value FROM meta WHERE key = 'ref_diff_auction_null'");
+  // v2: der erste Durchlauf lief parallel zum Vergleichspreis-Job, der aus seinem Schnappschuss noch 47 Abstände
+  // nachschrieb (seit dem rechnet der Job in SQL aus der Zeile) – einmal nachräumen.
+  const auctionDiff = await c.execute("SELECT value FROM meta WHERE key = 'ref_diff_auction_null_v2'");
   if (!auctionDiff.rows.length) {
     for (;;) {
       const r = await c.execute(`UPDATE listings SET ref_diff_de = NULL, ref_diff_at = NULL, ref_diff_nl = NULL, ref_diff_pl = NULL
@@ -307,7 +309,7 @@ async function heavyMigrations(c: Client): Promise<void> {
       if (r.rowsAffected === 0) break;
       await new Promise((res) => setTimeout(res, 150));
     }
-    await c.execute("INSERT INTO meta(key, value) VALUES ('ref_diff_auction_null', '1') ON CONFLICT(key) DO NOTHING");
+    await c.execute("INSERT INTO meta(key, value) VALUES ('ref_diff_auction_null_v2', '1') ON CONFLICT(key) DO NOTHING");
   }
   // Sauto-Fotos ohne CDN-Größenparameter (das Seznam-CDN lieferte damit nichts aus) – einmalig für den Bestand
   const sautoPhotos = await c.execute("SELECT value FROM meta WHERE key = 'sauto_photos_bare'");
