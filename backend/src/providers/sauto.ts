@@ -32,10 +32,13 @@ export interface SautoItem {
 }
 export interface SautoResponse { results?: SautoItem[]; pagination?: { total?: number; limit?: number; offset?: number } }
 
+/**
+ * Bild-URL absolut machen. Ohne Größenparameter: das Seznam-CDN lieferte mit `?fl=exf|res,…` keine Bilder aus
+ * (Sauto-Inserate ohne Fotos, 21.09.2026), die nackte URL liefert das Original.
+ */
 export function sautoImage(url: string | undefined): string | null {
   if (!url) return null;
-  const abs = url.startsWith('//') ? `https:${url}` : url;
-  return abs.includes('?') ? abs : `${abs}?fl=exf|res,1024,768,1|jpg,85`;
+  return url.startsWith('//') ? `https:${url}` : url;
 }
 
 export function sautoYear(v: string | number | undefined): number | null {

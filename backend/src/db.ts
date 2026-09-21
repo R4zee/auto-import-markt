@@ -222,7 +222,7 @@ async function migrate(): Promise<void> {
 }
 
 /** Stand der Bucket-Logik für listings.ref_key (Änderung → Spalten werden im Job neu berechnet) */
-const REF_KEY_VERSION = '2';
+const REF_KEY_VERSION = '3';
 
 async function heavyMigrations(c: Client): Promise<void> {
   await c.executeMultiple(`
@@ -261,6 +261,12 @@ async function heavyMigrations(c: Client): Promise<void> {
   if (refVersion.rows[0]?.value !== REF_KEY_VERSION) {
     await c.execute('UPDATE listings SET ref_key = NULL, ref_min_eur = NULL, ref_diff_de = NULL, ref_diff_at = NULL, ref_diff_nl = NULL, ref_diff_pl = NULL WHERE ref_key IS NOT NULL');
     await c.execute("INSERT INTO meta(key, value) VALUES ('ref_key_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [REF_KEY_VERSION]);
+  }
+  // Sauto-Fotos ohne CDN-Größenparameter (das Seznam-CDN lieferte damit nichts aus) – einmalig für den Bestand
+  const sautoPhotos = await c.execute("SELECT value FROM meta WHERE key = 'sauto_photos_bare'");
+  if (!sautoPhotos.rows.length) {
+    await c.execute("UPDATE listings SET photos_json = replace(photos_json, '?fl=exf|res,1024,768,1|jpg,85', '') WHERE source = 'sauto' AND photos_json LIKE '%?fl=exf%'");
+    await c.execute("INSERT INTO meta(key, value) VALUES ('sauto_photos_bare', '1') ON CONFLICT(key) DO NOTHING");
   }
   // Partner Japan/Korea zusammengeführt zu „Far East Imports“ (einmalig, Merker in meta)
   const partners = await c.execute("SELECT value FROM meta WHERE key = 'partners_fareast'");

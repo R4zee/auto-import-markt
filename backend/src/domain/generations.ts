@@ -65,6 +65,14 @@ const ROWS: Row[] = [
   ['Volkswagen', 'Golf 4|Golf IV|Mk4', 1997, 2003], ['Volkswagen', 'Golf 5|Golf V|Mk5', 2003, 2008], ['Volkswagen', 'Golf 6|Golf VI|Mk6', 2008, 2012],
   ['Volkswagen', 'Golf 7|Golf VII|Mk7', 2012, 2020], ['Volkswagen', 'Golf 8|Golf VIII|Mk8', 2019, null],
   ['Volkswagen', 'B6 3C', 2005, 2010], ['Volkswagen', 'B7', 2010, 2014], ['Volkswagen', 'B8 3G', 2014, null],
+  // Exoten: das Modell selbst ist die Baureihe (steht als Wort im Modellnamen) – Bauzeitraum statt Baujahr ±1
+  ['Lamborghini', 'Aventador', 2011, 2022], ['Lamborghini', 'Huracan|Huracán', 2014, 2024], ['Lamborghini', 'Gallardo', 2003, 2013],
+  ['Lamborghini', 'Murcielago|Murciélago', 2001, 2010], ['Lamborghini', 'Urus', 2018, null], ['Lamborghini', 'Revuelto', 2023, null], ['Lamborghini', 'Temerario', 2025, null],
+  ['Ferrari', '458', 2009, 2015], ['Ferrari', '488', 2015, 2019], ['Ferrari', 'F8', 2019, 2023], ['Ferrari', '296', 2022, null], ['Ferrari', 'Roma', 2020, null],
+  ['Ferrari', 'Portofino', 2017, 2023], ['Ferrari', 'California', 2008, 2017], ['Ferrari', 'F12', 2012, 2017], ['Ferrari', '812', 2017, 2023],
+  ['Ferrari', 'SF90', 2019, null], ['Ferrari', 'GTC4Lusso|GTC4 Lusso', 2016, 2020], ['Ferrari', 'FF', 2011, 2016], ['Ferrari', 'Purosangue', 2022, null], ['Ferrari', '12Cilindri|12 Cilindri', 2024, null],
+  ['McLaren', '650S', 2014, 2017], ['McLaren', '675LT', 2015, 2017], ['McLaren', '570S|570GT|540C', 2015, 2021], ['McLaren', '600LT', 2018, 2020],
+  ['McLaren', '720S', 2017, 2023], ['McLaren', '765LT', 2020, 2022], ['McLaren', 'GT', 2019, 2024], ['McLaren', 'Artura', 2021, null], ['McLaren', '750S', 2023, null],
   // Land Rover
   ['Land Rover', 'L322', 2002, 2012], ['Land Rover', 'L405', 2012, 2022], ['Land Rover', 'L460', 2022, null],
   ['Land Rover', 'L320', 2005, 2013], ['Land Rover', 'L494', 2013, 2022], ['Land Rover', 'L461', 2022, null],

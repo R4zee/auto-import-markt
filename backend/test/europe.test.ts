@@ -246,7 +246,7 @@ describe('Sauto.cz mapping', () => {
     assert.equal(l.photoCount, 41);
     assert.equal(l.location, 'Brno-město');
     assert.equal(l.url, 'https://www.sauto.cz/osobni/detail/skoda/octavia/214567890');
-    assert.equal(l.photos[0], 'https://d15-a.sdn.cz/d_15/c_img_QK_Iw/abc123.jpeg?fl=exf|res,1024,768,1|jpg,85');
+    assert.equal(l.photos[0], 'https://d15-a.sdn.cz/d_15/c_img_QK_Iw/abc123.jpeg');
     assert.equal(l.photos[1], 'https://d15-a.sdn.cz/d_15/c_img_QK_Iw/def456.jpeg?fl=exf|res,400,300,1');
     assert.equal(l.partnerId, 'carpathia');
   });
