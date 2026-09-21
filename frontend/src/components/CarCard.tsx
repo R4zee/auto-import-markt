@@ -8,7 +8,8 @@ export function chipsFor(car: Listing, t: (k: string, v?: Record<string, string 
   const chips: string[] = [];
   if (car.auction?.grade) chips.push(t('chSheet', { g: car.auction.grade }));
   if (car.auction) chips.push(`${car.auction.house} · ${car.auction.lot}`);
-  chips.push(car.coc ? t('chCocYes') : t('chCocNo'));
+  // COC nur nennen, wenn eines vorliegt – „auf Anfrage“ trifft praktisch immer zu und sagt nichts
+  if (car.coc) chips.push(t('chCocYes'));
   if (car.classic) chips.push(t('chClassic'));
   return chips;
 }

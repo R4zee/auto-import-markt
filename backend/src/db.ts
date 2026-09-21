@@ -191,6 +191,8 @@ async function migrate(): Promise<void> {
   await ensureColumn(c, 'listings', 'ref_key', 'TEXT');
   await ensureColumn(c, 'listings', 'ref_min_eur', 'REAL');
   for (const d of ['de', 'at', 'nl', 'pl']) await ensureColumn(c, 'listings', `ref_diff_${d}`, 'REAL');
+  // Fahrzeugbrief-Art nordamerikanischer Auktionen (clean/salvage/rebuilt/other) für den Filter „US-Titel“
+  await ensureColumn(c, 'listings', 'title_kind', 'TEXT');
   // Einmaliges Nachfüllen für Bestände von vor dieser Spalte – mit Merker in `meta`, damit nicht jeder Kaltstart
   // die Tabelle nach NULL-Werten durchsucht (auf Turso zählt jede gelesene Zeile)
   const backfilled = await c.execute("SELECT value FROM meta WHERE key = 'search_text_backfilled'");
@@ -233,14 +235,26 @@ async function heavyMigrations(c: Client): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_listings_ref_key ON listings(ref_key);
     -- Teilindex: Inserate, deren Vergleichspreis noch nie berechnet wurde (Nachzug im Job ohne Vollscan)
     CREATE INDEX IF NOT EXISTS idx_listings_ref_pending ON listings(ref_key) WHERE ref_min_eur IS NULL AND active = 1;
-    -- Abdeckender Suchindex v2: wie v1 plus Referenzabstände, damit auch die Sortierung nach Abstand im Index läuft
-    CREATE INDEX IF NOT EXISTS idx_listings_search_v2 ON listings(
+    -- Abdeckender Suchindex v3: wie v1 plus Referenzabstände (Sortierung nach Abstand) und Fahrzeugbrief-Art (Filter US-Titel)
+    CREATE INDEX IF NOT EXISTS idx_listings_search_v3 ON listings(
       active, make, model, year, km, landed_de, landed_at, landed_nl, landed_pl, price_eur,
       market, offer_type, fuel, transmission, coc, location, auction_ends_at, search_text,
-      ref_diff_de, ref_diff_at, ref_diff_nl, ref_diff_pl
+      ref_diff_de, ref_diff_at, ref_diff_nl, ref_diff_pl, title_kind
     );
     DROP INDEX IF EXISTS idx_listings_search_v1;
+    DROP INDEX IF EXISTS idx_listings_search_v2;
   `);
+  // Fahrzeugbrief-Art für vorhandene Copart-/Apibara-Lose aus der Ausstattungszeile ("Title: SALVAGE TITLE") nachtragen (einmalig)
+  const titles = await c.execute("SELECT value FROM meta WHERE key = 'title_kind_backfilled'");
+  if (!titles.rows.length) {
+    await c.execute(`UPDATE listings SET title_kind = CASE
+        WHEN trim LIKE '%Title: %' AND (trim LIKE '%REBUILT%' OR trim LIKE '%PRIOR SALVAGE%' OR trim LIKE '%RESTORED%') THEN 'rebuilt'
+        WHEN trim LIKE '%Title: %' AND (trim LIKE '%SALVAGE%' OR trim LIKE '%DESTRUCTION%' OR trim LIKE '%REPAIR%' OR trim LIKE '%JUNK%' OR trim LIKE '%PARTS ONLY%' OR trim LIKE '%BILL OF SALE%' OR trim LIKE '%FLOOD%') THEN 'salvage'
+        WHEN trim LIKE '%Title: %' AND (trim LIKE '%CLEAN%' OR trim LIKE '%CLEAR%') THEN 'clean'
+        WHEN trim LIKE '%Title: %' THEN 'other' ELSE title_kind END
+      WHERE (source = 'copart' OR source LIKE 'copart-%' OR source = 'apibara') AND title_kind IS NULL`);
+    await c.execute("INSERT INTO meta(key, value) VALUES ('title_kind_backfilled', '1') ON CONFLICT(key) DO NOTHING");
+  }
   // Bucket-Logik geändert (Baureihe aus Modellfamilie + Baujahr, 20.09.2026) → Schlüssel und Vergleichspreis-Spalten
   // zurücksetzen, der Vergleichspreis-Job trägt sie neu ein. Version hochzählen, wenn sich bucketQuery/yearBand ändern.
   const refVersion = await c.execute("SELECT value FROM meta WHERE key = 'ref_key_version'");

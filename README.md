@@ -54,7 +54,8 @@ Alternativ über die Claude-Code-Vorschau: `.claude/launch.json` enthält die Ko
 | `POST /api/admin/sync`, `POST /api/admin/cleanup`, `POST /api/admin/facets`, `GET /api/admin/status`, `GET /api/admin/enquiries` | Admin (Header `x-admin-key`); `cleanup` deaktiviert Bestände entfernter Anbieter, `facets` berechnet die Filterlisten neu |
 
 Filter-Parameter: `q, offer, markets, make, model, location, yearFrom, yearTo, maxKm, fuels,
-transmissions, cocOnly, maxLanded, dest, sort (landed-asc|landed-desc|year-desc|km-asc|ending|ref-asc|ref-desc), page, pageSize`.
+transmissions, cocOnly, titles (clean|salvage|rebuilt|other – Fahrzeugbrief-Art bei US-/Kanada-Auktionen), maxLanded, dest,
+sort (landed-asc|landed-desc|year-desc|km-asc|ending|ref-asc|ref-desc), page, pageSize`.
 
 ### Abfrage-Performance und Vercel-Kosten
 
@@ -88,7 +89,8 @@ Lokal reproduzieren: `backend/test/search.test.ts` prüft Pfade und Facetten; ei
 | `marketcheck` | USA (Händler, Festpreis) | `MARKETCHECK_API_KEY` |
 | `ebay` | USA (eBay Motors, Auktion + Festpreis) | `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET` |
 | `apibara` | USA (Copart/IAAI-Auktionen) | `APIBARA_API_KEY` (Test-Plan kostenlos, 100 Req/Monat) |
-| `copart` | **USA** – Copart-Suchendpunkt der Website `POST /public/lots/search-results`, keyless, kostenlos (Grauzone wie Encar); live bestätigt 15.09.2026 (385.803 Lose) | `COPART_ENABLED=true`, optional `COPART_MAKES` |
+| `copart` | **USA** – Copart-Suchendpunkt der Website `POST /public/lots/search-results`, keyless, kostenlos (Grauzone wie Encar); live bestätigt 15.09.2026 (385.803 Lose); bis 8.000 Lose je Lauf, Fahrzeugbrief-Art (`titleKind`) für den Filter „Title“ | `COPART_ENABLED=true`, optional `COPART_MAKES` |
+| `copart-ca` | **Kanada** – derselbe Endpunkt auf copart.ca, Markt CA, Preise in CAD (CETA: 0 % Zoll mit Ursprungsnachweis) | `COPART_CA_ENABLED=true` nach `npm run probe -- copart ca` |
 | `japcarz` | **Japan** – Jap Carz JSON-API der Website (`GET jap-carz.com/api/listings/?sort=upcoming_auctions&per_page=30&page=N`), keyless, kostenlos; Probe 20.09.2026 (475 Fahrzeuge); Vollabgleich, Auktionen mit Startgebot in JPY | `JAPCARZ_ENABLED=true` (im Workflow Standard an) |
 | `encar` | **Südkorea (Hauptquelle)** – Encar direkt, Vollabgleich (~150.000 Inserate) | `ENCAR_ENABLED=true` + `ENCAR_PROXY_URL` (Residential-Proxy); läuft per GitHub Actions alle 6 h, Teilabfragen < 10.000, Übersetzungs-Cache `encar_grades` |
 | `xapikorea` | Südkorea (Fallback, Encar-Wrapper mit englischen Feldern) | `XAPIKOREA_API_KEY` (Free 500 Req/Monat) |
@@ -101,7 +103,9 @@ Lokal reproduzieren: `backend/test/search.test.ts` prüft Pfade und Facetten; ei
 | `jpfeed` | Japan (Einzel-Feed, Altvariante von `PARTNER_FEEDS`) | `JP_FEED_URL`, `JP_FEED_MAPPING` (Feldzuordnung, siehe `feed.ts`) |
 
 Marktplatzweit werden nur Linkslenker übernommen. Auktionen mit abgelaufenem Termin blendet die Suche sofort aus
-und der Sync deaktiviert sie (nötig für Quellen ohne Vollabgleich wie Copart). Große Bestände synchronisiert der GitHub-Actions-Job
+und der Sync deaktiviert sie (nötig für Quellen ohne Vollabgleich wie Copart). Provider mit vielen Seiten reichen
+Zwischenstände über `onBatch` durch (Encar je Teilabfrage, Copart alle 5 Seiten, Dubizzle/Sauto je Preisfenster, OLX je
+Land) – der Sync schreibt sie sofort, Ergebnisse sind schon während des Laufs sichtbar. Große Bestände synchronisiert der GitHub-Actions-Job
 `.github/workflows/sync.yml` direkt in Turso (Vercel liest nur). Lokal: `npm run sync` (Datei-DB) bzw. `npm run sync:turso`.
 Suche/Filter/Sortierung laufen in SQL mit vorberechneten Endpreisen je Zielland (`landed_de/at/nl/pl`).
 

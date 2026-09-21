@@ -5,7 +5,7 @@ import type { Listing } from '../domain/types.js';
 import { defaultPartnerFor } from '../seed/partners.js';
 import { encarDrive } from './encar.js';
 import { HttpError, num, robustFetch, sleep, str } from './http.js';
-import { listingId, normalizeFuel, normalizeTransmission, powerKwFromText, type MarketProvider, type ProviderResult } from './types.js';
+import { batcher, listingId, normalizeFuel, normalizeTransmission, powerKwFromText, type FetchOptions, type MarketProvider, type ProviderResult } from './types.js';
 
 /**
  * OLX (Polen, Rumänien, Bulgarien, Portugal) – öffentlicher Frontend-Endpunkt der OLX-Seiten, kein Key:
@@ -354,15 +354,18 @@ export class OlxProvider implements MarketProvider {
     return listings;
   }
 
-  async fetchAll(): Promise<ProviderResult> {
+  async fetchAll(opts?: FetchOptions): Promise<ProviderResult> {
     const fetchedAt = new Date().toISOString();
     const listings: Listing[] = [];
+    const batch = batcher(listings, opts);
     const warnings: string[] = [];
     let failed = 0;
     const sites = config.olx.sites.filter((s) => s.enabled && s.categoryId != null);
     for (const site of sites) {
       try {
         listings.push(...(await this.fetchSite(site, fetchedAt, warnings)));
+        // je Land sofort in die Datenbank
+        await batch.flush();
       } catch (e) {
         failed++;
         warnings.push(`${site.country.toUpperCase()} (${site.host}): ${e instanceof Error ? e.message : String(e)}`);

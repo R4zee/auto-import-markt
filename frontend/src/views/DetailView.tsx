@@ -72,7 +72,8 @@ export function DetailView({ id }: { id: string }) {
   if (sel.vehicleTax && dest === 'DE') specs.push([t('sTax'), `${money(sel.vehicleTax.annualEur)}${sel.vehicleTax.estimated ? ` · ${t('estimated')}` : ''}`]);
 
   const compliance = [
-    { icon: sel.coc ? 'ph-fill ph-check-circle' : 'ph ph-warning-circle', color: sel.coc ? 'var(--color-accent-300)' : 'var(--color-neutral-400)', title: sel.coc ? t('cocYes') : t('cocNo'), note: sel.coc ? t('cocYesNote') : t('cocNoNote') },
+    // COC nur erwähnen, wenn eines vorliegt (fehlt praktisch immer; die Einzelabnahme steckt ohnehin im Endpreis)
+    ...(sel.coc ? [{ icon: 'ph-fill ph-check-circle', color: 'var(--color-accent-300)', title: t('cocYes'), note: t('cocYesNote') }] : []),
     { icon: 'ph-fill ph-steering-wheel', color: 'var(--color-accent-300)', title: t('lhdOk'), note: t('lhdOkNote') },
     { icon: 'ph ph-file-text', color: 'var(--color-neutral-400)', title: isEU ? t('intraEU') : t('customs'), note: isEU ? t('intraEUNote') : t('customsNote', { port }) },
     { icon: 'ph ph-gauge', color: 'var(--color-neutral-400)', title: t('kmOk'), note: isEU ? t('kmOkE') : t('kmOkA') },

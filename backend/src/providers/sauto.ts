@@ -3,7 +3,7 @@ import type { Listing } from '../domain/types.js';
 import { defaultPartnerFor } from '../seed/partners.js';
 import { encarDrive } from './encar.js';
 import { getJson, num, sleep, str } from './http.js';
-import { listingId, normalizeFuel, normalizeTransmission, type MarketProvider, type ProviderResult } from './types.js';
+import { batcher, listingId, normalizeFuel, normalizeTransmission, type FetchOptions, type MarketProvider, type ProviderResult } from './types.js';
 import { makeFromTitle } from './olx.js';
 
 /**
@@ -144,9 +144,10 @@ export class SautoProvider implements MarketProvider {
     return bands;
   }
 
-  async fetchAll(): Promise<ProviderResult> {
+  async fetchAll(opts?: FetchOptions): Promise<ProviderResult> {
     const fetchedAt = new Date().toISOString();
     const listings: Listing[] = [];
+    const batch = batcher(listings, opts);
     const warnings: string[] = [];
     const seen = new Set<string>();
     let failed = 0;
@@ -165,6 +166,8 @@ export class SautoProvider implements MarketProvider {
           if (items.length < config.sauto.pageSize || (total != null && (page + 1) * config.sauto.pageSize >= total)) break;
           await sleep(config.sauto.delayMs);
         }
+        // je Preisfenster sofort in die Datenbank
+        await batch.flush();
       } catch (e) {
         failed++;
         warnings.push(`${from}–${to ?? '∞'} CZK: ${e instanceof Error ? e.message : String(e)}`);

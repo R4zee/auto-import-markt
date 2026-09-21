@@ -84,10 +84,14 @@ export function variantText(l: Pick<Listing, 'make' | 'model' | 'trim'>): string
   return text.replace(/\s+/g, ' ').trim();
 }
 
-/** Laufleistungsfenster: nur nach oben begrenzt (+50 % unter 100.000 km, +30 % darüber), nach unten offen */
+/**
+ * Laufleistungsfenster: nur nach oben begrenzt (+50 % unter 100.000 km, +30 % darüber), nach unten offen. Fahrzeuge mit
+ * sehr wenig Laufleistung werden mit allen bis REFERENCE_KM_FLOOR (20.000 km) verglichen – ein 1.600-km-Aventador fand
+ * sonst nur Angebote bis 2.400 km.
+ */
 export function kmWindow(km: number): { from: number; to: number } {
   const pct = km < config.reference.kmThreshold ? config.reference.kmWindowBelow : config.reference.kmWindowAbove;
-  return { from: 0, to: Math.round(km * (1 + pct)) };
+  return { from: 0, to: Math.max(config.reference.kmFloor, Math.round(km * (1 + pct))) };
 }
 
 export const KM_BAND_STEP = 25000;
@@ -488,30 +492,37 @@ export async function refreshReferenceBuckets(opts: { limit?: number; maxMs?: nu
     .filter(([key]) => { const at = existing.get(key); return !at || new Date(at).getTime() < cutoff; })
     .sort((a, b) => b[1].n - a[1].n);
   const report: RefreshReport = { candidates: wanted.size, fetched: 0, fresh: wanted.size - due.length, failed: 0, aborted: null, stopped: null, samples: 0, withSamples: 0 };
-  log(`Buckets: ${wanted.size} gesamt · ${report.fresh} aktuell · ${due.length} fällig · Limit ${limit} · Zeitbudget ${Math.round(maxMs / 60000)} min`);
-  for (const [key, { q, n }] of due.slice(0, limit)) {
-    // Zeitbudget: der nächste geplante Lauf soll nicht hinter diesem warten müssen
-    if (Date.now() - started > maxMs) { report.stopped = `Zeitbudget von ${Math.round(maxMs / 60000)} min erreicht`; break; }
-    try {
-      const b = await fetchBucket(q);
-      report.fetched++;
-      report.samples += b.samples.length;
-      if (b.samples.length) report.withSamples++;
-      // Protokoll kompakt halten: Details nur für die ersten 20 Buckets, danach alle 100 eine Zwischensumme (REFERENCE_VERBOSE=true: alles)
-      if (config.reference.verbose || report.fetched <= 20) {
-        log(`  ✔ ${q.make} ${q.description} ${q.fuel ?? ''} ${q.yearFrom}–${q.yearTo}${q.kmTo ? ` ≤${q.kmTo} km` : ''}${b.query.modelId || b.query.modelGroupId ? ` [Modell ${b.query.modelId ?? `Gruppe ${b.query.modelGroupId}`}]` : ''} (${n} Inserate) → ${b.samples.length} passende${b.total != null ? ` von ${b.total}` : ''}, ab ${b.samples[0]?.priceEur ?? '–'} €`);
-      } else if (report.fetched % 100 === 0) {
-        log(`  … ${report.fetched} Buckets · ${report.withSamples} mit Angeboten · ${report.samples} Angebote · ${Math.round((Date.now() - started) / 60000)} min`);
+  const todo = due.slice(0, limit);
+  const concurrency = Math.max(1, config.reference.concurrency);
+  log(`Buckets: ${wanted.size} gesamt · ${report.fresh} aktuell · ${due.length} fällig · Limit ${limit} · Zeitbudget ${Math.round(maxMs / 60000)} min · ${concurrency} parallel`);
+  // Mehrere Buckets parallel (REFERENCE_CONCURRENCY): jede mobile.de-Anfrage wartet ~1–2 s auf die Antwort
+  let next = 0;
+  const worker = async () => {
+    while (next < todo.length && !report.aborted && !report.stopped) {
+      // Zeitbudget: der nächste geplante Lauf soll nicht hinter diesem warten müssen
+      if (Date.now() - started > maxMs) { report.stopped = `Zeitbudget von ${Math.round(maxMs / 60000)} min erreicht`; break; }
+      const [, { q, n }] = todo[next++];
+      try {
+        const b = await fetchBucket(q);
+        report.fetched++;
+        report.samples += b.samples.length;
+        if (b.samples.length) report.withSamples++;
+        // Protokoll kompakt halten: Details nur für die ersten 20 Buckets, danach alle 100 eine Zwischensumme (REFERENCE_VERBOSE=true: alles)
+        if (config.reference.verbose || report.fetched <= 20) {
+          log(`  ✔ ${q.make} ${q.description} ${q.fuel ?? ''} ${q.yearFrom}–${q.yearTo}${q.kmTo ? ` ≤${q.kmTo} km` : ''}${b.query.modelId || b.query.modelGroupId ? ` [Modell ${b.query.modelId ?? `Gruppe ${b.query.modelGroupId}`}]` : ''} (${n} Inserate) → ${b.samples.length} passende${b.total != null ? ` von ${b.total}` : ''}, ab ${b.samples[0]?.priceEur ?? '–'} €`);
+        } else if (report.fetched % 100 === 0) {
+          log(`  … ${report.fetched} Buckets · ${report.withSamples} mit Angeboten · ${report.samples} Angebote · ${Math.round((Date.now() - started) / 60000)} min`);
+        }
+      } catch (e) {
+        report.failed++;
+        const msg = e instanceof Error ? e.message : String(e);
+        log(`  ✖ ${q.make} ${q.description}: ${msg.slice(0, 120)}`);
+        if (e instanceof HttpError && (e.status === 403 || e.status === 429)) { report.aborted = `HTTP ${e.status} – Lauf abgebrochen (Sperre)`; break; }
+        if (report.failed >= 10 && report.fetched === 0) { report.aborted = 'zehn Fehler ohne Treffer – Lauf abgebrochen'; break; }
       }
-    } catch (e) {
-      report.failed++;
-      const msg = e instanceof Error ? e.message : String(e);
-      log(`  ✖ ${q.make} ${q.description}: ${msg.slice(0, 120)}`);
-      if (e instanceof HttpError && (e.status === 403 || e.status === 429)) { report.aborted = `HTTP ${e.status} – Lauf abgebrochen (Sperre)`; break; }
-      if (report.failed >= 10 && report.fetched === 0) { report.aborted = 'zehn Fehler ohne Treffer – Lauf abgebrochen'; break; }
+      await sleep(config.reference.delayMs);
     }
-    void key;
-    await sleep(config.reference.delayMs);
-  }
+  };
+  await Promise.all(Array.from({ length: concurrency }, worker));
   return report;
 }

@@ -361,7 +361,8 @@ Baureihe (nennt das Inserat einen Code wie W221, E93 oder F30, gilt deren Bauzei
 `backend/src/domain/generations.ts` – eine 2011er W221 zählt zur 2013er W221, eine W222 nicht; ohne Code wird die
 Baureihe seit 20.09.2026 aus Modellfamilie und Baujahr bestimmt, z. B. „Maybach S 650, 2020“ → W222 2013–2020, im
 Wechseljahr die auslaufende Reihe; erst ohne bekannte Familie Baujahr ±1),
-Laufleistung höchstens +50 % unter 100.000 km bzw. +30 % darüber (nach unten offen), Hubraum ±12 % und Leistung
+Laufleistung höchstens +50 % unter 100.000 km bzw. +30 % darüber, mindestens aber bis 20.000 km (`REFERENCE_KM_FLOOR`;
+ein 1.600-km-Aventador fand sonst nur Angebote bis 2.400 km; nach unten offen), Hubraum ±12 % und Leistung
 ±15 % sofern beide Seiten die Werte kennen. Weil mobile.de die Beschreibung unscharf sucht („S350“ liefert auch
 CLS 350 und E 350), muss die Variantenkennung zusätzlich als eigenes Wort im mobile.de-Modellnamen oder Titel stehen.
 

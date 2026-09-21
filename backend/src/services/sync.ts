@@ -25,27 +25,37 @@ export async function syncProvider(p: MarketProvider): Promise<SyncReport> {
   const runId = ins.lastInsertRowid == null ? null : Number(ins.lastInsertRowid);
   try {
     await getFx(); // Kurse für die vorberechneten EUR-/Endpreis-Spalten
-    const result = await p.fetchAll();
     await partnersRepo.upsertMany(SEED_PARTNERS);
+    // Nur neue oder geänderte Inserate schreiben (Preis/km) – spart bei großen Beständen den Großteil der Schreibvorgänge.
+    // Teilquellen des Providers zählen mit (olx → olx-pl/-ro/-bg/-pt, autoapi → autoapi-dubizzle …).
+    const existing = await listingsRepo.activeIdsBySource(p.id, true);
+    const normalize = (l: Listing): Listing => ({ ...l, make: canonicalMake(l.make) || l.make });
+    const isChanged = (l: Listing) => { const e = existing.get(l.id); return !e || e.price !== l.price || e.km !== l.km; };
+    // Zwischenstände (Encar-Teilabfragen, Copart-Seiten, Preisfenster …) sofort schreiben – Ergebnisse sind dann schon
+    // während des Laufs sichtbar. Die am Ende zurückgegebene Gesamtliste zählt nur noch das, was nicht bereits geschrieben ist.
+    const written = new Set<string>();
+    let upserted = 0;
+    const result = await p.fetchAll({
+      onBatch: async (batch) => {
+        const fresh = batch.filter((l) => l.steering === 'LHD' && !written.has(l.id)).map(normalize).filter(isChanged);
+        for (const l of fresh) written.add(l.id);
+        upserted += await listingsRepo.upsertMany(fresh);
+      },
+    });
     if (result.partners?.length) await partnersRepo.upsertMany(result.partners);
     // Marktplatzweit nur Linkslenker; doppelte IDs (z. B. beworbene OLX-Anzeigen auf mehreren Seiten) einmal nehmen;
     // Markennamen quellenübergreifend vereinheitlichen (sonst Dubletten im Markenfilter)
     const byId = new Map<string, Listing>();
-    for (const l of result.listings) if (l.steering === 'LHD') byId.set(l.id, { ...l, make: canonicalMake(l.make) || l.make });
+    for (const l of result.listings) if (l.steering === 'LHD') byId.set(l.id, normalize(l));
     const lhd = [...byId.values()];
     const duplicates = result.listings.filter((l) => l.steering === 'LHD').length - lhd.length;
-    // Nur neue oder geänderte Inserate schreiben (Preis/km) – spart bei großen Beständen den Großteil der Schreibvorgänge.
-    // Teilquellen des Providers zählen mit (olx → olx-pl/-ro/-bg/-pt, autoapi → autoapi-dubizzle …).
-    const existing = await listingsRepo.activeIdsBySource(p.id, true);
-    const changed = lhd.filter((l) => {
-      const e = existing.get(l.id);
-      return !e || e.price !== l.price || e.km !== l.km;
-    });
-    const upserted = await listingsRepo.upsertMany(changed);
+    const changed = lhd.filter((l) => !written.has(l.id) && isChanged(l));
+    upserted += await listingsRepo.upsertMany(changed);
     const deactivated = result.complete ? await listingsRepo.deactivateMissing(p.id, lhd.map((l) => l.id), true) : 0;
     const warnings = [...(result.warnings ?? [])];
     if (duplicates > 0) warnings.push(`${duplicates} Duplikate zusammengeführt`);
-    if (lhd.length !== changed.length) warnings.push(`${lhd.length - changed.length} unverändert übersprungen`);
+    if (lhd.length !== upserted) warnings.push(`${lhd.length - upserted} unverändert übersprungen`);
+    if (written.size) warnings.push(`${written.size} bereits während des Ladens geschrieben`);
     if (runId != null) {
       await run('UPDATE sync_runs SET finished_at = ?, status = ?, upserted = ?, deactivated = ?, error = ? WHERE id = ?',
         [new Date().toISOString(), 'ok', upserted, deactivated, warnings.length ? `warnings: ${warnings.join(' | ')}` : null, runId]);
