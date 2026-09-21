@@ -87,9 +87,12 @@ export function CarCard({ car }: { car: Listing }) {
                 title={t('refTooltip', { n: car.reference.count, kmTo: car.reference.kmTo.toLocaleString('de-DE'), years: `${car.reference.generation ? car.reference.generation + ' ' : ''}${car.reference.yearFrom}–${car.reference.yearTo}`, landed: money(car.landed.totalEur) })}
               >
                 <span className="aim-ref-label">{t('refDeFrom', { price: money(car.reference.minEur) })}</span>
-                <span className={car.reference.diffPct <= 0 ? 'aim-ref-diff aim-ref-good' : 'aim-ref-diff aim-ref-bad'}>
-                  {(car.reference.diffPct > 0 ? '+' : '−') + Math.abs(car.reference.diffPct).toLocaleString('de-DE', { maximumFractionDigits: 0 })} %
-                </span>
+                {/* Auktionen: kein Abstand – der Preis ist nur das Start-/Höchstgebot */}
+                {car.reference.diffPct != null && (
+                  <span className={car.reference.diffPct <= 0 ? 'aim-ref-diff aim-ref-good' : 'aim-ref-diff aim-ref-bad'}>
+                    {(car.reference.diffPct > 0 ? '+' : '−') + Math.abs(car.reference.diffPct).toLocaleString('de-DE', { maximumFractionDigits: 0 })} %
+                  </span>
+                )}
               </div>
             )}
           </div>

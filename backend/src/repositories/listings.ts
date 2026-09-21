@@ -98,7 +98,7 @@ ON CONFLICT(id) DO UPDATE SET
   -- nächsten Vergleichspreis-Lauf leer (IS vergleicht NULL-sicher)
   ref_key = excluded.ref_key,
   ref_min_eur = CASE WHEN excluded.ref_key IS listings.ref_key THEN listings.ref_min_eur ELSE NULL END,
-  ${DEST_CODES.map((d) => `ref_diff_${d.toLowerCase()} = CASE WHEN excluded.ref_key IS listings.ref_key THEN ${refDiffSql(`excluded.landed_${d.toLowerCase()}`, 'listings.ref_min_eur')} ELSE NULL END`).join(',\n  ')}
+  ${DEST_CODES.map((d) => `ref_diff_${d.toLowerCase()} = CASE WHEN excluded.ref_key IS listings.ref_key THEN ${refDiffSql(`excluded.landed_${d.toLowerCase()}`, 'listings.ref_min_eur', 'excluded.offer_type')} ELSE NULL END`).join(',\n  ')}
 `;
 
 function upsertStatement(l: Listing): InStatement {

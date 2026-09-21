@@ -170,8 +170,11 @@ export interface ReferenceSummary {
   yearTo: number;
   /** Inserat mit dem Mindestpreis */
   url: string | null;
-  /** Endpreis (inkl. Zoll, Steuer, TÜV, Zulassung) relativ zum Vergleichspreis in Prozent: -20 = 20 % günstiger */
-  diffPct: number;
+  /**
+   * Endpreis (inkl. Zoll, Steuer, TÜV, Zulassung) relativ zum Vergleichspreis in Prozent: -20 = 20 % günstiger.
+   * null bei Auktionen: dort ist der Preis nur das Start-/Höchstgebot, kein Kaufpreis
+   */
+  diffPct: number | null;
   /** Baureihe (z. B. "W221"), falls das Baujahrband daraus stammt */
   generation: string | null;
   fetchedAt: string;

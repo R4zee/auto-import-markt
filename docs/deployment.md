@@ -424,6 +424,14 @@ Einzelstücke (gepanzert, „1of1“) zählen nicht – für einen 760i aus Duba
 788.800 €. Probe: `npm run probe -- mobile BMW "X6 M" 2020 Petrol 156000 "X6 M" 460` (Leistung in kW als letztes
 Argument), `mobile-models 3500 7`, `sauto-detail <id>`; auf dem Runner über den Workflow **Probe** (Feld `args`).
 
+**Auktionen ohne Abstand (21.09.2026):** Bei Auktionen ist `price` nur das Start- bzw. aktuelle Höchstgebot (Copart:
+Gebot, Jap Carz: Startgebot), kein Kaufpreis. Die Sortierung „Größte Differenz zum DE-Preis“ zeigte deshalb Copart-Lose
+mit 175 $ Gebot als „−94 %“ ganz vorn. Seither bekommen Auktionen den Vergleichspreis („DE ab …“), aber keinen Abstand:
+`firmPrice()` in `services/reference.ts` (Karte, Detail, Job) und die Bedingung `offer_type <> 'auction'` in
+`refDiffSql()` (Upsert, Kursnachzug) schreiben `ref_diff_*` = NULL, die Abstandssortierung reiht sie damit hinten ein;
+`heavyMigrations` hat vorhandene Abstände von Auktionen einmalig gelöscht (Merker `ref_diff_auction_null`). Die
+Detailansicht erklärt das in einer Zeile (`refAuction`).
+
 **Transportkosten EU (21.09.2026):** Innerhalb der EU rechnet die Kalkulation mit 0,3 % Transportversicherung statt 1,1 %
 Seefracht-Versicherung (`FEES.insurancePctEU`) – ein 440.000-€-Fahrzeug aus Prag stand sonst mit über 5.000 € „Seefracht“ da.
 Nach Änderungen an Gebühren `LANDED_VERSION` in `services/sync.ts` hochzählen, dann rechnet der nächste Sync alle

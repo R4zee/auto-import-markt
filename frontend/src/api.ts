@@ -32,7 +32,8 @@ export interface Listing {
 
 export interface ReferenceSummary {
   source: string; minEur: number; medianEur: number | null; count: number; kmFrom: number; kmTo: number;
-  yearFrom: number; yearTo: number; url: string | null; diffPct: number; generation: string | null; fetchedAt: string;
+  /** diffPct null bei Auktionen: der Preis ist nur das Start-/Höchstgebot */
+  yearFrom: number; yearTo: number; url: string | null; diffPct: number | null; generation: string | null; fetchedAt: string;
 }
 
 export interface ReferencePrices {

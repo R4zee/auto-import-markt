@@ -265,6 +265,8 @@ export function DetailView({ id }: { id: string }) {
                     )}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', marginTop: -2 }}>{t('refMin')} · {t('refLine', { n: ref.count, yearFrom: ref.yearFrom, yearTo: ref.yearTo })}</div>
+                  {/* Auktion: der Endpreis beruht nur auf dem Start-/Höchstgebot, deshalb kein Abstand */}
+                  {ref.diffPct == null && <div style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>{t('refAuction')}</div>}
                   <div style={{ height: 1, background: 'var(--color-divider)' }} />
                   <div className="tabular" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span style={{ color: 'var(--color-neutral-400)' }}>{t('refWindow', { kmTo: ref.kmTo.toLocaleString('de-DE'), years: `${ref.generation ? ref.generation + ' ' : ''}${ref.yearFrom}–${ref.yearTo}` })}</span></div>
                   <div className="tabular" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span style={{ color: 'var(--color-neutral-400)' }}>{t('refRange')}</span><span>{ref.maxEur != null ? `${money(ref.minEur)} – ${money(ref.maxEur)}` : money(ref.minEur)}</span></div>
