@@ -3,6 +3,9 @@ name: Reference Prices
 # Vergleichspreise DE (mobile.de) stündlich nachladen (seit 21.09.2026; zwei Buckets parallel) – zusätzlich zum Schritt
 # im Sync-Workflow. Die Concurrency-Gruppe verhindert überlappende Läufe; danach erneuert der Job Buckets, die älter
 # als REFERENCE_TTL_DAYS sind. Abschalten: Variable REFERENCE_ENABLED=false.
+# Hinweis 21.09.2026: nach dem Wechsel auf „öffentlich“ feuerte der Zeitplan ab 07:12 UTC nicht mehr (auch der Sync
+# nicht); eine Änderung an der Workflow-Datei auf main registriert den Zeitplan neu. Bleibt er aus: Actions →
+# Workflow → „Enable workflow“ prüfen.
 on:
   schedule:
     - cron: '45 * * * *'
