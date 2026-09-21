@@ -430,7 +430,8 @@ mit 175 $ Gebot als „−94 %“ ganz vorn. Seither bekommen Auktionen den Verg
 `firmPrice()` in `services/reference.ts` (Karte, Detail, Job) und die Bedingung `offer_type <> 'auction'` in
 `refDiffSql()` (Upsert, Kursnachzug) schreiben `ref_diff_*` = NULL, die Abstandssortierung reiht sie damit hinten ein;
 `heavyMigrations` hat vorhandene Abstände von Auktionen einmalig gelöscht (Merker `ref_diff_auction_null`). Die
-Detailansicht erklärt das in einer Zeile (`refAuction`).
+Detailansicht erklärt das in einer Zeile (`refAuction`). Stand der Spalten ohne Datenbankzugang: `/api/health/reference`
+(Migrationsmerker, offene Inserate, Inserate mit Abstand, Auktionen mit Abstand – sollen 0 sein – samt drei Beispielen).
 
 **Turso-Schreibsperre (21.09.2026):** Nach den Massenläufen des Tages (Schlüssel-Reset über 273.000 Inserate, Nachzug
 der Sortierspalten, Nachhol-Lauf der Buckets) sperrte Turso alle Schreibzugriffe: „BLOCKED: … SQL write operations are

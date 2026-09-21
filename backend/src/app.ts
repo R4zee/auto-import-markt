@@ -2,7 +2,7 @@ import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { config, databaseMissing, isServerless } from './config.js';
-import { dbReadOnly, ready } from './db.js';
+import { dbReadOnly, one, query, ready } from './db.js';
 import { listingsRepo } from './repositories/listings.js';
 import { adminRoutes } from './routes/admin.js';
 import { calcRoutes } from './routes/calc.js';
@@ -39,6 +39,29 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     database: databaseMissing ? 'MISSING – TURSO_DATABASE_URL/TURSO_AUTH_TOKEN setzen und redeployen' : config.database.url.startsWith('file:') ? 'local-file' : config.database.url === ':memory:' ? 'memory' : 'remote',
     time: new Date().toISOString(),
   }));
+
+  /**
+   * Stand der Vergleichspreis-Spalten (Diagnose ohne Datenbankzugang, 21.09.2026): Migrationsmerker, offene Inserate
+   * (Teilindex), Inserate mit Abstand sowie Auktionen, die entgegen firmPrice() noch einen Abstand tragen (sollen 0 sein).
+   * Zählungen laufen über den abdeckenden Suchindex (wenige Sekunden), nicht über die Zeilen.
+   */
+  app.get('/api/health/reference', async () => {
+    const meta = await query<{ key: string; value: string }>("SELECT key, value FROM meta WHERE key IN ('ref_key_version', 'ref_diff_auction_null')");
+    const [pending, withDiff, auctionsWithDiff, topAuctions] = await Promise.all([
+      one<{ n: number }>("SELECT COUNT(*) AS n FROM listings WHERE ref_min_eur IS NULL AND active = 1 AND ref_key <> ''"),
+      one<{ n: number }>('SELECT COUNT(*) AS n FROM listings WHERE active = 1 AND ref_diff_de IS NOT NULL'),
+      one<{ n: number }>("SELECT COUNT(*) AS n FROM listings WHERE active = 1 AND offer_type = 'auction' AND ref_diff_de IS NOT NULL"),
+      query<{ id: string; ref_diff_de: number; fetched_at: string }>("SELECT id, ref_diff_de, fetched_at FROM listings WHERE active = 1 AND offer_type = 'auction' AND ref_diff_de IS NOT NULL ORDER BY ref_diff_de DESC LIMIT 3"),
+    ]);
+    return {
+      meta: Object.fromEntries(meta.map((r) => [r.key, r.value])),
+      pending: Number(pending?.n ?? 0),
+      withDiff: Number(withDiff?.n ?? 0),
+      auctionsWithDiff: Number(auctionsWithDiff?.n ?? 0),
+      topAuctions,
+      time: new Date().toISOString(),
+    };
+  });
 
   /** Vercel Cron (GET) – Header "Authorization: Bearer <CRON_SECRET>"; alternativ x-admin-key */
   app.get('/api/cron/sync', async (req, reply) => {
