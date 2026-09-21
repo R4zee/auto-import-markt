@@ -1,13 +1,13 @@
 import { config, type OlxSite } from '../config.js';
 import { allProviders } from '../providers/index.js';
-import { curlFetch, freshFetch, getJson, robustFetch } from '../providers/http.js';
+import { curlFetch, freshFetch, getJson, robustFetch, str } from '../providers/http.js';
 import { mapOlxOffer, olxHeaders, OlxProvider, type OlxFilterLevel } from '../providers/olx.js';
 import { mapSauto, SautoProvider } from '../providers/sauto.js';
 import { mapSubito, SubitoProvider } from '../providers/subito.js';
 import { CopartProvider, copartSkipReason, mapCopart } from '../providers/copart.js';
 import { DubizzleProvider, dubizzleSkipReason, initialBands, mapDubizzle } from '../providers/dubizzle.js';
 import { japcarzSkipReason, mapJapCarz, type JapCarzItem } from '../providers/japcarz.js';
-import { extractItems, mapMobileItem, mobileApiUrl, mobileMakeId, MobileDeReference, mobileSearchUrl, mobileSeoUrl, type RefQuery } from '../providers/mobilede.js';
+import { extractItems, mapMobileItem, mobileApiUrl, mobileHeaders, mobileMakeId, mobileModelListUrls, MobileDeReference, mobileSearchUrl, mobileSeoUrl, type RefQuery } from '../providers/mobilede.js';
 import { bucketKey, kmBandFor, kmWindow, kwWindow, summarize, titleMatches } from '../services/reference.js';
 import { yearBand } from '../domain/generations.js';
 import type { Fuel } from '../domain/types.js';
@@ -34,7 +34,7 @@ import type { Fuel } from '../domain/types.js';
  *   npm run probe -- <provider> (jeder andere Provider: fetchAll mit Ausgabe der ersten 3 Inserate)
  */
 const name = process.argv[2] ?? '';
-const short = (v: unknown, n = 1800) => JSON.stringify(v, null, 1).slice(0, n);
+const short = (v: unknown, n = 1800) => (JSON.stringify(v, null, 1) ?? String(v)).slice(0, n);
 const proxyUrl = config.europe.proxyUrl || undefined;
 const fetchedAt = new Date().toISOString();
 
@@ -293,6 +293,87 @@ async function probeSauto() {
   }
 }
 
+/**
+ * Sauto-Detail: `probe sauto-detail 88823722` – Detail-API (Hubraum? Bilder?), Bild-URLs aus der HTML-Detailseite
+ * (welche Form nutzt die Seite selbst?) und Abruf einiger URL-Varianten gegen das Seznam-CDN (Status/Typ).
+ */
+async function probeSautoDetail(id: string) {
+  const headers = { Accept: 'application/json', 'Accept-Language': 'cs', 'User-Agent': config.europe.userAgent, Referer: 'https://www.sauto.cz/' };
+  console.log(`\n=== Sauto.cz Detail ${id}`);
+  let apiImages: string[] = [];
+  for (const url of [`https://www.sauto.cz/api/v1/items/${id}`, `https://www.sauto.cz/api/v1/items/${id}?with_images=1`]) {
+    try {
+      const res = await robustFetch(url, { headers, timeoutMs: 20000, proxyUrl, nodeOnly: true, tls: 'chrome' });
+      const body = await res.text();
+      console.log(`  ${url} → HTTP ${res.status} · ${(body.length / 1024).toFixed(1)} KB`);
+      if (!res.ok) continue;
+      const j = JSON.parse(body) as Record<string, unknown>;
+      const r = (j.result ?? j) as Record<string, unknown>;
+      console.log('  Schlüssel:', Object.keys(r).join(', '));
+      const imgs = (r.images as Array<Record<string, unknown>> | undefined) ?? [];
+      apiImages = imgs.map((i) => str(i.url)).filter(Boolean);
+      console.log('  engine_volume/engine_power/tachometer/images:', short({ engine_volume: r.engine_volume, engine_power: r.engine_power, tachometer: r.tachometer, images_total_count: r.images_total_count, images: imgs.slice(0, 3) }, 1500));
+      break;
+    } catch (e) { console.log('  ✖', e instanceof Error ? e.message.slice(0, 160) : String(e)); }
+  }
+  // HTML-Detailseite: alle CDN-Adressen (auch in JSON-escaped Form) – so, wie die Seite sie selbst nutzt
+  const page = `https://www.sauto.cz/osobni/detail/x/y/${id}`;
+  let fromHtml: string[] = [];
+  try {
+    const res = await robustFetch(page, { headers: { ...headers, Accept: 'text/html,application/xhtml+xml' }, timeoutMs: 30000, proxyUrl, nodeOnly: true, tls: 'chrome' });
+    const html = (await res.text()).replace(/\\\//g, '/').replace(/\\u002F/gi, '/').replace(/&amp;/g, '&');
+    console.log(`  ${page} → HTTP ${res.status} · ${(html.length / 1024).toFixed(0)} KB`);
+    fromHtml = [...new Set(html.match(/(?:https?:)?\/\/[a-z0-9.-]*sdn\.cz\/[^"'\s<>\\)]+/gi) ?? [])];
+    console.log(`  CDN-Adressen im Quelltext: ${fromHtml.length}`);
+    for (const u of fromHtml.slice(0, 8)) console.log(`    ${u}`);
+  } catch (e) { console.log('  ✖ HTML:', e instanceof Error ? e.message.slice(0, 160) : String(e)); }
+  // Varianten gegen das CDN
+  const base = (apiImages[0] ?? fromHtml.find((u) => /\.jpe?g/i.test(u)) ?? '').replace(/^\/\//, 'https://').split('?')[0];
+  if (!base) { console.log('  keine Bild-URL gefunden'); return; }
+  const variants = [
+    base,
+    `${base}?fl=res,1024,768,3|shr,,20|jpg,85`,
+    `${base}?fl=res,1024,768,3%7Cshr,,20%7Cjpg,85`,
+    `${base}?fl=exf|res,1024,768,1|jpg,85`,
+    `${base}?fl=res,400,300,3|shr,,20|jpg,80`,
+    ...fromHtml.filter((u) => u.includes(base.replace('https://', '')) && u.includes('?')).slice(0, 2).map((u) => u.replace(/^\/\//, 'https://')),
+  ];
+  for (const [label, hdr] of [['ohne Referer', { 'User-Agent': config.europe.userAgent, Accept: 'image/*,*/*;q=0.8' }], ['Referer sauto.cz', { 'User-Agent': config.europe.userAgent, Accept: 'image/*,*/*;q=0.8', Referer: 'https://www.sauto.cz/' }]] as const) {
+    console.log(`  Abruf (${label}):`);
+    for (const u of [...new Set(variants)]) {
+      try {
+        const res = await robustFetch(u, { headers: hdr as Record<string, string>, timeoutMs: 20000, proxyUrl, nodeOnly: true, tls: 'chrome' });
+        const buf = await res.arrayBuffer();
+        console.log(`    ${res.ok ? '✔' : '✖'} HTTP ${res.status} · ${res.headers.get('content-type') ?? '?'} · ${(buf.byteLength / 1024).toFixed(1)} KB · ${u}`);
+      } catch (e) { console.log(`    ✖ ${u} · ${e instanceof Error ? e.message.slice(0, 100) : String(e)}`); }
+    }
+  }
+}
+
+/** Modellliste von mobile.de je Marke: `probe mobile-models 3500 [Filter]` – welche IDs/Gruppen gibt es (7er? X6 M?) */
+async function probeMobileModels(makeId: number, filter: string) {
+  console.log(`\n=== mobile.de Modelle der Marke ${makeId}${filter ? ` · Filter "${filter}"` : ''}`);
+  for (const url of mobileModelListUrls(makeId)) {
+    try {
+      const res = await robustFetch(url, { headers: mobileHeaders(), timeoutMs: 20000, proxyUrl, nodeOnly: true, tls: 'chrome' });
+      const body = await res.text();
+      console.log(`  ${url} → HTTP ${res.status} · ${res.headers.get('content-type') ?? '?'} · ${(body.length / 1024).toFixed(1)} KB`);
+      if (!res.ok) continue;
+      let json: unknown;
+      try { json = JSON.parse(body); } catch { console.log('  keine JSON-Antwort:', body.slice(0, 600)); continue; }
+      const list = Array.isArray(json) ? json : Object.values(json as Record<string, unknown>).find(Array.isArray) as unknown[] | undefined;
+      console.log('  Struktur:', Array.isArray(json) ? `Array[${json.length}]` : Object.keys(json as Record<string, unknown>).join(', '));
+      console.log('  Anfang:', short(json, 1500));
+      if (list) {
+        const hits = list.filter((m) => !filter || JSON.stringify(m).toLowerCase().includes(filter.toLowerCase()));
+        console.log(`  Einträge: ${list.length}${filter ? ` · mit "${filter}": ${hits.length}` : ''}`);
+        for (const h of hits.slice(0, 30)) console.log('   ', JSON.stringify(h).slice(0, 200));
+      }
+      return;
+    } catch (e) { console.log('  ✖', e instanceof Error ? e.message.slice(0, 160) : String(e)); }
+  }
+}
+
 /** Modell-ID von mobile.de über die SEO-Modellseite: `probe mobile-model Mercedes-Benz "S-Class"` */
 async function probeMobileModel(make: string, model: string): Promise<{ modelId: number | null; modelGroupId: number | null }> {
   const src = new MobileDeReference();
@@ -301,6 +382,7 @@ async function probeMobileModel(make: string, model: string): Promise<{ modelId:
     const r = await src.resolveModel(make, model);
     const ok = r.makeId != null && (r.modelId != null || r.modelGroupId != null);
     console.log(`  ${ok ? '✔' : '✖'} make=${r.makeId ?? '–'} model=${r.modelId ?? '–'} modelGroup=${r.modelGroupId ?? '–'} · Bezeichnung "${r.label || '–'}"${ok ? ` → Suche mit ms=${r.makeId};${r.modelId ?? ''};${r.modelGroupId ?? ''};` : ''}`);
+    if (r.raw) console.log('  filters.ms / chips.makeModel (roh):', short(r.raw, 1200));
     if (!ok) console.log('  Kein Modell erkannt – Slug prüfen: im Browser suchen.mobile.de → Marke/Modell wählen → Adresse /auto/<marke>-<modell>.html vergleichen');
     return ok ? { modelId: r.modelId, modelGroupId: r.modelGroupId } : { modelId: null, modelGroupId: null };
   } catch (e) {
@@ -481,6 +563,8 @@ try {
     const fuel = (['Petrol', 'Diesel', 'Hybrid', 'Electric'] as Fuel[]).find((f) => f.toLowerCase() === fuelArg.toLowerCase()) ?? null;
     await probeMobile(process.argv[3] ?? 'BMW', process.argv[4] ?? '320d', Number(process.argv[5] ?? 2019), fuel, Number(process.argv[7] ?? 80000), process.argv[8] || null, process.argv[9] ? Number(process.argv[9]) : null);
   } else if (name === 'mobile-model') await probeMobileModel(process.argv[3] ?? 'Mercedes-Benz', process.argv[4] ?? 'S-Class');
+  else if (name === 'mobile-models') await probeMobileModels(Number(process.argv[3] ?? 3500), process.argv[4] ?? '');
+  else if (name === 'sauto-detail') await probeSautoDetail(process.argv[3] ?? '88823722');
   else if (name === 'copart') await probeCopart(process.argv[3] === 'ca' ? 'ca' : 'us');
   else if (name === 'dubizzle') await probeDubizzle();
   else if (name === 'japcarz') await probeJapCarz(process.argv[3] || 'upcoming_auctions', Number(process.argv[4] ?? 1));
