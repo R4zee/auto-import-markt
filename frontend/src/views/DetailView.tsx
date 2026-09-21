@@ -111,18 +111,46 @@ export function DetailView({ id }: { id: string }) {
             )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(104px,132px)', gap: 10 }}>
-            <div style={{ position: 'relative', aspectRatio: '16/10', background: 'var(--color-neutral-900)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-              <Photo src={photos[heroIdx]} alt={name} hint={photos.length ? name : t('photoHint')} />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {THUMBS.map((hint, i) => (
-                <div key={hint} onClick={() => photos[i + 1] && setHeroIdx(i + 1)} style={{ position: 'relative', aspectRatio: '4/3', background: 'var(--color-neutral-900)', borderRadius: 'var(--radius-sm)', overflow: 'hidden', cursor: photos[i + 1] ? 'pointer' : 'default', outline: heroIdx === i + 1 ? '1px solid var(--color-accent)' : undefined }}>
-                  <Photo src={photos[i + 1]} alt={t(hint)} hint={t(hint)} />
+          {photos.length > 0 ? (
+            /* Galerie: alle Fotos der Quelle, Hauptbild mit Blättern und Zähler, darunter alle Vorschaubilder */
+            <div className="aim-gallery">
+              <div className="aim-gallery-hero">
+                <Photo src={photos[Math.min(heroIdx, photos.length - 1)]} alt={name} hint={name} />
+                {photos.length > 1 && (
+                  <>
+                    <button type="button" className="aim-gallery-nav is-prev" aria-label="←" onClick={() => setHeroIdx((i) => (i - 1 + photos.length) % photos.length)}><i className="ph ph-caret-left" /></button>
+                    <button type="button" className="aim-gallery-nav is-next" aria-label="→" onClick={() => setHeroIdx((i) => (i + 1) % photos.length)}><i className="ph ph-caret-right" /></button>
+                    <span className="aim-gallery-count tabular">{t('photoOf', { i: Math.min(heroIdx, photos.length - 1) + 1, n: photos.length })}</span>
+                  </>
+                )}
+              </div>
+              {photos.length > 1 && (
+                <div className="aim-gallery-strip">
+                  {photos.map((p, i) => (
+                    <button key={p} type="button" className={`aim-gallery-thumb${i === heroIdx ? ' is-active' : ''}`} onClick={() => setHeroIdx(i)} aria-label={t('photoOf', { i: i + 1, n: photos.length })}>
+                      <Photo src={p} alt={`${name} ${i + 1}`} hint="" />
+                    </button>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          </div>
+          ) : (
+            /* Ohne Fotos: Platzhalter – bei japanischen Auktionen die vier Prüfblatt-Ansichten, sonst ein Feld */
+            <div style={{ display: 'grid', gridTemplateColumns: sel.market === 'JP' && isAuction ? 'minmax(0,1fr) minmax(104px,132px)' : 'minmax(0,1fr)', gap: 10 }}>
+              <div style={{ position: 'relative', aspectRatio: '16/10', background: 'var(--color-neutral-900)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                <Photo alt={name} hint={t('photoHint')} />
+              </div>
+              {sel.market === 'JP' && isAuction && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {THUMBS.map((hint) => (
+                    <div key={hint} style={{ position: 'relative', aspectRatio: '4/3', background: 'var(--color-neutral-900)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                      <Photo alt={t(hint)} hint={t(hint)} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div>
             <h6 style={{ color: 'var(--color-neutral-500)', marginBottom: 10 }}>{t('vehicleData')}</h6>

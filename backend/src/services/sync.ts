@@ -84,14 +84,18 @@ export async function deactivateOrphans(): Promise<Record<string, number>> {
   return out;
 }
 
-/** EUR-/Endpreis-Spalten neu berechnen, wenn sich der Kursstand seit dem letzten Mal geändert hat. */
+/** Stand der Endpreis-Kalkulation (Gebühren, Versicherungssätze) – hochzählen, wenn sich calcLandedCost/FEES ändern */
+const LANDED_VERSION = '2';
+
+/** EUR-/Endpreis-Spalten neu berechnen, wenn sich der Kursstand oder die Kalkulation seit dem letzten Mal geändert hat. */
 export async function recomputeDerivedIfFxChanged(): Promise<number> {
   const asOf = fxSync().asOf;
   if (!asOf || asOf === 'fallback') return 0;
+  const stamp = `${asOf}|v${LANDED_VERSION}`;
   const last = await one<{ value: string }>("SELECT value FROM meta WHERE key = 'derived_fx_as_of'");
-  if (last?.value === asOf) return 0;
+  if (last?.value === stamp) return 0;
   const n = await listingsRepo.recomputeDerived();
-  await run("INSERT INTO meta(key, value) VALUES ('derived_fx_as_of', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [asOf]);
+  await run("INSERT INTO meta(key, value) VALUES ('derived_fx_as_of', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [stamp]);
   return n;
 }
 

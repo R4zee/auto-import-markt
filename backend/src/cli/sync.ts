@@ -1,6 +1,6 @@
 import { closeDb, ready } from '../db.js';
 import { getFx } from '../services/fx.js';
-import { canonicalizeStoredMakes, syncAll, syncProvider, type SyncReport } from '../services/sync.js';
+import { canonicalizeStoredMakes, recomputeDerivedIfFxChanged, syncAll, syncProvider, type SyncReport } from '../services/sync.js';
 import { refreshFacets } from '../services/facets.js';
 import { listingsRepo } from '../repositories/listings.js';
 import { activeProviders } from '../providers/index.js';
@@ -34,6 +34,10 @@ if (only.length) {
   const ta = Date.now();
   const ended = await listingsRepo.deactivateEndedAuctions();
   if (ended > 0) reports.push({ provider: 'auctions', status: 'ok', upserted: 0, deactivated: ended, warnings: ['Auktionen mit abgelaufenem Termin deaktiviert'], durationMs: Date.now() - ta });
+  // Endpreise nachrechnen, falls Kurse oder Kalkulation sich geändert haben (sonst 0 Zeilen)
+  const t0 = Date.now();
+  const recomputed = await recomputeDerivedIfFxChanged();
+  if (recomputed > 0) reports.push({ provider: 'fx-recompute', status: 'ok', upserted: recomputed, deactivated: 0, warnings: ['Endpreise mit neuem Kursstand bzw. neuer Kalkulation neu berechnet'], durationMs: Date.now() - t0 });
   await refreshFacets();
 } else {
   reports = await syncAll();
