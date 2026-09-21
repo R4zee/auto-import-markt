@@ -1,6 +1,8 @@
 name: Sync Listings
 
 # Läuft alle 3 Stunden (UTC; seit 21.09.2026 – öffentliches Repository, keine Minutenbegrenzung) und auf Knopfdruck.
+# Hinweis 21.09.2026: nach dem Wechsel auf „öffentlich“ feuerten die Zeitpläne ab 07:12 UTC nicht mehr (weder Sync noch
+# Vergleichspreise); eine Änderung an der Workflow-Datei auf main registriert den Zeitplan neu.
 # Holt die Bestände aller aktiven Provider und schreibt sie häppchenweise in die Turso-Datenbank (Zwischenstände sind
 # schon während des Laufs sichtbar). Encar wird über den Residential-Proxy abgerufen (ENCAR_PROXY_URL).
 on:
