@@ -8,7 +8,7 @@ import { CopartProvider, copartSkipReason, mapCopart } from '../providers/copart
 import { DubizzleProvider, dubizzleSkipReason, initialBands, mapDubizzle } from '../providers/dubizzle.js';
 import { japcarzSkipReason, mapJapCarz, type JapCarzItem } from '../providers/japcarz.js';
 import { extractItems, mapMobileItem, mobileApiUrl, mobileMakeId, MobileDeReference, mobileSearchUrl, mobileSeoUrl, type RefQuery } from '../providers/mobilede.js';
-import { bucketKey, kmBandFor, kmWindow, summarize, titleMatches } from '../services/reference.js';
+import { bucketKey, kmBandFor, kmWindow, kwWindow, summarize, titleMatches } from '../services/reference.js';
 import { yearBand } from '../domain/generations.js';
 import type { Fuel } from '../domain/types.js';
 
@@ -309,16 +309,17 @@ async function probeMobileModel(make: string, model: string): Promise<{ modelId:
   }
 }
 
-/** Vergleichspreise DE: `probe mobile <Marke> <Beschreibung> [Baujahr] [Petrol|Diesel|Hybrid|Electric] [km] [Modellname]` */
-async function probeMobile(make: string, description: string, year: number, fuel: Fuel | null, km: number, model: string | null) {
+/** Vergleichspreise DE: `probe mobile <Marke> <Beschreibung> [Baujahr] [Petrol|Diesel|Hybrid|Electric] [km] [Modellname] [kW]` */
+async function probeMobile(make: string, description: string, year: number, fuel: Fuel | null, km: number, model: string | null, kw: number | null) {
   // Beschreibung darf einen Baureihen-Code enthalten ("S350 W221") → Bauzeitraum statt Baujahr ±1
   const band = yearBand({ make, model: description, trim: description, year }, config.reference.yearSpan);
   const cleanDesc = band.generation ? description.replace(new RegExp(`\\s*\\b${band.generation}\\b\\s*`, 'i'), ' ').trim() : description;
   const ref = model ? await probeMobileModel(make, model) : { modelId: null, modelGroupId: null };
-  const q: RefQuery = { make, description: cleanDesc, yearFrom: band.from, yearTo: band.to, fuel, generation: band.generation, kmTo: kmBandFor(km), ...ref, model: model ?? undefined };
+  const power = kw ? kwWindow(kw) : null;
+  const q: RefQuery = { make, description: cleanDesc, yearFrom: band.from, yearTo: band.to, fuel, generation: band.generation, kmTo: kmBandFor(km), ...ref, model: model ?? undefined, kwFrom: power?.from ?? null, kwTo: power?.to ?? null };
   const src = new MobileDeReference();
   const viaId = ref.modelId ? `Modell-ID ${ref.modelId}` : ref.modelGroupId ? `Modellgruppe ${ref.modelGroupId}` : '';
-  console.log(`\n=== mobile.de · ${make} (ID ${mobileMakeId(make) ?? 'UNBEKANNT → REFERENCE_MAKE_IDS'}) · "${cleanDesc}"${viaId ? ` · ${viaId} statt Freitext` : ''} · ${q.yearFrom}–${q.yearTo}${band.generation ? ` (Baureihe ${band.generation})` : ''} · ${fuel ?? 'alle Kraftstoffe'} · ${km} km → Suche bis ${q.kmTo ?? 'unbegrenzt'} km`);
+  console.log(`\n=== mobile.de · ${make} (ID ${mobileMakeId(make) ?? 'UNBEKANNT → REFERENCE_MAKE_IDS'}) · "${cleanDesc}"${viaId ? ` · ${viaId} statt Freitext` : ''} · ${q.yearFrom}–${q.yearTo}${band.generation ? ` (Baureihe ${band.generation})` : ''} · ${fuel ?? 'alle Kraftstoffe'} · ${km} km → Suche bis ${q.kmTo ?? 'unbegrenzt'} km${power ? ` · ${kw} kW → Suche ${power.from}–${power.to} kW` : ''}`);
   console.log('Such-URL (Browser):', mobileSearchUrl(q));
   let got: Awaited<ReturnType<typeof src.fetchPage>> | null = null;
   for (const mode of ['query', 'url'] as const) {
@@ -347,7 +348,7 @@ async function probeMobile(make: string, description: string, year: number, fuel
   // mobile.de sucht die Beschreibung unscharf → Modellabgleich über shortTitle/Titel wie im Adapter
   const matching = got.items.filter((s) => titleMatches(cleanDesc, s));
   console.log(`Modellabgleich "${cleanDesc}": ${matching.length} von ${got.items.length} Treffern passen${matching.length < got.items.length ? ` – verworfen: ${got.items.filter((s) => !titleMatches(cleanDesc, s)).map((s) => s.model ?? s.title).slice(0, 6).join(' | ')}` : ''}`);
-  const fake = { km, engineCcm: null, powerKw: null } as const;
+  const fake = { km, engineCcm: null, powerKw: kw };
   const bucket = { key: bucketKey(q), source: src.id, query: q, samples: got.items, total: got.total, url: mobileSearchUrl(q), fetchedAt: fetchedAt };
   const win = kmWindow(km);
   const sum = summarize(fake, 0, bucket);
@@ -455,14 +456,22 @@ async function probeUrl(url: string, headerArgs: string[]) {
   console.log(`\n=== ${url}`);
   const t0 = Date.now();
   const res = await robustFetch(url, { headers, timeoutMs: 30000, proxyUrl, nodeOnly: true, tls: 'chrome' });
+  const type = res.headers.get('content-type') ?? '?';
+  // Bilder (CDN-Prüfung): nur Status, Typ und Größe – kein Binärmüll im Protokoll
+  if (/^image\//i.test(type)) {
+    const bytes = (await res.arrayBuffer()).byteLength;
+    console.log(`  HTTP ${res.status} · ${Date.now() - t0} ms · ${type} · ${(bytes / 1024).toFixed(1)} KB · Header: ${[...res.headers.entries()].filter(([k]) => /cache|vary|access-control|x-/i.test(k)).map(([k, v]) => `${k}=${v}`).join(' · ')}`);
+    return;
+  }
   const body = await res.text();
-  console.log(`  HTTP ${res.status} · ${Date.now() - t0} ms · ${res.headers.get('content-type') ?? '?'} · ${(body.length / 1024).toFixed(1)} KB`);
+  console.log(`  HTTP ${res.status} · ${Date.now() - t0} ms · ${type} · ${(body.length / 1024).toFixed(1)} KB`);
+  const max = Number(process.env.PROBE_JSON_CHARS ?? 4000);
   try {
     const json = JSON.parse(body) as Record<string, unknown>;
     console.log('  JSON-Schlüssel:', Object.keys(json).join(', '));
-    console.log(short(json, 4000));
+    console.log(short(json, max));
   } catch {
-    console.log(body.slice(0, 3000));
+    console.log(body.slice(0, Math.max(3000, max)));
   }
 }
 
@@ -470,7 +479,7 @@ try {
   if (name === 'mobile') {
     const fuelArg = process.argv[6] ?? '';
     const fuel = (['Petrol', 'Diesel', 'Hybrid', 'Electric'] as Fuel[]).find((f) => f.toLowerCase() === fuelArg.toLowerCase()) ?? null;
-    await probeMobile(process.argv[3] ?? 'BMW', process.argv[4] ?? '320d', Number(process.argv[5] ?? 2019), fuel, Number(process.argv[7] ?? 80000), process.argv[8] ?? null);
+    await probeMobile(process.argv[3] ?? 'BMW', process.argv[4] ?? '320d', Number(process.argv[5] ?? 2019), fuel, Number(process.argv[7] ?? 80000), process.argv[8] || null, process.argv[9] ? Number(process.argv[9]) : null);
   } else if (name === 'mobile-model') await probeMobileModel(process.argv[3] ?? 'Mercedes-Benz', process.argv[4] ?? 'S-Class');
   else if (name === 'copart') await probeCopart(process.argv[3] === 'ca' ? 'ca' : 'us');
   else if (name === 'dubizzle') await probeDubizzle();

@@ -62,10 +62,12 @@ export function mapSauto(it: SautoItem, fetchedAt: string): Listing | null {
   const gear = str(it.gearbox_cb?.name);
   const transmission = /manu/i.test(gear) ? 'Manual' : normalizeTransmission(gear || 'automat');
   const ccmRaw = num(it.engine_volume);
-  const ccm = fuel === 'Electric' ? null : ccmRaw && ccmRaw > 400 && ccmRaw < 9000 ? Math.round(ccmRaw) : null;
-  // Die Trefferliste liefert keinen Hubraum – Hubraumangabe aus der Ausstattungszeile ("1,2 TSi", "2.0 TDI")
+  // Die Trefferliste liefert keinen Hubraum – Literangabe aus Ausstattungszeile oder Titel ("1,2 TSi", "2.0 TDI",
+  // "Aventador 6,5 V12"); daraus ein Näherungswert in cm³ (2,0 → 2000; die Toleranz im Vergleich beträgt 12 %)
   const extra = str(it.additional_model_name).trim();
-  const litres = extra.match(/\b(\d)[,.](\d)\b/);
+  const litres = extra.match(/\b(\d)[,.](\d)\b/) ?? title.match(/\b(\d)[,.](\d)\b/);
+  const ccmFromLitres = litres ? Number(`${litres[1]}.${litres[2]}`) * 1000 : null;
+  const ccm = fuel === 'Electric' ? null : ccmRaw && ccmRaw > 400 && ccmRaw < 9000 ? Math.round(ccmRaw) : ccmFromLitres && ccmFromLitres >= 600 && ccmFromLitres < 9000 ? Math.round(ccmFromLitres) : null;
   const driveText = str(it.drive_cb?.name);
   const drive = /4x4|awd|všechna|vsechna|4wd/i.test(`${driveText} ${title}`) ? 'AWD' : /předn|predn/i.test(driveText) ? 'FWD' : /zadn/i.test(driveText) ? 'RWD' : encarDrive(title, make);
   const photos = (it.images ?? []).map((i) => sautoImage(i.url)).filter((p): p is string => !!p);

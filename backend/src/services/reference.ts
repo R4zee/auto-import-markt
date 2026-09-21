@@ -131,6 +131,25 @@ export function kmWindow(km: number): { from: number; to: number } {
   return { from: 0, to: Math.max(config.reference.kmFloor, Math.round(km * (1 + pct))) };
 }
 
+/**
+ * Leistungsbänder (kW) für die Suche: mobile.de sortiert nach Preis, ohne Leistungsfilter liefern die ersten Seiten
+ * nur die schwächsten Motoren eines Modells (X6 M 460 kW fand unter 40 günstigen X6 40i genau ein Angebot).
+ */
+export const KW_BANDS = [0, 60, 80, 100, 120, 145, 175, 210, 250, 300, 360, 430, 520, 650];
+
+export function kwBandFor(kw: number | null | undefined): { from: number; to: number | null } | null {
+  if (kw == null || !(kw > 0)) return null;
+  let i = 0;
+  while (i + 1 < KW_BANDS.length && kw >= KW_BANDS[i + 1]) i++;
+  return { from: KW_BANDS[i], to: i + 1 < KW_BANDS.length ? KW_BANDS[i + 1] : null };
+}
+
+/** Suchfenster zum Band mit 15 % Rand, damit Nachbarn am Bandrand (Leistungs-Toleranz in engineMatches) nicht fehlen */
+export function kwWindow(kw: number): { from: number; to: number | null } {
+  const b = kwBandFor(kw) ?? { from: 0, to: null };
+  return { from: Math.floor(b.from * 0.85), to: b.to == null ? null : Math.ceil(b.to * 1.15) };
+}
+
 export const KM_BAND_STEP = 25000;
 export const KM_BAND_MAX = 300000;
 

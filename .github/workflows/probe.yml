@@ -1,0 +1,45 @@
+name: Probe
+
+# Live-Prüfung einer Quelle vom GitHub-Runner aus (npm run probe -- …), ohne Datenbank-Schreibzugriff. Der Runner
+# erreicht Seiten, die aus anderen Umgebungen gesperrt sind (mobile.de, Sauto-CDN, Vercel). Beispiele für `args`:
+#   sauto · mobile BMW "X6 M" 2020 Petrol 156000 "X6 M" 460 · url https://d19-a.sdn.cz/…jpeg · url "https://auto-import-markt.vercel.app/api/listings?q=X6"
+on:
+  workflow_dispatch:
+    inputs:
+      args:
+        description: 'Argumente für npm run probe (Anführungszeichen für Leerzeichen, z. B. mobile BMW "X6 M" 2020 Petrol 156000 "X6 M")'
+        required: true
+
+jobs:
+  probe:
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Probe
+        working-directory: backend
+        env:
+          PROBE_ARGS: ${{ github.event.inputs.args }}
+          EUROPE_PROXY_URL: ${{ secrets.EUROPE_PROXY_URL }}
+          REFERENCE_PROXY_URL: ${{ secrets.REFERENCE_PROXY_URL }}
+          COPART_PROXY_URL: ${{ secrets.COPART_PROXY_URL }}
+          DUBIZZLE_PROXY_URL: ${{ secrets.DUBIZZLE_PROXY_URL }}
+          JAPCARZ_PROXY_URL: ${{ secrets.JAPCARZ_PROXY_URL }}
+          OLX_ENABLED: ${{ vars.OLX_ENABLED || 'false' }}
+          OLX_SITES: ${{ vars.OLX_SITES }}
+          SUBITO_ENABLED: ${{ vars.SUBITO_ENABLED || 'false' }}
+          SAUTO_ENABLED: ${{ vars.SAUTO_ENABLED || 'false' }}
+          COPART_ENABLED: ${{ vars.COPART_ENABLED || 'false' }}
+          COPART_CA_ENABLED: ${{ vars.COPART_CA_ENABLED || 'true' }}
+          JAPCARZ_ENABLED: ${{ vars.JAPCARZ_ENABLED || 'true' }}
+          DUBIZZLE_ENABLED: ${{ vars.DUBIZZLE_ENABLED || 'false' }}
+          REFERENCE_MOBILE_MODE: ${{ vars.REFERENCE_MOBILE_MODE || 'url' }}
+        # Argumente wie in der Shell trennen (Anführungszeichen bleiben zusammen); nur Nutzer mit Schreibrecht können den Lauf starten
+        run: |
+          eval "set -- $PROBE_ARGS"
+          node --import tsx src/cli/probe.ts "$@"

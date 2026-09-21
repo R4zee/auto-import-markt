@@ -241,7 +241,8 @@ describe('Sauto.cz mapping', () => {
     assert.equal(l.fuel, 'Diesel');
     assert.equal(l.transmission, 'Automatic');
     assert.equal(l.drive, 'FWD');
-    assert.equal(l.engineCcm, null);
+    // ohne engine_volume: Näherung aus der Literangabe (2.0 → 2000 cm³)
+    assert.equal(l.engineCcm, 2000);
     assert.equal(l.engine, '2.0 L');
     assert.equal(l.photoCount, 41);
     assert.equal(l.location, 'Brno-město');
