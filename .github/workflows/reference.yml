@@ -16,7 +16,11 @@ on:
         required: false
         default: ''
       reference_max_minutes:
-        description: 'Zeitbudget in Minuten (leer = Variable bzw. 50)'
+        description: 'Zeitbudget in Minuten (leer = Variable bzw. 50; Maximum ~340, der Job endet nach 360)'
+        required: false
+        default: ''
+      concurrency:
+        description: 'Parallele mobile.de-Anfragen (leer = Variable bzw. 2; 4 für einen Nachhol-Lauf, bei 403/429 bricht der Job ab)'
         required: false
         default: ''
 
@@ -28,7 +32,9 @@ jobs:
   reference:
     # Variable RUNNER=self-hosted → eigener Runner (Teil L in docs/deployment.md), sonst GitHub-Runner (Minutenkontingent)
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 120
+    # GitHub-Maximum je Job; der stündliche Lauf endet über REFERENCE_MAX_MINUTES (50) viel früher, ein manueller
+    # Nachhol-Lauf (alle fehlenden Buckets, 21.09.2026) darf bis zu ~340 Minuten laufen
+    timeout-minutes: 360
     if: ${{ vars.REFERENCE_ENABLED != 'false' }}
     steps:
       - uses: actions/checkout@v4
@@ -49,5 +55,5 @@ jobs:
           REFERENCE_MAKE_IDS: ${{ vars.REFERENCE_MAKE_IDS }}
           REFERENCE_PROXY_URL: ${{ secrets.REFERENCE_PROXY_URL }}
           # Parallele mobile.de-Anfragen (Standard 2); bei 403/429 auf 1 zurück
-          REFERENCE_CONCURRENCY: ${{ vars.REFERENCE_CONCURRENCY || '2' }}
+          REFERENCE_CONCURRENCY: ${{ github.event.inputs.concurrency || vars.REFERENCE_CONCURRENCY || '2' }}
         run: node --import tsx src/cli/reference.ts
