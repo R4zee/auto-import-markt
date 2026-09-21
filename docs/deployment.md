@@ -432,6 +432,17 @@ mit 175 $ Gebot als „−94 %“ ganz vorn. Seither bekommen Auktionen den Verg
 `heavyMigrations` hat vorhandene Abstände von Auktionen einmalig gelöscht (Merker `ref_diff_auction_null`). Die
 Detailansicht erklärt das in einer Zeile (`refAuction`).
 
+**Turso-Schreibsperre (21.09.2026):** Nach den Massenläufen des Tages (Schlüssel-Reset über 273.000 Inserate, Nachzug
+der Sortierspalten, Nachhol-Lauf der Buckets) sperrte Turso alle Schreibzugriffe: „BLOCKED: … SQL write operations are
+forbidden (writes are blocked, do you need to upgrade your plan?)“ – das Kontingent des Plans (Zeilen-Schreibvorgänge
+bzw. Speicher) war erschöpft. Die Vercel-Function meldete daraufhin bei jeder Anfrage `startup_failed`, weil `migrate()`
+beim Kaltstart schreibt (`CREATE … IF NOT EXISTS`), obwohl alle Daten lesbar waren. Seither fängt `ready()` diese
+Sperre auf Vercel ab (`isWriteBlocked`, `dbReadOnly`) und die Website läuft lesend weiter; `/api/health` zeigt
+`writes: BLOCKED …`. Jobs (Sync, Vergleichspreise) schlagen bis zur Freigabe fehl. Prüfen: Turso-Dashboard → Usage
+(Rows written, Storage) und Plan; Abhilfe: Plan erhöhen oder auf den Monatswechsel warten. Jede UPDATE-Zeile zählt
+mit ihren Indexeinträgen (abdeckender Suchindex v3 mit 24 Spalten) mehrfach – Massenläufe wie der Schlüssel-Reset sind
+deshalb teuer und sollten selten bleiben.
+
 **Transportkosten EU (21.09.2026):** Innerhalb der EU rechnet die Kalkulation mit 0,3 % Transportversicherung statt 1,1 %
 Seefracht-Versicherung (`FEES.insurancePctEU`) – ein 440.000-€-Fahrzeug aus Prag stand sonst mit über 5.000 € „Seefracht“ da.
 Nach Änderungen an Gebühren `LANDED_VERSION` in `services/sync.ts` hochzählen, dann rechnet der nächste Sync alle
