@@ -20,9 +20,34 @@ export function db(): Client {
   return client;
 }
 
+/**
+ * Turso sperrt alle Schreibzugriffe, wenn das Kontingent des Plans erschöpft ist (Meldung „BLOCKED: … SQL write
+ * operations are forbidden (writes are blocked, do you need to upgrade your plan?)“, 21.09.2026 nach den Massenläufen).
+ */
+const WRITE_BLOCKED = /write operations are forbidden|writes are blocked/i;
+export function isWriteBlocked(e: unknown): boolean {
+  return WRITE_BLOCKED.test(e instanceof Error ? e.message : String(e));
+}
+
+let readOnly = false;
+/** true, wenn die Datenbank beim Start keine Schreibzugriffe erlaubte – die Function läuft dann nur lesend weiter */
+export function dbReadOnly(): boolean {
+  return readOnly;
+}
+
 /** Stellt sicher, dass Schema und Verbindung bereitstehen. */
 export async function ready(): Promise<Client> {
-  if (!migration) migration = migrate().catch((e) => { migration = null; throw e; });
+  if (!migration) migration = migrate().catch((e) => {
+    // Schreibsperre auf Vercel: lesend weiterlaufen. Das Schema stammt vollständig vom letzten Job, die Website braucht
+    // nur Leseabfragen – ohne diesen Fall meldete jede Anfrage „startup_failed“, obwohl alle Daten lesbar waren.
+    if (isServerless && isWriteBlocked(e)) {
+      readOnly = true;
+      console.warn('Datenbank ohne Schreibrecht (Turso-Kontingent?) – Function läuft nur lesend:', e instanceof Error ? e.message : e);
+      return;
+    }
+    migration = null;
+    throw e;
+  });
   await migration;
   return db();
 }
@@ -31,6 +56,7 @@ export async function closeDb(): Promise<void> {
   client?.close();
   client = null;
   migration = null;
+  readOnly = false;
 }
 
 export async function query<T extends Row = Row>(sql: string, args: InValue[] = []): Promise<T[]> {

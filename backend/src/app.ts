@@ -2,7 +2,7 @@ import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { config, databaseMissing, isServerless } from './config.js';
-import { ready } from './db.js';
+import { dbReadOnly, ready } from './db.js';
 import { listingsRepo } from './repositories/listings.js';
 import { adminRoutes } from './routes/admin.js';
 import { calcRoutes } from './routes/calc.js';
@@ -34,6 +34,8 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     ok: !databaseMissing,
     listings: await listingsRepo.countBySource(),
     serverless: isServerless,
+    // Turso sperrt Schreibzugriffe bei erschöpftem Plan-Kontingent; die Website liest dann weiter, Jobs schlagen fehl
+    writes: dbReadOnly() ? 'BLOCKED – Turso-Kontingent (Usage/Plan) prüfen; Sync und Vergleichspreise schreiben nicht' : 'ok',
     database: databaseMissing ? 'MISSING – TURSO_DATABASE_URL/TURSO_AUTH_TOKEN setzen und redeployen' : config.database.url.startsWith('file:') ? 'local-file' : config.database.url === ':memory:' ? 'memory' : 'remote',
     time: new Date().toISOString(),
   }));
