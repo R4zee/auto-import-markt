@@ -363,7 +363,11 @@ export const listingsRepo = {
           args: [pre.priceEur, pre.landed.DE, pre.landed.AT, pre.landed.NL, pre.landed.PL, ...DEST_CODES.flatMap((d) => [pre.landed[d], pre.landed[d]]), r.id],
         }];
       });
-      if (stmts.length) await db().batch(stmts, 'write');
+      if (stmts.length) {
+        await db().batch(stmts, 'write');
+        // Leseanfragen der Website zwischen den Blöcken durchlassen (ein Schreiber; Lauf 57 blockierte die Seite)
+        await new Promise((res) => setTimeout(res, 150));
+      }
     }
     return n;
   },
