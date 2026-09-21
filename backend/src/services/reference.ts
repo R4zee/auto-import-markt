@@ -4,7 +4,7 @@ import { db, one, query, run, type Row } from '../db.js';
 import { yearBand } from '../domain/generations.js';
 import { makeKey } from '../domain/makes.js';
 import { DEST_CODES } from '../domain/markets.js';
-import type { DecoratedListing, DestCode, Fuel, Listing, ReferenceSummary } from '../domain/types.js';
+import type { DecoratedListing, DestCode, Fuel, Listing, OfferType, ReferenceSummary } from '../domain/types.js';
 import { HttpError, sleep } from '../providers/http.js';
 import { matchModel, MobileDeReference, mobileMakeId, type MobileModelItem, type RefQuery, type RefSample } from '../providers/mobilede.js';
 
@@ -342,7 +342,19 @@ export function diffPct(landedEur: number, refEur: number): number {
   return Math.round(((landedEur - refEur) / refEur) * 1000) / 10;
 }
 
-export function summarize(l: Pick<Listing, 'km' | 'engineCcm' | 'powerKw'>, landedEur: number, b: RefBucket): ReferenceSummary | null {
+/**
+ * Nur Festpreise haben einen Abstand zum Vergleichspreis. Bei Auktionen ist `price` das Start- bzw. aktuelle
+ * Höchstgebot (Copart: Gebot, Jap Carz: Startgebot) – ein Copart-Los mit 175 $ Gebot stand als „−94 %“ ganz vorn in
+ * der Sortierung nach Abstand (21.09.2026). Der Vergleichspreis selbst („DE ab …“) wird weiterhin gezeigt.
+ * Identisch zur SQL-Bedingung in refDiffSql() (db.ts).
+ */
+export function firmPrice(l: { offerType?: OfferType | null }): boolean {
+  return l.offerType !== 'auction';
+}
+
+type RefListing = Pick<Listing, 'km' | 'engineCcm' | 'powerKw'> & { offerType?: OfferType | null };
+
+export function summarize(l: RefListing, landedEur: number, b: RefBucket): ReferenceSummary | null {
   const { samples, kmFrom, kmTo } = comparable(l, b);
   if (samples.length < MIN_COMPARABLES) return null;
   const best = samples[0];
@@ -354,13 +366,13 @@ export function summarize(l: Pick<Listing, 'km' | 'engineCcm' | 'powerKw'>, land
     kmFrom, kmTo,
     yearFrom: b.query.yearFrom, yearTo: b.query.yearTo,
     url: best.url,
-    diffPct: diffPct(landedEur, best.priceEur),
+    diffPct: firmPrice(l) ? diffPct(landedEur, best.priceEur) : null,
     generation: b.query.generation ?? null,
     fetchedAt: b.fetchedAt,
   };
 }
 
-export function detailFrom(l: Pick<Listing, 'km' | 'engineCcm' | 'powerKw'>, landedEur: number, b: RefBucket): ReferencePrices {
+export function detailFrom(l: RefListing, landedEur: number, b: RefBucket): ReferencePrices {
   const { samples, kmFrom, kmTo } = comparable(l, b);
   const prices = samples.map((s) => s.priceEur);
   // unter MIN_COMPARABLES: Treffer werden gezeigt (count, samples), aber kein Vergleichspreis/Abstand
@@ -375,7 +387,7 @@ export function detailFrom(l: Pick<Listing, 'km' | 'engineCcm' | 'powerKw'>, lan
     yearFrom: b.query.yearFrom, yearTo: b.query.yearTo,
     kmFrom, kmTo,
     landedEur,
-    diffPct: minEur != null ? diffPct(landedEur, minEur) : null,
+    diffPct: minEur != null && firmPrice(l) ? diffPct(landedEur, minEur) : null,
     url: samples[0]?.url ?? null,
     generation: b.query.generation ?? null,
     samples: samples.slice(0, 12).map((s) => ({ priceEur: s.priceEur, year: s.year, km: s.km, url: s.url })),
@@ -468,23 +480,24 @@ export async function fetchBucket(q: RefQuery): Promise<RefBucket> {
 // --- Vergleichspreis-Spalten je Inserat (ref_min_eur, ref_diff_<Zielland>) -----------------------------------------
 
 interface RefListingRow extends Row {
-  id: string; km: number; engine_ccm: number | null; power_kw: number | null;
+  id: string; km: number; engine_ccm: number | null; power_kw: number | null; offer_type: string;
   landed_de: number | null; landed_at: number | null; landed_nl: number | null; landed_pl: number | null;
 }
-const REF_LISTING_COLS = 'id, km, engine_ccm, power_kw, landed_de, landed_at, landed_nl, landed_pl';
+const REF_LISTING_COLS = 'id, km, engine_ccm, power_kw, offer_type, landed_de, landed_at, landed_nl, landed_pl';
 
 /**
  * UPDATE-Anweisungen: günstigstes vergleichbares Angebot und Abstand je Zielland für die Inserate eines Buckets.
  * ref_min_eur = 0 heißt „geprüft, kein vergleichbares Angebot“ (Abstände NULL) – NULL heißt „noch nicht berechnet“.
+ * Auktionen bekommen den Vergleichspreis, aber keinen Abstand (firmPrice).
  */
-function referenceUpdates(rows: RefListingRow[], b: RefBucket): InStatement[] {
+export function referenceUpdates(rows: RefListingRow[], b: RefBucket): InStatement[] {
   return rows.map((r) => {
-    const l = { km: Number(r.km), engineCcm: r.engine_ccm == null ? null : Number(r.engine_ccm), powerKw: r.power_kw == null ? null : Number(r.power_kw) };
+    const l = { km: Number(r.km), engineCcm: r.engine_ccm == null ? null : Number(r.engine_ccm), powerKw: r.power_kw == null ? null : Number(r.power_kw), offerType: r.offer_type as OfferType };
     const samples = comparable(l, b).samples;
     const min = samples.length >= MIN_COMPARABLES ? samples[0].priceEur : 0;
     const diff = (dest: DestCode): number | null => {
       const landed = r[`landed_${dest.toLowerCase()}` as keyof RefListingRow];
-      return min > 0 && landed != null ? diffPct(Number(landed), min) : null;
+      return min > 0 && landed != null && firmPrice(l) ? diffPct(Number(landed), min) : null;
     };
     return { sql: 'UPDATE listings SET ref_min_eur = ?, ref_diff_de = ?, ref_diff_at = ?, ref_diff_nl = ?, ref_diff_pl = ? WHERE id = ?', args: [min, ...DEST_CODES.map(diff), r.id] };
   });

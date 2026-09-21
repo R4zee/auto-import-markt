@@ -6,9 +6,10 @@ process.env.REFERENCE_MAKE_IDS = '{"Hongqi": 99999}';
 
 const { copartBody, copartPhoto, copartSkipReason, mapCopart } = await import('../src/providers/copart.js');
 const { extractItems, extractResolvedModel, firstInt, flattenModelList, mapMobileItem, matchModel, mobileApiUrl, mobileMakeId, mobileSearchParams, mobileSeoUrl, normModelLabel } = await import('../src/providers/mobilede.js');
-const { bucketKey, bucketQuery, detailFrom, diffPct, engineMatches, isOneOff, kmBandFor, kmWindow, summarize, titleMatches, variantText } = await import('../src/services/reference.js');
+const { bucketKey, bucketQuery, detailFrom, diffPct, engineMatches, isOneOff, kmBandFor, kmWindow, referenceUpdates, summarize, titleMatches, variantText } = await import('../src/services/reference.js');
 const { powerKwFromText } = await import('../src/providers/types.js');
 const { generationOf, yearBand } = await import('../src/domain/generations.js');
+import type { InStatement } from '@libsql/client';
 import type { RefBucket } from '../src/services/reference.js';
 
 const NOW = '2026-09-15T10:00:00.000Z';
@@ -179,6 +180,23 @@ describe('Vergleichspreise DE – Zusammenfassung', () => {
     assert.ok(!isOneOff('BMW X6 M Competition Panorama Soft-Close Vollleder'));
     const armored = { ...bucket, samples: [...bucket.samples, { priceEur: 9_000, year: 2019, km: 50_000, kw: 140, ccm: 1995, title: 'BMW 320d gepanzert VR4', url: null }] };
     assert.equal(summarize({ km: 80_000, engineCcm: 1995 }, 18_060, armored)?.minEur, 21_500, 'gepanzerter 9.000-€-Wagen bleibt außen vor');
+  });
+
+  it('Auktionen: Vergleichspreis ja, Abstand nein (Preis ist nur das Start-/Höchstgebot)', () => {
+    const s = summarize({ km: 80_000, engineCcm: 1995, offerType: 'auction' }, 4_100, bucket);
+    assert.ok(s);
+    assert.equal(s.minEur, 21_500); assert.equal(s.count, 2);
+    assert.equal(s.diffPct, null, 'Copart-Los mit 175 $ Gebot darf nicht als −94 % vorn stehen');
+    const d = detailFrom({ km: 80_000, engineCcm: 1995, offerType: 'auction' }, 4_100, bucket);
+    assert.equal(d.minEur, 21_500); assert.equal(d.diffPct, null);
+    assert.equal(summarize({ km: 80_000, engineCcm: 1995, offerType: 'fixed' }, 18_060, bucket)?.diffPct, -16);
+    const stmts = referenceUpdates([
+      { id: 'copart:1', km: 80_000, engine_ccm: 1995, power_kw: null, offer_type: 'auction', landed_de: 4_100, landed_at: 4_200, landed_nl: 4_300, landed_pl: 4_000 },
+      { id: 'olx-ro:2', km: 80_000, engine_ccm: 1995, power_kw: null, offer_type: 'fixed', landed_de: 18_060, landed_at: null, landed_nl: 18_060, landed_pl: 18_060 },
+    ], bucket);
+    const argsOf = (s: InStatement) => (typeof s === 'string' ? [] : s.args);
+    assert.deepEqual(argsOf(stmts[0]), [21_500, null, null, null, null, 'copart:1']);
+    assert.deepEqual(argsOf(stmts[1]), [21_500, -16, null, -16, -16, 'olx-ro:2']);
   });
 
   it('hohe Laufleistung nutzt +30 %; Angebote mit weniger km bleiben vergleichbar', () => {
@@ -372,10 +390,11 @@ describe('Vergleichspreis-Spalten je Inserat', async () => {
     assert.match(key, /^mobilede\|bmw\|320d\|Diesel\|\d{4}-\d{4}\|km\d+$/);
     assert.equal(refKeyFor({ make: 'Unbekannte Marke XY', model: 'Z', trim: '', year: 2019, fuel: 'Petrol', km: 1000 }), '');
   });
-  it('SQL-Abstand rechnet wie diffPct()', () => {
+  it('SQL-Abstand rechnet wie diffPct() und nur für Festpreise', () => {
     const sql = refDiffSql('20000', '17900');
     assert.match(sql, /ROUND\(\(20000 - 17900\) \* 1000\.0 \/ 17900\) \/ 10\.0/);
-    assert.match(refDiffSql('excluded.landed_de', 'listings.ref_min_eur'), /listings\.ref_min_eur > 0 AND excluded\.landed_de IS NOT NULL/);
+    assert.match(sql, /offer_type <> 'auction'/);
+    assert.match(refDiffSql('excluded.landed_de', 'listings.ref_min_eur', 'excluded.offer_type'), /listings\.ref_min_eur > 0 AND excluded\.landed_de IS NOT NULL AND excluded\.offer_type <> 'auction'/);
   });
 });
 

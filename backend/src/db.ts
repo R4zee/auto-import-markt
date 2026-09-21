@@ -269,6 +269,20 @@ async function heavyMigrations(c: Client): Promise<void> {
     }
     await c.execute("INSERT INTO meta(key, value) VALUES ('ref_key_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [REF_KEY_VERSION]);
   }
+  // Auktionen ohne Abstand (21.09.2026): der Preis eines Loses ist das Start-/Höchstgebot, kein Kaufpreis – die
+  // Sortierung nach Abstand zeigte Copart-Lose mit 175 $ Gebot als „−94 %“ ganz vorn. Bestehende Abstände einmalig
+  // löschen (blockweise wie oben); Upsert, Job und Kursnachzug schreiben für Auktionen seither NULL.
+  const auctionDiff = await c.execute("SELECT value FROM meta WHERE key = 'ref_diff_auction_null'");
+  if (!auctionDiff.rows.length) {
+    for (;;) {
+      const r = await c.execute(`UPDATE listings SET ref_diff_de = NULL, ref_diff_at = NULL, ref_diff_nl = NULL, ref_diff_pl = NULL
+        WHERE rowid IN (SELECT rowid FROM listings WHERE offer_type = 'auction'
+          AND (ref_diff_de IS NOT NULL OR ref_diff_at IS NOT NULL OR ref_diff_nl IS NOT NULL OR ref_diff_pl IS NOT NULL) LIMIT 2000)`);
+      if (r.rowsAffected === 0) break;
+      await new Promise((res) => setTimeout(res, 150));
+    }
+    await c.execute("INSERT INTO meta(key, value) VALUES ('ref_diff_auction_null', '1') ON CONFLICT(key) DO NOTHING");
+  }
   // Sauto-Fotos ohne CDN-Größenparameter (das Seznam-CDN lieferte damit nichts aus) – einmalig für den Bestand
   const sautoPhotos = await c.execute("SELECT value FROM meta WHERE key = 'sauto_photos_bare'");
   if (!sautoPhotos.rows.length) {
@@ -296,9 +310,11 @@ async function heavyMigrations(c: Client): Promise<void> {
 /**
  * Abstand des Endpreises zum günstigsten vergleichbaren DE-Angebot in Prozent (eine Nachkommastelle) – identisch zu
  * diffPct() in services/reference.ts. `landedExpr` ist die Endpreis-Spalte bzw. ein Platzhalter, `refExpr` der Vergleichspreis.
+ * Nur für Festpreise (`offerExpr` = Angebotsart): bei Auktionen ist der Preis das Start- bzw. aktuelle Höchstgebot,
+ * ein Abstand dazu (Copart-Los mit 175 $ Gebot → „−94 %“) stünde in der Sortierung ganz vorn – siehe firmPrice().
  */
-export function refDiffSql(landedExpr: string, refExpr = 'ref_min_eur'): string {
-  return `CASE WHEN ${refExpr} > 0 AND ${landedExpr} IS NOT NULL THEN ROUND((${landedExpr} - ${refExpr}) * 1000.0 / ${refExpr}) / 10.0 ELSE NULL END`;
+export function refDiffSql(landedExpr: string, refExpr = 'ref_min_eur', offerExpr = 'offer_type'): string {
+  return `CASE WHEN ${refExpr} > 0 AND ${landedExpr} IS NOT NULL AND ${offerExpr} <> 'auction' THEN ROUND((${landedExpr} - ${refExpr}) * 1000.0 / ${refExpr}) / 10.0 ELSE NULL END`;
 }
 
 /**
