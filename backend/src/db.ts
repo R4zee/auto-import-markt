@@ -259,7 +259,14 @@ async function heavyMigrations(c: Client): Promise<void> {
   // zurücksetzen, der Vergleichspreis-Job trägt sie neu ein. Version hochzählen, wenn sich bucketQuery/yearBand ändern.
   const refVersion = await c.execute("SELECT value FROM meta WHERE key = 'ref_key_version'");
   if (refVersion.rows[0]?.value !== REF_KEY_VERSION) {
-    await c.execute('UPDATE listings SET ref_key = NULL, ref_min_eur = NULL, ref_diff_de = NULL, ref_diff_at = NULL, ref_diff_nl = NULL, ref_diff_pl = NULL WHERE ref_key IS NOT NULL');
+    // Blockweise mit Pausen statt einer Anweisung über den ganzen Bestand: die eine UPDATE über 273.000 Zeilen samt
+    // Indizes hielt die Datenbank minutenlang exklusiv, die Website lieferte währenddessen keine Inserate (21.09.2026)
+    for (;;) {
+      const r = await c.execute(`UPDATE listings SET ref_key = NULL, ref_min_eur = NULL, ref_diff_de = NULL, ref_diff_at = NULL, ref_diff_nl = NULL, ref_diff_pl = NULL
+        WHERE rowid IN (SELECT rowid FROM listings WHERE ref_key IS NOT NULL LIMIT 2000)`);
+      if (r.rowsAffected === 0) break;
+      await new Promise((res) => setTimeout(res, 150));
+    }
     await c.execute("INSERT INTO meta(key, value) VALUES ('ref_key_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [REF_KEY_VERSION]);
   }
   // Sauto-Fotos ohne CDN-Größenparameter (das Seznam-CDN lieferte damit nichts aus) – einmalig für den Bestand

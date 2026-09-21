@@ -490,8 +490,19 @@ function referenceUpdates(rows: RefListingRow[], b: RefBucket): InStatement[] {
   });
 }
 
+/**
+ * Schreiben in Blöcken mit kurzer Pause: die Datenbank hat einen Schreiber, und dichte Schreibläufe (Schlüssel für
+ * 273.000 Inserate, Vergleichspreis-Spalten) machten die Website minutenlang unbenutzbar (21.09.2026). Die Pause
+ * lässt Leseanfragen der Website zwischen den Blöcken durch; 900 Blöcke × 150 ms kosten gut zwei Minuten je Volldurchlauf.
+ */
+export const WRITE_BATCH = 300;
+export const WRITE_PAUSE_MS = 150;
+
 async function writeBatches(stmts: InStatement[]): Promise<void> {
-  for (let i = 0; i < stmts.length; i += 300) await db().batch(stmts.slice(i, i + 300), 'write');
+  for (let i = 0; i < stmts.length; i += WRITE_BATCH) {
+    await db().batch(stmts.slice(i, i + WRITE_BATCH), 'write');
+    if (i + WRITE_BATCH < stmts.length) await sleep(WRITE_PAUSE_MS);
+  }
 }
 
 /**
