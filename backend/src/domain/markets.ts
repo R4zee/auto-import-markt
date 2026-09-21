@@ -37,6 +37,12 @@ export const MARKETS: Record<MarketCode, MarketMeta> = {
     preferentialNote: 'EU-US-Rahmenabkommen (seit 1. Juli 2026): 0 % für Fahrzeuge mit US-Ursprung – Nachweis erforderlich.',
     deliveryDays: [35, 60], currencies: ['USD'],
   },
+  CA: {
+    code: 'CA', flag: 'ca', isEU: false, freightEur: 1480, dutyRate: 0.10,
+    preferentialDutyRate: 0,
+    preferentialNote: 'CETA (EU–Kanada): 0 % Zoll für Fahrzeuge mit kanadischem Ursprung – Ursprungserklärung erforderlich.',
+    deliveryDays: [35, 60], currencies: ['CAD'],
+  },
   GCC: {
     code: 'GCC', flag: 'ae', isEU: false, freightEur: 1640, dutyRate: 0.10,
     preferentialDutyRate: null, preferentialNote: null,

@@ -1,10 +1,11 @@
 name: Sync Listings
 
-# Läuft alle 6 Stunden (UTC) und auf Knopfdruck. Holt die Bestände aller aktiven Provider und schreibt
-# sie direkt in die Turso-Datenbank. Encar wird über den Residential-Proxy abgerufen (ENCAR_PROXY_URL).
+# Läuft alle 3 Stunden (UTC; seit 21.09.2026 – öffentliches Repository, keine Minutenbegrenzung) und auf Knopfdruck.
+# Holt die Bestände aller aktiven Provider und schreibt sie häppchenweise in die Turso-Datenbank (Zwischenstände sind
+# schon während des Laufs sichtbar). Encar wird über den Residential-Proxy abgerufen (ENCAR_PROXY_URL).
 on:
   schedule:
-    - cron: '15 */6 * * *'
+    - cron: '15 */3 * * *'
   workflow_dispatch:
     inputs:
       encar_limit_partition:
@@ -77,6 +78,8 @@ jobs:
           COPART_ENABLED: ${{ vars.COPART_ENABLED || 'false' }}
           COPART_MAKES: ${{ vars.COPART_MAKES }}
           COPART_PROXY_URL: ${{ secrets.COPART_PROXY_URL }}
+          # Kanada: derselbe Endpunkt auf copart.ca – einschalten, sobald `npm run probe -- copart ca` ihn bestätigt hat
+          COPART_CA_ENABLED: ${{ vars.COPART_CA_ENABLED || 'false' }}
           # Japan: Jap Carz JSON-API (kein Key, Probe 20.09.2026 bestätigt) – Standard an, Variable JAPCARZ_ENABLED=false schaltet ab
           JAPCARZ_ENABLED: ${{ vars.JAPCARZ_ENABLED || 'true' }}
           JAPCARZ_PROXY_URL: ${{ secrets.JAPCARZ_PROXY_URL }}
@@ -100,4 +103,5 @@ jobs:
           REFERENCE_MAX_MINUTES: ${{ github.event.inputs.reference_max_minutes || vars.REFERENCE_MAX_MINUTES || '45' }}
           REFERENCE_MAKE_IDS: ${{ vars.REFERENCE_MAKE_IDS }}
           REFERENCE_PROXY_URL: ${{ secrets.REFERENCE_PROXY_URL }}
+          REFERENCE_CONCURRENCY: ${{ vars.REFERENCE_CONCURRENCY || '2' }}
         run: node --import tsx src/cli/reference.ts

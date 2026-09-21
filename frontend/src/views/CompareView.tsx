@@ -18,7 +18,8 @@ export function CompareView({ cars, partners }: { cars: Listing[]; partners: Rec
     [t('thMileage'), (d) => km(d.km)], [t('sEngine'), (d) => d.engine], [t('sDrive'), (d) => d.drive],
     [t('rSourcePrice'), (d) => local(d)], [t('rLandedPrice'), (d) => money(d.landed.totalEur)],
     [t('rDutyTax'), dutyTax],
-    [t('rCoc'), (d) => d.coc ? t('rAvail') : t('rOnReq')],
+    // COC-Zeile nur, wenn mindestens ein Fahrzeug eines hat
+    ...(cars.some((c) => c.coc) ? [[t('rCoc'), (d: Listing) => d.coc ? t('rAvail') : '—'] as [string, (d: Listing) => string]] : []),
     [t('rPartner'), (d) => partners[d.partnerId]?.name ?? '—'],
   ];
 

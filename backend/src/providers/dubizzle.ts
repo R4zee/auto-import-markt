@@ -4,7 +4,7 @@ import type { Listing } from '../domain/types.js';
 import { defaultPartnerFor } from '../seed/partners.js';
 import { encarDrive } from './encar.js';
 import { HttpError, num, robustFetch, sleep, str } from './http.js';
-import { listingId, normalizeFuel, normalizeTransmission, type MarketProvider, type ProviderResult } from './types.js';
+import { batcher, listingId, normalizeFuel, normalizeTransmission, type FetchOptions, type MarketProvider, type ProviderResult } from './types.js';
 
 /**
  * Dubizzle Motors (VAE) über den Algolia-Proxy der Website (aus dem Netzwerk-Tab, 16.09.2026):
@@ -293,9 +293,10 @@ export class DubizzleProvider implements MarketProvider {
     throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
   }
 
-  async fetchAll(): Promise<ProviderResult> {
+  async fetchAll(opts?: FetchOptions): Promise<ProviderResult> {
     const fetchedAt = new Date().toISOString();
     const listings: Listing[] = [];
+    const batch = batcher(listings, opts);
     const seen = new Set<string>();
     const skipped = new Map<string, number>();
     const warnings: string[] = [];
@@ -340,6 +341,8 @@ export class DubizzleProvider implements MarketProvider {
           if (r.hits.length < hitsPerPage) break;
         }
         bandsDone++;
+        // je Preisfenster sofort in die Datenbank
+        await batch.flush();
       } catch (e) {
         failed++;
         warnings.push(`${band[0]}–${band[1] ?? '∞'} AED: ${e instanceof Error ? e.message.slice(0, 160) : String(e)}`);
@@ -348,6 +351,7 @@ export class DubizzleProvider implements MarketProvider {
       await sleep(config.dubizzle.delayMs);
     }
     if (bandsDone === 0) throw new Error(`Dubizzle: kein Preisfenster geladen – ${warnings.slice(0, 2).join(' | ')}`);
+    await batch.flush();
     const leftover = queue.length;
     const skipInfo = [...skipped.entries()].map(([k, n]) => `${n}× ${k}`).join(', ');
     warnings.push(`${listings.length} Inserate${total != null ? ` von ${total} Gebrauchtwagen` : ''} aus ${bandsDone} Preisfenstern (${requests} Anfragen)${leftover ? ` · ${leftover} Fenster nicht mehr abgefragt (DUBIZZLE_MAX_REQUESTS)` : ''}${skipInfo ? ` · übersprungen: ${skipInfo}` : ''}`);

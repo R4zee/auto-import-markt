@@ -320,3 +320,13 @@ describe('Vergleichspreis-Spalten je Inserat', async () => {
     assert.match(refDiffSql('excluded.landed_de', 'listings.ref_min_eur'), /listings\.ref_min_eur > 0 AND excluded\.landed_de IS NOT NULL/);
   });
 });
+
+describe('Laufleistungsfenster mit Untergrenze', async () => {
+  const { kmWindow } = await import('../src/services/reference.js');
+  it('Fahrzeuge unter 20.000 km werden mit allen bis 20.000 km verglichen', () => {
+    assert.deepEqual(kmWindow(1_600), { from: 0, to: 20_000 });
+    assert.deepEqual(kmWindow(12_000), { from: 0, to: 20_000 });
+    assert.deepEqual(kmWindow(30_000), { from: 0, to: 45_000 });
+    assert.deepEqual(kmWindow(150_000), { from: 0, to: 195_000 });
+  });
+});

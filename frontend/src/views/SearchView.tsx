@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, PAGE_SIZE, type Fuel, type MarketCode, type OfferType, type SearchResult, type SortKey } from '../api';
+import { api, PAGE_SIZE, type Fuel, type MarketCode, type OfferType, type SearchResult, type SortKey, type TitleKind } from '../api';
 import { CarCard } from '../components/CarCard';
 import { Flag } from '../components/Flag';
 import { MakePicker } from '../components/MakePicker';
@@ -10,6 +10,8 @@ import { useDebounced } from '../hooks';
 export interface Filters {
   offer: 'all' | OfferType; markets: MarketCode[]; query: string; sort: SortKey; make: string; model: string; loc: string;
   maxPrice: number; yearFrom: number; yearTo: number; maxKm: number; fuels: Fuel[]; trans: Array<'Automatic' | 'Manual'>; cocOnly: boolean;
+  /** Fahrzeugbrief-Art (US-/Kanada-Auktionen); leer = alle */
+  titles: TitleKind[];
 }
 
 /** Reglergrenzen – stehen die Filter auf der Grenze, werden sie nicht mitgeschickt (kürzere Abfrage, gleiche Cache-URL). */
@@ -17,14 +19,15 @@ export const BOUNDS = { maxPrice: 300000, yearFrom: 1985, yearTo: 2026, maxKm: 3
 
 export const DEFAULT_FILTERS: Filters = {
   offer: 'all', markets: [], query: '', sort: 'landed-asc', make: '', model: '', loc: '',
-  maxPrice: BOUNDS.maxPrice, yearFrom: BOUNDS.yearFrom, yearTo: BOUNDS.yearTo, maxKm: BOUNDS.maxKm, fuels: [], trans: [], cocOnly: false,
+  maxPrice: BOUNDS.maxPrice, yearFrom: BOUNDS.yearFrom, yearTo: BOUNDS.yearTo, maxKm: BOUNDS.maxKm, fuels: [], trans: [], cocOnly: false, titles: [],
 };
 
 const atBound = <K extends keyof typeof BOUNDS>(f: Filters, k: K): number | undefined => (f[k] === BOUNDS[k] ? undefined : f[k]);
 
-const MARKET_ORDER: MarketCode[] = ['JP', 'KR', 'US', 'GCC', 'SE', 'EE'];
+const MARKET_ORDER: MarketCode[] = ['JP', 'KR', 'US', 'CA', 'GCC', 'SE', 'EE'];
 const FUELS: Fuel[] = ['Petrol', 'Diesel', 'Hybrid', 'Electric'];
 const TRANS: Array<'Automatic' | 'Manual'> = ['Automatic', 'Manual'];
+const TITLES: Array<[TitleKind, string]> = [['clean', 'titleClean'], ['salvage', 'titleSalvage'], ['rebuilt', 'titleRebuilt'], ['other', 'titleOther']];
 
 function toggle<T>(list: T[], v: T): T[] { return list.includes(v) ? list.filter((x) => x !== v) : [...list, v]; }
 
@@ -43,7 +46,7 @@ export function SearchView({ filters, setFilters }: { filters: Filters; setFilte
   const params = (page: number) => ({
     q: debouncedQuery, offer: f.offer, markets: f.markets, make: f.make, model: f.model, location: f.loc,
     yearFrom: atBound(f, 'yearFrom'), yearTo: atBound(f, 'yearTo'), maxKm: atBound(f, 'maxKm'), fuels: f.fuels, transmissions: f.trans, cocOnly: f.cocOnly,
-    maxLanded: atBound(f, 'maxPrice'), dest, sort: f.sort, page,
+    titles: f.titles, maxLanded: atBound(f, 'maxPrice'), dest, sort: f.sort, page,
   });
 
   useEffect(() => {
@@ -55,7 +58,7 @@ export function SearchView({ filters, setFilters }: { filters: Filters; setFilte
       .catch(() => { if (!cancelled) setState('error'); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedQuery, f.offer, f.markets, f.make, f.model, f.loc, f.yearFrom, f.yearTo, f.maxKm, f.fuels, f.trans, f.cocOnly, f.maxPrice, f.sort, dest, reload]);
+  }, [debouncedQuery, f.offer, f.markets, f.make, f.model, f.loc, f.yearFrom, f.yearTo, f.maxKm, f.fuels, f.trans, f.cocOnly, f.titles, f.maxPrice, f.sort, dest, reload]);
 
   const cars = result?.items ?? [];
   const hasMore = !!result && cars.length < result.total && result.items.length > 0;
@@ -195,6 +198,15 @@ export function SearchView({ filters, setFilters }: { filters: Filters; setFilte
               {TRANS.map((x) => <button key={x} className="btn" style={chipStyle(f.trans.includes(x))} onClick={() => set({ trans: toggle(f.trans, x) })}>{t(x)}</button>)}
             </div>
           </div>
+
+          {(!f.markets.length || f.markets.includes('US') || f.markets.includes('CA')) && (
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--color-neutral-400)', marginBottom: 8 }}>{t('usTitle')}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {TITLES.map(([k, label]) => <button key={k} className="btn" style={chipStyle(f.titles.includes(k))} onClick={() => set({ titles: toggle(f.titles, k) })}>{t(label)}</button>)}
+              </div>
+            </div>
+          )}
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, cursor: 'pointer' }}>
             <input type="checkbox" checked={f.cocOnly} onChange={(e) => set({ cocOnly: e.target.checked })} style={{ accentColor: 'var(--color-accent)', width: 15, height: 15 }} />

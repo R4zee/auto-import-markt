@@ -7,6 +7,7 @@ const FALLBACK: Record<string, number> = {
   JPY: 0.0061,
   KRW: 0.00069,
   USD: 0.92,
+  CAD: 0.67,
   AED: 0.25,
   GBP: 1 / 0.845,
   CHF: 1 / 0.94,
@@ -18,7 +19,7 @@ const FALLBACK: Record<string, number> = {
   HUF: 0.0025,
 };
 
-const TRACKED = ['JPY', 'KRW', 'USD', 'AED', 'GBP', 'CHF', 'PLN', 'CZK', 'RON', 'BGN', 'HUF'];
+const TRACKED = ['JPY', 'KRW', 'USD', 'CAD', 'AED', 'GBP', 'CHF', 'PLN', 'CZK', 'RON', 'BGN', 'HUF'];
 const TTL_MS = 6 * 60 * 60 * 1000;
 
 interface FxState {

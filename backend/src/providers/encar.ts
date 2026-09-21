@@ -4,7 +4,7 @@ import type { Listing } from '../domain/types.js';
 import { encarGradesRepo, gradeKey, type EncarGrade } from '../repositories/listings.js';
 import { defaultPartnerFor } from '../seed/partners.js';
 import { getJson, HttpError, num, sleep, str } from './http.js';
-import { listingId, type MarketProvider, type ProviderResult } from './types.js';
+import { batcher, listingId, type FetchOptions, type MarketProvider, type ProviderResult } from './types.js';
 
 /**
  * Encar (Südkorea) – vollständiger Bestandsabgleich, direkt angebunden.
@@ -242,7 +242,7 @@ export class EncarProvider implements MarketProvider {
     return out;
   }
 
-  async fetchAll(): Promise<ProviderResult> {
+  async fetchAll(opts?: FetchOptions): Promise<ProviderResult> {
     const fetchedAt = new Date().toISOString();
     const warnings: string[] = [];
     const partState = { skipped: 0 };
@@ -251,22 +251,40 @@ export class EncarProvider implements MarketProvider {
     // deactivateMissing würde den gesamten Bestand deaktivieren
     if (!parts.length) throw new Error(`Encar: keine Teilabfragen ermittelt – ${warnings.slice(0, 2).join(' | ') || 'keine Treffer'}`);
     const expected = parts.reduce((a, p) => a + p.count, 0);
+    // Übersetzungs-Cache vorab laden: Inserate mit bekannter Ausstattung gehen schon während des Ladens in die Datenbank
+    const grades = await encarGradesRepo.all();
+    const listings: Listing[] = [];
+    const streamed = new Set<string>();
+    const batch = batcher(listings, opts);
 
     // 1) Alle Partitionen seitenweise laden – mehrere Partitionen parallel (jede Anfrage kostet über Proxy ~1 s)
     const items = new Map<string, EncarListItem>();
     let failed = 0;
     const partQueue = [...parts];
+    let flushing: Promise<void> = Promise.resolve();
     const partWorker = async () => {
       while (partQueue.length) {
         const p = partQueue.shift()!;
         try {
           const cap = config.encar.limitPartition > 0 ? Math.min(p.count, config.encar.limitPartition) : p.count;
+          const fresh: EncarListItem[] = [];
           for (let offset = 0; offset < cap; offset += config.encar.pageSize) {
             const limit = Math.min(config.encar.pageSize, cap - offset);
             const page = await this.fetchList(p.q, offset, limit);
-            for (const it of page.items) items.set(it.Id, it);
+            for (const it of page.items) { if (!items.has(it.Id)) fresh.push(it); items.set(it.Id, it); }
             if (page.items.length < limit) break;
             await sleep(config.encar.delayMs);
+          }
+          // Teilabfrage fertig → übersetzbare Inserate sofort weiterreichen (Schreibvorgänge nacheinander)
+          if (opts?.onBatch) {
+            for (const it of fresh) {
+              const g = grades.get(gradeKey(it.Manufacturer, it.Model, it.Badge ?? '')) ?? null;
+              if (!g || !g.modelEn) continue;
+              const mapped = mapEncarItem(it, g, fetchedAt);
+              if (mapped) { listings.push(mapped); streamed.add(it.Id); }
+            }
+            flushing = flushing.then(() => batch.flush());
+            await flushing;
           }
         } catch (e) {
           failed++;
@@ -279,7 +297,6 @@ export class EncarProvider implements MarketProvider {
     if (parts.length && failed === parts.length) throw new Error(`Encar: alle ${parts.length} Teilabfragen fehlgeschlagen – ${warnings.slice(0, 3).join(' | ')}`);
 
     // 2) Übersetzungs-Cache ergänzen: häufigste unbekannte Kombinationen zuerst
-    const grades = await encarGradesRepo.all();
     const missing = new Map<string, { item: EncarListItem; n: number }>();
     for (const it of items.values()) {
       const k = gradeKey(it.Manufacturer, it.Model, it.Badge ?? '');
@@ -308,15 +325,16 @@ export class EncarProvider implements MarketProvider {
     await Promise.all(Array.from({ length: Math.max(1, config.encar.detailConcurrency) }, worker));
     if (learned.length) await encarGradesRepo.upsertMany(learned);
 
-    // 3) Abbilden – nur Inserate mit bekannter Übersetzung
-    const listings: Listing[] = [];
+    // 3) Abbilden – nur Inserate mit bekannter Übersetzung (bereits weitergereichte nicht doppelt)
     let untranslated = 0;
     for (const it of items.values()) {
+      if (streamed.has(it.Id)) continue;
       const g = grades.get(gradeKey(it.Manufacturer, it.Model, it.Badge ?? '')) ?? null;
       if (!g || !g.modelEn) { untranslated++; continue; }
       const mapped = mapEncarItem(it, g, fetchedAt);
       if (mapped) listings.push(mapped);
     }
+    await batch.flush();
     warnings.push(`Partitionen ${parts.length} (${failed} fehlgeschlagen), erwartet ${expected}, geladen ${items.size}, neue Ausstattungen gelernt ${learned.length} (offen ${Math.max(0, missing.size - learned.length)}), ohne Übersetzung zurückgestellt ${untranslated}`);
 
     // Nur ein vollständiger Lauf deaktiviert Fahrzeuge, die nicht mehr gelistet sind

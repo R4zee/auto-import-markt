@@ -312,3 +312,39 @@ describe('Jap Carz mapping', async () => {
     assert.equal(japcarzUrl(2, 30, 'upcoming_auctions'), 'https://jap-carz.com/api/listings/?sort=upcoming_auctions&per_page=30&page=2');
   });
 });
+
+describe('Fahrzeugbrief-Art und Copart Kanada', async () => {
+  const { titleKindOf } = await import('../src/providers/types.js');
+  const { mapCopart, copartSkipReason } = await import('../src/providers/copart.js');
+  const future = Date.now() + 3 * 86400000;
+  const lot = { ln: 77001, mkn: 'FORD', lm: 'F-150', lmg: 'F-150', lcy: 2020, orr: 40000, ord: 'ACTUAL', hb: 12000, bnp: 0, ad: future, yn: 'ON - TORONTO', dd: 'REAR END', ft: 'GAS', tmtp: 'AUTOMATIC', drv: 'Four-wheel Drive', egn: '3.5L 6', cy: 6, tgd: 'SALVAGE TITLE', lcd: 'Run and Drive', hk: 'YES', locCountry: 'CAN', locCity: 'Toronto', cuc: 'CAD' };
+
+  it('ordnet Titeltexte den Arten zu', () => {
+    assert.equal(titleKindOf('CLEAN TITLE'), 'clean');
+    assert.equal(titleKindOf('Clear Title'), 'clean');
+    assert.equal(titleKindOf('SALVAGE TITLE'), 'salvage');
+    assert.equal(titleKindOf('CERTIFICATE OF DESTRUCTION'), 'salvage');
+    assert.equal(titleKindOf('NON-REPAIRABLE'), 'salvage');
+    assert.equal(titleKindOf('REBUILT SALVAGE'), 'rebuilt');
+    assert.equal(titleKindOf('MV-907A'), 'other');
+    assert.equal(titleKindOf(''), null);
+    assert.equal(titleKindOf(undefined), null);
+  });
+
+  it('Copart Kanada: Quelle copart-ca, Markt CA, CAD, Titelart; auf der US-Seite übersprungen', () => {
+    const l = mapCopart(lot, NOW, 'ca');
+    assert.ok(l);
+    assert.equal(l.id, 'copart-ca:77001');
+    assert.equal(l.source, 'copart-ca');
+    assert.equal(l.market, 'CA');
+    assert.equal(l.country, 'ca');
+    assert.equal(l.currency, 'CAD');
+    assert.equal(l.titleKind, 'salvage');
+    assert.equal(l.url, 'https://www.copart.ca/lot/77001');
+    assert.equal(l.partnerId, 'atlantic');
+    assert.equal(copartSkipReason(lot, 'us'), 'nicht USA');
+    assert.equal(copartSkipReason({ ...lot, locCountry: 'USA' }, 'ca'), 'nicht Kanada');
+    const us = mapCopart({ ...lot, locCountry: 'USA', cuc: 'USD', tgd: 'CLEAN TITLE' }, NOW);
+    assert.equal(us?.market, 'US'); assert.equal(us?.currency, 'USD'); assert.equal(us?.titleKind, 'clean');
+  });
+});

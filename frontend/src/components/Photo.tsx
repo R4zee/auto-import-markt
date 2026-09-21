@@ -4,7 +4,8 @@ import { useState } from 'react';
 export function Photo({ src, alt, hint }: { src?: string; alt: string; hint: string }) {
   const [failed, setFailed] = useState(false);
   if (src && !failed) {
-    return <img className="aim-photo lighten" src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} />;
+    // referrerPolicy: einige Bild-CDNs (z. B. sdn.cz von Sauto) weisen Anfragen mit fremdem Referer ab
+    return <img className="aim-photo lighten" src={src} alt={alt} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
   }
   return (
     <div className="aim-photo-empty" aria-label={alt}>

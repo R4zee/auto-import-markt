@@ -1,11 +1,11 @@
 name: Reference Prices
 
-# Vergleichspreise DE (mobile.de) alle zwei Stunden nachladen – zusätzlich zum Schritt im Sync-Workflow, damit die
-# rund 29.000 Buckets des Bestands in wenigen Tagen statt Wochen gefüllt sind. Danach erneuert der Job Buckets,
-# die älter als REFERENCE_TTL_DAYS sind. Abschalten: Variable REFERENCE_ENABLED=false.
+# Vergleichspreise DE (mobile.de) stündlich nachladen (seit 21.09.2026; zwei Buckets parallel) – zusätzlich zum Schritt
+# im Sync-Workflow. Die Concurrency-Gruppe verhindert überlappende Läufe; danach erneuert der Job Buckets, die älter
+# als REFERENCE_TTL_DAYS sind. Abschalten: Variable REFERENCE_ENABLED=false.
 on:
   schedule:
-    - cron: '45 1,3,5,7,9,11,13,15,17,19,21,23 * * *'
+    - cron: '45 * * * *'
   workflow_dispatch:
     inputs:
       reference_max_per_run:
@@ -45,4 +45,6 @@ jobs:
           REFERENCE_MAX_MINUTES: ${{ github.event.inputs.reference_max_minutes || vars.REFERENCE_MAX_MINUTES || '50' }}
           REFERENCE_MAKE_IDS: ${{ vars.REFERENCE_MAKE_IDS }}
           REFERENCE_PROXY_URL: ${{ secrets.REFERENCE_PROXY_URL }}
+          # Parallele mobile.de-Anfragen (Standard 2); bei 403/429 auf 1 zurück
+          REFERENCE_CONCURRENCY: ${{ vars.REFERENCE_CONCURRENCY || '2' }}
         run: node --import tsx src/cli/reference.ts

@@ -283,10 +283,13 @@ async function probeSauto() {
   console.log(`\n=== Sauto.cz\n${url}`);
   const json = await getJson<{ results?: unknown[]; pagination?: unknown }>(url, { headers: { Accept: 'application/json', 'User-Agent': config.europe.userAgent }, proxyUrl });
   console.log('pagination:', short(json.pagination, 300));
-  console.log('Rohantwort results[0]:', short(json.results?.[0], 3000));
+  const first = json.results?.[0] as Record<string, unknown> | undefined;
+  console.log('Rohantwort results[0] (ohne images):', short({ ...first, images: undefined }, 2500));
+  // Bilder: Feldform prüfen (Sauto liefert protokollrelative URLs ohne Größenparameter)
+  console.log('results[0].images (roh):', short(first?.images, 1200));
   for (const it of (json.results ?? []).slice(0, 5)) {
     const l = mapSauto(it as never, fetchedAt);
-    console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.location} · ${l.photoCount} Fotos · ${l.url}` : '  ✖ nicht abbildbar');
+    console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.location} · ${l.photos.length}/${l.photoCount} Fotos · ${l.photos[0] ?? '–'} · ${l.url}` : '  ✖ nicht abbildbar');
   }
 }
 
@@ -351,9 +354,9 @@ async function probeMobile(make: string, description: string, year: number, fuel
   console.log(`km-Fenster für ${km} km: bis ${win.to} km → ${sum ? `${sum.count} vergleichbar, günstigstes ${sum.minEur} €` : 'kein vergleichbares Angebot auf Seite 1'}`);
 }
 
-async function probeCopart() {
-  const p = new CopartProvider();
-  console.log(`\n=== Copart · POST https://www.copart.com/public/lots/search-results · Seite 0, 5 Lose${config.copart.makes.length ? ` · Marken ${config.copart.makes.join(',')}` : ''}`);
+async function probeCopart(site: 'us' | 'ca' = 'us') {
+  const p = new CopartProvider(site);
+  console.log(`\n=== ${p.label} · POST https://${site === 'ca' ? 'www.copart.ca' : 'www.copart.com'}/public/lots/search-results · Seite 0, 5 Lose${config.copart.makes.length ? ` · Marken ${config.copart.makes.join(',')}` : ''}`);
   try {
     const r = await p.fetchPage(0, 5);
     console.log(`  ✔ ${r.lots.length} Lose · gesamt ${r.total ?? '?'}`);
@@ -363,16 +366,16 @@ async function probeCopart() {
     const day = (ms: unknown) => { const n = Number(ms); return n > 0 ? new Date(n).toISOString().slice(0, 16) : '–'; };
     for (const page of [0, 5, 10, 20, 40]) {
       const pg = await p.fetchPage(page, 100);
-      const future = pg.lots.filter((l) => !copartSkipReason(l)).length;
+      const future = pg.lots.filter((l) => !copartSkipReason(l, site)).length;
       console.log(`  Seite ${String(page).padStart(2)}: Termine ${day(pg.lots[0]?.ad)} … ${day(pg.lots[pg.lots.length - 1]?.ad)} · ${future} von ${pg.lots.length} übernehmbar`);
     }
     for (const lot of r.lots) {
-      const l = mapCopart(lot, fetchedAt);
-      console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · ${l.offerType}${l.auction ? ` bis ${l.auction.endsAt}` : ''} · ${l.location} · ${l.photos.length} Fotos · ${l.url}` : `  – übersprungen (${copartSkipReason(lot) ?? 'unvollständig'}): ln=${lot.ln} ${lot.lcy} ${lot.mkn} ${lot.lmg ?? lot.lm} · hb=${lot.hb} bnp=${lot.bnp} ad=${lot.ad ? new Date(Number(lot.ad)).toISOString().slice(0, 10) : '–'}`);
+      const l = mapCopart(lot, fetchedAt, site);
+      console.log(l ? `  ✔ ${l.year} ${l.make} ${l.model} · ${l.trim} · ${l.km} km · ${l.price} ${l.currency} · Titel ${l.titleKind ?? '–'} · ${l.offerType}${l.auction ? ` bis ${l.auction.endsAt}` : ''} · ${l.location} · ${l.photos.length} Fotos · ${l.url}` : `  – übersprungen (${copartSkipReason(lot, site) ?? 'unvollständig'}): ln=${lot.ln} ${lot.lcy} ${lot.mkn} ${lot.lmg ?? lot.lm} · hb=${lot.hb} bnp=${lot.bnp} cuc=${lot.cuc} loc=${lot.locCountry} ad=${lot.ad ? new Date(Number(lot.ad)).toISOString().slice(0, 10) : '–'}`);
     }
   } catch (e) {
     console.log('  ✖', e instanceof Error ? e.message.slice(0, 300) : String(e));
-    console.log('  Im Browser https://www.copart.com/vehicleFinder öffnen → Netzwerk-Tab → Aufruf "search-results" → Request-Body und Antwort hier einfügen.');
+    console.log(`  Im Browser https://${site === 'ca' ? 'www.copart.ca' : 'www.copart.com'}/vehicleFinder öffnen → Netzwerk-Tab → Aufruf "search-results" → Request-Body und Antwort hier einfügen.`);
   }
 }
 
@@ -469,7 +472,7 @@ try {
     const fuel = (['Petrol', 'Diesel', 'Hybrid', 'Electric'] as Fuel[]).find((f) => f.toLowerCase() === fuelArg.toLowerCase()) ?? null;
     await probeMobile(process.argv[3] ?? 'BMW', process.argv[4] ?? '320d', Number(process.argv[5] ?? 2019), fuel, Number(process.argv[7] ?? 80000), process.argv[8] ?? null);
   } else if (name === 'mobile-model') await probeMobileModel(process.argv[3] ?? 'Mercedes-Benz', process.argv[4] ?? 'S-Class');
-  else if (name === 'copart') await probeCopart();
+  else if (name === 'copart') await probeCopart(process.argv[3] === 'ca' ? 'ca' : 'us');
   else if (name === 'dubizzle') await probeDubizzle();
   else if (name === 'japcarz') await probeJapCarz(process.argv[3] || 'upcoming_auctions', Number(process.argv[4] ?? 1));
   else if (name === 'url') await probeUrl(process.argv[3] ?? '', process.argv.slice(4));

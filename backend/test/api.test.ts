@@ -68,6 +68,14 @@ describe('API', async () => {
     assert.ok(body.items.every((i: { auction: unknown }) => i.auction));
   });
 
+  it('Filter: Fahrzeugbrief-Art (titles) – Mock-Daten ohne Angabe → 0 Treffer, ungültige Werte werden ignoriert', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/listings?titles=clean,salvage' });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.json().total, 0);
+    const ignored = await app.inject({ method: 'GET', url: '/api/listings?titles=nope' });
+    assert.equal(ignored.json().total, 14);
+  });
+
   it('Filter: Endpreis-Obergrenze', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/listings?maxLanded=40000' });
     assert.ok(res.json().items.every((i: { landed: { totalEur: number } }) => i.landed.totalEur <= 40000));

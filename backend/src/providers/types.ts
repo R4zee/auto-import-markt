@@ -1,4 +1,25 @@
-import type { Listing, Partner } from '../domain/types.js';
+import type { Listing, Partner, TitleKind } from '../domain/types.js';
+
+/** Optionen für fetchAll: `onBatch` liefert fertige Inserate häppchenweise, damit der Sync sie sofort schreiben kann */
+export interface FetchOptions {
+  onBatch?: (listings: Listing[]) => Promise<void>;
+}
+
+/**
+ * Hilfe für Provider, die häppchenweise liefern: sammelt in `listings`, `flush()` reicht alles seit dem letzten Aufruf an
+ * `onBatch` weiter (ohne onBatch passiert nichts – die Liste geht wie bisher am Ende zurück).
+ */
+export function batcher(listings: Listing[], opts?: FetchOptions): { flush: () => Promise<void> } {
+  let emitted = 0;
+  return {
+    async flush() {
+      if (!opts?.onBatch || listings.length <= emitted) return;
+      const batch = listings.slice(emitted);
+      emitted = listings.length;
+      await opts.onBatch(batch);
+    },
+  };
+}
 
 export interface ProviderResult {
   listings: Listing[];
@@ -19,7 +40,22 @@ export interface MarketProvider {
   readonly label: string;
   /** Ob der Provider konfiguriert ist (Keys, URL …) */
   enabled(): boolean;
-  fetchAll(): Promise<ProviderResult>;
+  /** Bestand laden; Provider mit vielen Seiten reichen Zwischenstände über `opts.onBatch` durch */
+  fetchAll(opts?: FetchOptions): Promise<ProviderResult>;
+}
+
+/**
+ * Fahrzeugbrief-Art aus dem Titeltext nordamerikanischer Auktionen: "CLEAN TITLE" → clean; "SALVAGE TITLE",
+ * "CERTIFICATE OF DESTRUCTION", "NON-REPAIRABLE", "JUNK", "PARTS ONLY", "BILL OF SALE" → salvage;
+ * "REBUILT", "PRIOR SALVAGE", "RESTORED" → rebuilt; sonstiger Text → other; leer → null.
+ */
+export function titleKindOf(text: string | null | undefined): TitleKind | null {
+  const s = (text ?? '').trim().toLowerCase();
+  if (!s) return null;
+  if (/rebuilt|prior salvage|restored|reconstructed/.test(s)) return 'rebuilt';
+  if (/salvage|destruction|non-?repair|junk|parts only|bill of sale|dismantl|scrap|flood/.test(s)) return 'salvage';
+  if (/clean|clear/.test(s)) return 'clean';
+  return 'other';
 }
 
 export function listingId(source: string, externalId: string): string {

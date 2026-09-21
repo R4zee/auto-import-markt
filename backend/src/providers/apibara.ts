@@ -2,7 +2,7 @@ import { config } from '../config.js';
 import type { Listing } from '../domain/types.js';
 import { defaultPartnerFor } from '../seed/partners.js';
 import { getJson, num, sleep, str } from './http.js';
-import { listingId, milesToKm, normalizeDrive, normalizeFuel, normalizeTransmission, type MarketProvider, type ProviderResult } from './types.js';
+import { listingId, milesToKm, normalizeDrive, normalizeFuel, normalizeTransmission, titleKindOf, type MarketProvider, type ProviderResult } from './types.js';
 
 /**
  * Apibara – Vehicle Auction Data API (Copart + IAAI, USA).
@@ -61,6 +61,7 @@ export function mapApibara(v: ApibaraVehicle, fetchedAt: string): Listing | null
     make: v.make,
     model: v.model,
     trim: [v.trim, docType ? `Title: ${docType}` : null].filter(Boolean).join(' · ') || str(v.title),
+    titleKind: titleKindOf(docType),
     km: Math.round(km),
     engine,
     engineCcm: v.engine_size ? Math.round(v.engine_size * 1000) : null,

@@ -189,7 +189,11 @@ export const config = {
     /** Jede Bucket-Zeile protokollieren (Standard: erste 20, dann Zwischensummen alle 100) */
     verbose: bool(env.REFERENCE_VERBOSE, false),
     pages: num(env.REFERENCE_PAGES, 2),
-    delayMs: num(env.REFERENCE_DELAY_MS, 700),
+    delayMs: num(env.REFERENCE_DELAY_MS, 500),
+    /** Buckets parallel nachladen (mobile.de-Anfragen gleichzeitig); 1 = nacheinander */
+    concurrency: num(env.REFERENCE_CONCURRENCY, 2),
+    /** Laufleistungsfenster: Fahrzeuge unter dieser Marke werden mit allen bis zu dieser Marke verglichen (1.600 km → bis 20.000 km) */
+    kmFloor: num(env.REFERENCE_KM_FLOOR, 20000),
     /** Baujahr ± Jahre im Suchband, wenn keine Baureihe (W221, F30 …) erkannt wird – sonst gilt deren Bauzeitraum */
     yearSpan: num(env.REFERENCE_YEAR_SPAN, 1),
     /** Laufleistung vergleichbarer Angebote höchstens +50 % unter 100.000 km bzw. +30 % darüber (nach unten offen) */
@@ -210,16 +214,18 @@ export const config = {
   /** USA: Copart-Suchendpunkt der Website (kein Login, kein Key; Grauzone wie Encar). Live bestätigt 15.09.2026: 385.803 Lose. */
   copart: {
     enabled: bool(env.COPART_ENABLED, false),
-    /** Höchstens so viele Seiten je Lauf (nach Auktionstermin aufsteigend; die ersten Seiten sind meist schon gelaufen) */
-    pages: num(env.COPART_PAGES, 80),
+    /** Kanada: gleicher Endpunkt auf copart.ca (Quelle copart-ca, Markt CA, Preise in CAD) – nach Probe `npm run probe -- copart ca` einschalten */
+    caEnabled: bool(env.COPART_CA_ENABLED, false),
+    /** Höchstens so viele Seiten je Lauf (die ersten Seiten sind meist schon gelaufen; seit 21.09.2026 250 statt 80) */
+    pages: num(env.COPART_PAGES, 250),
     pageSize: num(env.COPART_PAGE_SIZE, 100),
-    /** Abbruch, sobald so viele Lose mit künftigem Termin oder Sofortkauf beisammen sind */
-    maxLots: num(env.COPART_MAX_LOTS, 2000),
+    /** Abbruch, sobald so viele Lose mit künftigem Termin oder Sofortkauf beisammen sind (8.000 statt 2.000) */
+    maxLots: num(env.COPART_MAX_LOTS, 8000),
     /** Optional auf Marken einschränken (Copart-Schreibweise, z. B. BMW,MERCEDES-BENZ) */
     makes: list(env.COPART_MAKES),
     minYear: num(env.COPART_MIN_YEAR, 2012),
     /** Nur Lose mit laufender Auktion oder Sofortkauf-Preis */
-    delayMs: num(env.COPART_DELAY_MS, 800),
+    delayMs: num(env.COPART_DELAY_MS, 500),
     proxyUrl: env.COPART_PROXY_URL || '',
   },
   /** VAE: Dubizzle Motors über den Algolia-Proxy der Website (kein Key; Grauzone wie Encar). Aufrufe aus dem Netzwerk-Tab 16.09.2026. */

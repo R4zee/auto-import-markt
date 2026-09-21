@@ -1,4 +1,6 @@
-export type MarketCode = 'JP' | 'KR' | 'US' | 'GCC' | 'SE' | 'EE';
+export type MarketCode = 'JP' | 'KR' | 'US' | 'CA' | 'GCC' | 'SE' | 'EE';
+/** Fahrzeugbrief-Art bei US-/Kanada-Auktionen */
+export type TitleKind = 'clean' | 'salvage' | 'rebuilt' | 'other';
 export type DestCode = 'DE' | 'AT' | 'NL' | 'PL';
 export type OfferType = 'auction' | 'fixed';
 export type Fuel = 'Petrol' | 'Diesel' | 'Hybrid' | 'Electric';
@@ -17,7 +19,7 @@ export interface Listing {
   id: string; source: string; externalId: string; market: MarketCode; country: string; location: string;
   offerType: OfferType; url: string | null; year: number; make: string; model: string; trim: string; km: number;
   engine: string; engineCcm: number | null; co2Gkm: number | null; transmission: string; drive: string; fuel: Fuel;
-  price: number; currency: string; steering: 'LHD' | 'RHD';
+  price: number; currency: string; steering: 'LHD' | 'RHD'; titleKind?: TitleKind | null;
   auction: { house: string; lot: string; grade: string | null; gradeNote: string | null; hammerLow: number | null; hammerHigh: number | null; endsAt: string } | null;
   coc: boolean; classic: boolean; dutyRateOverride: number | null; originProof: boolean; resaleEur: number | null;
   partnerId: string; photos: string[]; photoCount: number; damage: Array<{ panel: string; code: string }>;
@@ -56,7 +58,7 @@ export interface AppConfig {
 export interface SearchParams {
   q?: string; offer?: 'all' | OfferType; markets?: MarketCode[]; make?: string; model?: string; location?: string;
   yearFrom?: number; yearTo?: number; maxKm?: number; fuels?: Fuel[]; transmissions?: Array<'Automatic' | 'Manual'>;
-  cocOnly?: boolean; maxLanded?: number; dest: DestCode; sort?: SortKey;
+  cocOnly?: boolean; titles?: TitleKind[]; maxLanded?: number; dest: DestCode; sort?: SortKey;
   /** Seite (1-basiert) – die Trefferliste lädt seitenweise nach */
   page?: number;
 }
@@ -80,7 +82,7 @@ export const api = {
     const set = (k: string, v: unknown) => { if (v !== undefined && v !== '' && v !== null && !(Array.isArray(v) && !v.length)) sp.set(k, Array.isArray(v) ? v.join(',') : String(v)); };
     set('q', p.q); set('offer', p.offer); set('markets', p.markets); set('make', p.make); set('model', p.model); set('location', p.location);
     set('yearFrom', p.yearFrom); set('yearTo', p.yearTo); set('maxKm', p.maxKm); set('fuels', p.fuels); set('transmissions', p.transmissions);
-    set('cocOnly', p.cocOnly ? 'true' : undefined); set('maxLanded', p.maxLanded); set('dest', p.dest); set('sort', p.sort);
+    set('cocOnly', p.cocOnly ? 'true' : undefined); set('titles', p.titles); set('maxLanded', p.maxLanded); set('dest', p.dest); set('sort', p.sort);
     set('page', p.page && p.page > 1 ? p.page : undefined);
     sp.set('pageSize', String(PAGE_SIZE));
     return http<SearchResult>(`/api/listings?${sp}`);

@@ -24,8 +24,9 @@ const ALL: MarketProvider[] = [
   new MarketCheckProvider(),
   new EbayMotorsProvider(),
   new ApibaraProvider(),
-  // USA: Copart-Suchendpunkt der Website (kein Key; Grauzone wie Encar, schaltbar)
-  new CopartProvider(),
+  // USA und Kanada: Copart-Suchendpunkt der Website (kein Key; Grauzone wie Encar, je Seite schaltbar)
+  new CopartProvider('us'),
+  new CopartProvider('ca'),
   new AutoApiProvider(),
   // VAE: Algolia-Proxy der Dubizzle-Website (kein Key; Grauzone wie Encar, schaltbar)
   new DubizzleProvider(),

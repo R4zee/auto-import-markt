@@ -1,5 +1,7 @@
-/** Herkunftsmärkte wie im Design: Japan, Südkorea, USA, Golfstaaten, Süd-/Osteuropa. */
-export type MarketCode = 'JP' | 'KR' | 'US' | 'GCC' | 'SE' | 'EE';
+/** Herkunftsmärkte: Japan, Südkorea, USA, Kanada, Golfstaaten, Süd-/Osteuropa. */
+export type MarketCode = 'JP' | 'KR' | 'US' | 'CA' | 'GCC' | 'SE' | 'EE';
+/** Art des Fahrzeugbriefs bei nordamerikanischen Auktionen (Copart/IAAI): sauber, Unfall-/Totalschaden, wiederaufgebaut, sonstiges */
+export type TitleKind = 'clean' | 'salvage' | 'rebuilt' | 'other';
 /** Zielländer (Verzollung/Zulassung) wie im Design. */
 export type DestCode = 'DE' | 'AT' | 'NL' | 'PL';
 export type Lang = 'en' | 'de';
@@ -59,6 +61,8 @@ export interface Listing {
   currency: string;
   /** Marktplatzweit nur Linkslenker – Feld dient der Filterung beim Import */
   steering: 'LHD' | 'RHD';
+  /** Fahrzeugbrief-Art bei US-/Kanada-Auktionen (Filter „US-Titel“); null bei anderen Quellen */
+  titleKind?: TitleKind | null;
   auction: AuctionInfo | null;
   /** EU-Übereinstimmungsbescheinigung vorhanden */
   coc: boolean;
@@ -101,6 +105,8 @@ export interface ListingQuery {
   /** "Automatic" fasst Automatic/PDK/Single speed zusammen */
   transmissions?: Array<'Automatic' | 'Manual'>;
   cocOnly?: boolean;
+  /** Fahrzeugbrief-Arten (US/Kanada-Auktionen); gesetzt → nur Inserate mit einer dieser Arten */
+  titles?: TitleKind[];
   /** Max. Endpreis in EUR (nach Landed-Cost-Berechnung) */
   maxLandedEur?: number;
   dest?: DestCode;
