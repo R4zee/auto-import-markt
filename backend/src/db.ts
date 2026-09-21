@@ -268,6 +268,15 @@ async function heavyMigrations(c: Client): Promise<void> {
     await c.execute("UPDATE listings SET photos_json = replace(photos_json, '?fl=exf|res,1024,768,1|jpg,85', '') WHERE source = 'sauto' AND photos_json LIKE '%?fl=exf%'");
     await c.execute("INSERT INTO meta(key, value) VALUES ('sauto_photos_bare', '1') ON CONFLICT(key) DO NOTHING");
   }
+  // Sauto-Fotos mit dem einzigen Parametersatz, den das CDN ausliefert (Probe 21.09.2026: nackt 401, andere 400) –
+  // identisch zu SAUTO_IMAGE_PARAMS in providers/sauto.ts; einmalig für den Bestand
+  const sautoWrm = await c.execute("SELECT value FROM meta WHERE key = 'sauto_photos_wrm'");
+  if (!sautoWrm.rows.length) {
+    const p = '?fl=exf|res,1024,768,1|wrm,/watermark/sauto.png,10,10|jpg,80,,1';
+    await c.execute(`UPDATE listings SET photos_json = replace(replace(replace(photos_json, '.jpeg"', '.jpeg${p}"'), '.jpg"', '.jpg${p}"'), '.png"', '.png${p}"')
+      WHERE source = 'sauto' AND photos_json LIKE '%sdn.cz%' AND photos_json NOT LIKE '%wrm,%'`);
+    await c.execute("INSERT INTO meta(key, value) VALUES ('sauto_photos_wrm', '1') ON CONFLICT(key) DO NOTHING");
+  }
   // Partner Japan/Korea zusammengeführt zu „Far East Imports“ (einmalig, Merker in meta)
   const partners = await c.execute("SELECT value FROM meta WHERE key = 'partners_fareast'");
   if (!partners.rows.length) {

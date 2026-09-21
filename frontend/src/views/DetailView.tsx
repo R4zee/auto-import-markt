@@ -252,7 +252,7 @@ export function DetailView({ id }: { id: string }) {
             <div className="card elev-sm" style={{ padding: 18, gap: 10 }}>
               <div className="card-kicker">{t('refTitle', { source: ref && ref !== 'loading' ? refSourceLabel(ref.source) : 'mobile.de' })}</div>
               {ref === 'loading' && <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>{t('refLoading')}</div>}
-              {ref !== 'loading' && (!ref || ref.count === 0) && <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>{t('refNone')}</div>}
+              {ref !== 'loading' && (!ref || ref.minEur == null) && <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>{ref && ref.count > 0 ? t('refTooFew', { n: ref.count }) : t('refNone')}</div>}
               {ref && ref !== 'loading' && ref.count > 0 && ref.minEur != null && (
                 <>
                   {/* Referenz ist immer das günstigste vergleichbare DE-Angebot – kein Median, kein Durchschnitt */}
