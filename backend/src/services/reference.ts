@@ -69,7 +69,11 @@ export function median(values: number[]): number | null {
  */
 export function variantText(l: Pick<Listing, 'make' | 'model' | 'trim'>): string {
   // Generationscodes in Klammern ("5 Series (G30)") weglassen
-  const model = l.model.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  let model = l.model.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  // OLX & Co. führen „X6 M“/„X5 M“ als eigene Kategorie, in der auch normale X6 landen: nennt die Ausstattung eine
+  // Serienmotorisierung („xDrive30d“, „40i“, „M50d“), ist es kein M-Modell → „X6“ (ein X6 xDrive30d aus Rumänien wurde
+  // sonst mit dem X6 M verglichen)
+  if (makeKey(l.make) === 'bmw' && /\sM$/i.test(model) && /\b[sx]?drive\s?\d{2}[dei]?\b|\b(?:m)?\d{2}[dei]\b/i.test(l.trim)) model = model.replace(/\sM$/i, '');
   const firstTrim = l.trim.trim().split(/[\s,·/|]+/)[0] ?? '';
   const classWord = /[- ]?\b(class|klasse|series|serie|reihe)\b/i;
   let text = model;

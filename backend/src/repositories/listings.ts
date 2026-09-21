@@ -341,25 +341,29 @@ export const listingsRepo = {
   /** Vorberechnete EUR/Endpreis-Spalten mit aktuellen Kursen neu berechnen (z. B. nach Kursänderung). */
   async recomputeDerived(source?: string): Promise<number> {
     // nur die Spalten lesen, die die Kalkulation braucht – nicht Fotos/Schäden
-    const rows = await query<{ id: string; market: string; price: number; currency: string; classic: number; duty_rate_override: number | null; origin_proof: number }>(
-      `SELECT id, market, price, currency, classic, duty_rate_override, origin_proof FROM listings WHERE active = 1${source ? ' AND source = ?' : ''}`,
+    const rows = await query<{ id: string; market: string; price: number; currency: string; classic: number; duty_rate_override: number | null; origin_proof: number; price_eur: number | null; landed_de: number | null; landed_at: number | null; landed_nl: number | null; landed_pl: number | null }>(
+      `SELECT id, market, price, currency, classic, duty_rate_override, origin_proof, price_eur, landed_de, landed_at, landed_nl, landed_pl FROM listings WHERE active = 1${source ? ' AND source = ?' : ''}`,
       source ? [source] : [],
     );
     let n = 0;
+    // Nur Zeilen schreiben, deren Werte sich ändern: eine Kalkulationsänderung für EU-Quellen (LANDED_VERSION 2) schrieb
+    // sonst alle 273.000 Zeilen samt Indizes neu (Lauf 57: über 35 Minuten)
+    const same = (a: number | null, b: number | null) => a != null && b != null && Math.abs(Number(a) - b) < 0.005;
     for (let i = 0; i < rows.length; i += 300) {
-      const stmts = rows.slice(i, i + 300).map((r) => {
+      const stmts = rows.slice(i, i + 300).flatMap((r) => {
         const pre = precompute({
           market: r.market as Listing['market'], price: Number(r.price), currency: r.currency, classic: !!r.classic,
           dutyRateOverride: r.duty_rate_override == null ? null : Number(r.duty_rate_override), originProof: !!r.origin_proof,
         });
+        if (same(r.price_eur, pre.priceEur) && same(r.landed_de, pre.landed.DE) && same(r.landed_at, pre.landed.AT) && same(r.landed_nl, pre.landed.NL) && same(r.landed_pl, pre.landed.PL)) return [];
         n++;
         // Referenzabstände mit dem neuen Endpreis nachziehen (ref_min_eur ist im SET noch der alte, unveränderte Wert)
-        return {
+        return [{
           sql: `UPDATE listings SET price_eur = ?, landed_de = ?, landed_at = ?, landed_nl = ?, landed_pl = ?, ${DEST_CODES.map((d) => `ref_diff_${d.toLowerCase()} = ${refDiffSql('?')}`).join(', ')} WHERE id = ?`,
           args: [pre.priceEur, pre.landed.DE, pre.landed.AT, pre.landed.NL, pre.landed.PL, ...DEST_CODES.flatMap((d) => [pre.landed[d], pre.landed[d]]), r.id],
-        };
+        }];
       });
-      await db().batch(stmts, 'write');
+      if (stmts.length) await db().batch(stmts, 'write');
     }
     return n;
   },
