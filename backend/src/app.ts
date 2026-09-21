@@ -46,7 +46,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
    * Zählungen laufen über den abdeckenden Suchindex (wenige Sekunden), nicht über die Zeilen.
    */
   app.get('/api/health/reference', async () => {
-    const meta = await query<{ key: string; value: string }>("SELECT key, value FROM meta WHERE key IN ('ref_key_version', 'ref_diff_auction_null')");
+    const meta = await query<{ key: string; value: string }>("SELECT key, value FROM meta WHERE key IN ('ref_key_version', 'ref_diff_auction_null', 'ref_diff_auction_null_v2')");
     const [pending, withDiff, auctionsWithDiff, topAuctions] = await Promise.all([
       one<{ n: number }>("SELECT COUNT(*) AS n FROM listings WHERE ref_min_eur IS NULL AND active = 1 AND ref_key <> ''"),
       one<{ n: number }>('SELECT COUNT(*) AS n FROM listings WHERE active = 1 AND ref_diff_de IS NOT NULL'),

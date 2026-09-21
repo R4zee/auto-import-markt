@@ -9,7 +9,6 @@ const { extractItems, extractResolvedModel, firstInt, flattenModelList, mapMobil
 const { bucketKey, bucketQuery, detailFrom, diffPct, engineMatches, isOneOff, kmBandFor, kmWindow, referenceUpdates, summarize, titleMatches, variantText } = await import('../src/services/reference.js');
 const { powerKwFromText } = await import('../src/providers/types.js');
 const { generationOf, yearBand } = await import('../src/domain/generations.js');
-import type { InStatement } from '@libsql/client';
 import type { RefBucket } from '../src/services/reference.js';
 
 const NOW = '2026-09-15T10:00:00.000Z';
@@ -190,13 +189,15 @@ describe('Vergleichspreise DE – Zusammenfassung', () => {
     const d = detailFrom({ km: 80_000, engineCcm: 1995, offerType: 'auction' }, 4_100, bucket);
     assert.equal(d.minEur, 21_500); assert.equal(d.diffPct, null);
     assert.equal(summarize({ km: 80_000, engineCcm: 1995, offerType: 'fixed' }, 18_060, bucket)?.diffPct, -16);
+    // Job-Spalten: Abstand rechnet SQL aus Endpreis und Angebotsart der Zeile zum Schreibzeitpunkt (kein Schnappschuss)
     const stmts = referenceUpdates([
-      { id: 'copart:1', km: 80_000, engine_ccm: 1995, power_kw: null, offer_type: 'auction', landed_de: 4_100, landed_at: 4_200, landed_nl: 4_300, landed_pl: 4_000 },
-      { id: 'olx-ro:2', km: 80_000, engine_ccm: 1995, power_kw: null, offer_type: 'fixed', landed_de: 18_060, landed_at: null, landed_nl: 18_060, landed_pl: 18_060 },
+      { id: 'copart:1', km: 80_000, engine_ccm: 1995, power_kw: null },
+      { id: 'x:2', km: 10_000, engine_ccm: 1995, power_kw: null },
     ], bucket);
-    const argsOf = (s: InStatement) => (typeof s === 'string' ? [] : s.args);
-    assert.deepEqual(argsOf(stmts[0]), [21_500, null, null, null, null, 'copart:1']);
-    assert.deepEqual(argsOf(stmts[1]), [21_500, -16, null, -16, -16, 'olx-ro:2']);
+    const s0 = stmts[0] as { sql: string; args: unknown[] };
+    assert.match(s0.sql, /ref_diff_de = CASE WHEN \? > 0 AND landed_de IS NOT NULL AND offer_type <> 'auction' THEN ROUND\(\(landed_de - \?\) \* 1000\.0 \/ \?\) \/ 10\.0 ELSE NULL END/);
+    assert.deepEqual(s0.args, [21_500, ...Array(12).fill(21_500), 'copart:1']);
+    assert.deepEqual((stmts[1] as { args: unknown[] }).args, [0, ...Array(12).fill(0), 'x:2'], 'kein vergleichbares Angebot → 0 = geprüft');
   });
 
   it('hohe Laufleistung nutzt +30 %; Angebote mit weniger km bleiben vergleichbar', () => {

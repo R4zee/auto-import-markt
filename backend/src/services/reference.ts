@@ -1,6 +1,6 @@
 import type { InStatement } from '@libsql/client';
 import { config, isServerless } from '../config.js';
-import { db, one, query, run, type Row } from '../db.js';
+import { db, one, query, refDiffSql, run, type Row } from '../db.js';
 import { yearBand } from '../domain/generations.js';
 import { makeKey } from '../domain/makes.js';
 import { DEST_CODES } from '../domain/markets.js';
@@ -480,26 +480,29 @@ export async function fetchBucket(q: RefQuery): Promise<RefBucket> {
 // --- Vergleichspreis-Spalten je Inserat (ref_min_eur, ref_diff_<Zielland>) -----------------------------------------
 
 interface RefListingRow extends Row {
-  id: string; km: number; engine_ccm: number | null; power_kw: number | null; offer_type: string;
-  landed_de: number | null; landed_at: number | null; landed_nl: number | null; landed_pl: number | null;
+  id: string; km: number; engine_ccm: number | null; power_kw: number | null;
 }
-const REF_LISTING_COLS = 'id, km, engine_ccm, power_kw, offer_type, landed_de, landed_at, landed_nl, landed_pl';
+const REF_LISTING_COLS = 'id, km, engine_ccm, power_kw';
+
+/**
+ * Abstände aus den Spalten der Zeile zum Schreibzeitpunkt (Endpreis, Angebotsart), der Vergleichspreis kommt als
+ * Parameter (dreimal je Zielland: Prüfung, Differenz, Nenner). Nicht aus dem JS-Schnappschuss: der Job liest die
+ * offenen Inserate am Anfang und schreibt minutenlang – lief parallel ein Sync (Copart-Gebote, Wechsel Sofortkauf →
+ * Auktion), standen 47 Auktionen mit Abständen aus veralteten Endpreisen in der Sortierung (21.09.2026, 18:21 UTC).
+ */
+const REF_DIFF_SET = DEST_CODES.map((d) => `ref_diff_${d.toLowerCase()} = ${refDiffSql(`landed_${d.toLowerCase()}`, '?')}`).join(', ');
 
 /**
  * UPDATE-Anweisungen: günstigstes vergleichbares Angebot und Abstand je Zielland für die Inserate eines Buckets.
  * ref_min_eur = 0 heißt „geprüft, kein vergleichbares Angebot“ (Abstände NULL) – NULL heißt „noch nicht berechnet“.
- * Auktionen bekommen den Vergleichspreis, aber keinen Abstand (firmPrice).
+ * Auktionen bekommen den Vergleichspreis, aber keinen Abstand (offer_type <> 'auction' in refDiffSql, wie firmPrice()).
  */
 export function referenceUpdates(rows: RefListingRow[], b: RefBucket): InStatement[] {
   return rows.map((r) => {
-    const l = { km: Number(r.km), engineCcm: r.engine_ccm == null ? null : Number(r.engine_ccm), powerKw: r.power_kw == null ? null : Number(r.power_kw), offerType: r.offer_type as OfferType };
+    const l = { km: Number(r.km), engineCcm: r.engine_ccm == null ? null : Number(r.engine_ccm), powerKw: r.power_kw == null ? null : Number(r.power_kw) };
     const samples = comparable(l, b).samples;
     const min = samples.length >= MIN_COMPARABLES ? samples[0].priceEur : 0;
-    const diff = (dest: DestCode): number | null => {
-      const landed = r[`landed_${dest.toLowerCase()}` as keyof RefListingRow];
-      return min > 0 && landed != null && firmPrice(l) ? diffPct(Number(landed), min) : null;
-    };
-    return { sql: 'UPDATE listings SET ref_min_eur = ?, ref_diff_de = ?, ref_diff_at = ?, ref_diff_nl = ?, ref_diff_pl = ? WHERE id = ?', args: [min, ...DEST_CODES.map(diff), r.id] };
+    return { sql: `UPDATE listings SET ref_min_eur = ?, ${REF_DIFF_SET} WHERE id = ?`, args: [min, ...DEST_CODES.flatMap(() => [min, min, min]), r.id] };
   });
 }
 

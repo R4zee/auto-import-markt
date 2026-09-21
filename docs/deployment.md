@@ -429,7 +429,10 @@ Gebot, Jap Carz: Startgebot), kein Kaufpreis. Die Sortierung „Größte Differe
 mit 175 $ Gebot als „−94 %“ ganz vorn. Seither bekommen Auktionen den Vergleichspreis („DE ab …“), aber keinen Abstand:
 `firmPrice()` in `services/reference.ts` (Karte, Detail, Job) und die Bedingung `offer_type <> 'auction'` in
 `refDiffSql()` (Upsert, Kursnachzug) schreiben `ref_diff_*` = NULL, die Abstandssortierung reiht sie damit hinten ein;
-`heavyMigrations` hat vorhandene Abstände von Auktionen einmalig gelöscht (Merker `ref_diff_auction_null`). Die
+`heavyMigrations` hat vorhandene Abstände von Auktionen einmalig gelöscht (Merker `ref_diff_auction_null`, Nachräumen
+`…_v2`). Der Job rechnet die Abstände seit dem in SQL aus Endpreis und Angebotsart der Zeile zum Schreibzeitpunkt
+(`REF_DIFF_SET`): Er liest die offenen Inserate am Anfang und schreibt minutenlang; ein parallel laufender Sync änderte
+Copart-Gebote und Angebotsarten, so dass 47 Auktionen mit Abständen aus veralteten Werten wieder vorn standen. Die
 Detailansicht erklärt das in einer Zeile (`refAuction`). Stand der Spalten ohne Datenbankzugang: `/api/health/reference`
 (Migrationsmerker, offene Inserate, Inserate mit Abstand, Auktionen mit Abstand – sollen 0 sein – samt drei Beispielen);
 unter Schreiblast dauert die Antwort über 30 s, Probe deshalb mit `url <Adresse> timeout=120000`.
