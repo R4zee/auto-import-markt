@@ -68,20 +68,32 @@ export function mobileSeoUrl(make: string, model: string): string {
   return `https://suchen.mobile.de/auto/${makeSlug}-${mobileModelSlug(model)}.html`;
 }
 
-export interface ResolvedModel { makeId: number | null; modelId: number | null; modelGroupId: number | null; label: string; url: string }
+export interface ResolvedModel { makeId: number | null; modelId: number | null; modelGroupId: number | null; label: string; url: string; raw?: unknown }
 
 /** Aufgelöste IDs aus `filters.ms[0]` und die Bezeichnung aus `chips.makeModel[0].label` lesen */
 export function extractResolvedModel(json: unknown, url: string): ResolvedModel {
   const j = json as Record<string, unknown> | null;
-  const ms = ((j?.filters as Record<string, unknown> | undefined)?.ms as Array<Record<string, unknown>> | undefined)?.[0] ?? {};
-  const chips = ((j?.chips as Record<string, unknown> | undefined)?.makeModel as Array<Record<string, unknown>> | undefined)?.[0];
+  const msAll = (j?.filters as Record<string, unknown> | undefined)?.ms as Array<Record<string, unknown>> | undefined;
+  const ms = msAll?.[0] ?? {};
+  const chipsAll = (j?.chips as Record<string, unknown> | undefined)?.makeModel as Array<Record<string, unknown>> | undefined;
+  const chips = chipsAll?.[0];
   return {
     makeId: num(ms.make),
     modelId: num(ms.model),
     modelGroupId: num(ms.modelGroup),
     label: str(chips?.label),
     url,
+    raw: { ms: msAll, chips: chipsAll },
   };
+}
+
+/** Modellliste einer Marke (Referenzdaten der mobile.de-Web-App) – Kandidaten-Endpunkte, der erste mit JSON gewinnt */
+export function mobileModelListUrls(makeId: number): string[] {
+  return [
+    `https://www.mobile.de/consumer/api/search/reference-data/models/${makeId}`,
+    `https://www.mobile.de/consumer/api/search/reference-data/models/${makeId}?vc=Car`,
+    `https://m.mobile.de/consumer/api/search/reference-data/models/${makeId}`,
+  ];
 }
 
 /** mobile.de-Marken-IDs (Parameter `ms=<id>;;;<Beschreibung>`), Schlüssel = makeKey des kanonischen Namens */

@@ -222,7 +222,7 @@ async function migrate(): Promise<void> {
 }
 
 /** Stand der Bucket-Logik für listings.ref_key (Änderung → Spalten werden im Job neu berechnet) */
-const REF_KEY_VERSION = '3';
+const REF_KEY_VERSION = '4';
 
 async function heavyMigrations(c: Client): Promise<void> {
   await c.executeMultiple(`

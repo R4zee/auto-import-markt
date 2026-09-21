@@ -179,14 +179,22 @@ export function kmBandSql(): string {
  * Bauzeitraum der Baureihe (W221, E93, F30 …), wenn das Inserat den Code nennt, sonst Baujahr ± REFERENCE_YEAR_SPAN.
  * `kmBand` übersteuert das aus `km` berechnete Band (Refresh-Job gruppiert in SQL).
  */
-export function bucketQuery(l: Pick<Listing, 'make' | 'model' | 'trim' | 'year' | 'fuel' | 'km'> & { kmBand?: number | null }): RefQuery | null {
+export function bucketQuery(l: Pick<Listing, 'make' | 'model' | 'trim' | 'year' | 'fuel' | 'km'> & { powerKw?: number | null; kmBand?: number | null }): RefQuery | null {
   if (mobileMakeId(l.make) == null) return null;
   const description = variantText(l);
   if (!description) return null;
   const band = yearBand(l, config.reference.yearSpan);
   const kmTo = l.kmBand !== undefined ? l.kmBand : kmBandFor(l.km);
   const model = l.model.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
-  return { make: l.make, description, yearFrom: band.from, yearTo: band.to, fuel: (l.fuel as Fuel) ?? null, generation: band.generation, kmTo, model };
+  // Leistungsband (falls die Leistung bekannt ist): Suche im Band mit Rand, Schlüssel über das Band
+  const kw = l.powerKw != null && l.powerKw > 0 ? kwWindow(l.powerKw) : null;
+  return { make: l.make, description, yearFrom: band.from, yearTo: band.to, fuel: (l.fuel as Fuel) ?? null, generation: band.generation, kmTo, model, kwFrom: kw?.from ?? null, kwTo: kw?.to ?? null };
+}
+
+/** Leistungsband als SQL-Ausdruck über `power_kw` (untere Bandgrenze, NULL ohne Leistung) – muss zu kwBandFor() passen */
+export function kwBandSql(): string {
+  const cases = [...KW_BANDS].reverse().map((edge) => `WHEN power_kw >= ${edge} THEN ${edge}`).join(' ');
+  return `CASE WHEN power_kw IS NULL OR power_kw <= 0 THEN NULL ${cases} END`;
 }
 
 // --- Modell-IDs von mobile.de (SEO-Modellseite → filters.ms[0].model), Cache in `meta` ------------------------------
@@ -234,11 +242,12 @@ export async function modelRefFor(make: string, model: string): Promise<ModelRef
 }
 
 export function bucketKey(q: RefQuery): string {
-  return `${source.id}|${makeKey(q.make)}|${q.description.toLowerCase()}|${q.fuel ?? 'any'}|${q.yearFrom}-${q.yearTo}|km${q.kmTo ?? 'all'}`;
+  const kw = q.kwFrom || q.kwTo ? `|kw${q.kwFrom ?? 0}-${q.kwTo ?? 'max'}` : '';
+  return `${source.id}|${makeKey(q.make)}|${q.description.toLowerCase()}|${q.fuel ?? 'any'}|${q.yearFrom}-${q.yearTo}|km${q.kmTo ?? 'all'}${kw}`;
 }
 
 /** Bucket-Schlüssel eines Inserats für die Spalte `listings.ref_key` ('' = für diese Marke/Variante kein Bucket möglich) */
-export function refKeyFor(l: Pick<Listing, 'make' | 'model' | 'trim' | 'year' | 'fuel' | 'km'>): string {
+export function refKeyFor(l: Pick<Listing, 'make' | 'model' | 'trim' | 'year' | 'fuel' | 'km'> & { powerKw?: number | null }): string {
   const q = bucketQuery(l);
   return q ? bucketKey(q) : '';
 }
@@ -461,13 +470,13 @@ export async function backfillReferenceColumns(opts: { maxMs?: number; log?: (li
   const report: BackfillReport = { keyed: 0, pending: 0, updated: 0, buckets: 0, stopped: null };
   for (;;) {
     if (Date.now() - started > maxMs) { report.stopped = `Zeitbudget von ${Math.round(maxMs / 60000)} min erreicht`; return report; }
-    const rows = await query<{ id: string; make: string; model: string; trim: string; year: number; fuel: string; km: number }>(
-      'SELECT id, make, model, trim, year, fuel, km FROM listings WHERE ref_key IS NULL AND active = 1 LIMIT 5000',
+    const rows = await query<{ id: string; make: string; model: string; trim: string; year: number; fuel: string; km: number; power_kw: number | null }>(
+      'SELECT id, make, model, trim, year, fuel, km, power_kw FROM listings WHERE ref_key IS NULL AND active = 1 LIMIT 5000',
     );
     if (!rows.length) break;
     await writeBatches(rows.map((r) => ({
       sql: 'UPDATE listings SET ref_key = ? WHERE id = ?',
-      args: [refKeyFor({ make: r.make, model: r.model, trim: r.trim, year: Number(r.year), fuel: r.fuel as Fuel, km: Number(r.km) }), r.id],
+      args: [refKeyFor({ make: r.make, model: r.model, trim: r.trim, year: Number(r.year), fuel: r.fuel as Fuel, km: Number(r.km), powerKw: r.power_kw == null ? null : Number(r.power_kw) }), r.id],
     })));
     report.keyed += rows.length;
     if (report.keyed % 25000 < 5000) log(`  … ${report.keyed} Inserate mit Bucket-Schlüssel · ${Math.round((Date.now() - started) / 60000)} min`);
@@ -534,13 +543,15 @@ export async function refreshReferenceBuckets(opts: { limit?: number; maxMs?: nu
   const maxMs = opts.maxMs ?? config.reference.maxMinutes * 60000;
   const started = Date.now();
   const log = opts.log ?? (() => undefined);
-  const rows = await query<{ make: string; model: string; trim1: string; fuel: string; year: number; km_band: number | null; n: number }>(
-    `SELECT make, model, substr(trim, 1, instr(trim || ' ', ' ') - 1) AS trim1, fuel, year, ${kmBandSql()} AS km_band, COUNT(*) AS n
-     FROM listings WHERE active = 1 GROUP BY make, model, trim1, fuel, year, km_band`,
+  const rows = await query<{ make: string; model: string; trim1: string; fuel: string; year: number; km_band: number | null; kw_band: number | null; n: number }>(
+    `SELECT make, model, substr(trim, 1, instr(trim || ' ', ' ') - 1) AS trim1, fuel, year, ${kmBandSql()} AS km_band, ${kwBandSql()} AS kw_band, COUNT(*) AS n
+     FROM listings WHERE active = 1 GROUP BY make, model, trim1, fuel, year, km_band, kw_band`,
   );
   const wanted = new Map<string, { q: RefQuery; n: number }>();
   for (const r of rows) {
-    const q = bucketQuery({ make: r.make, model: r.model, trim: r.trim1 ?? '', year: Number(r.year), fuel: r.fuel as Fuel, km: 0, kmBand: r.km_band == null ? null : Number(r.km_band) });
+    // kw_band = untere Bandgrenze; sie liegt im Band, also ergibt sie dasselbe Fenster wie jede Leistung des Bands
+    const kwBand = r.kw_band == null ? null : Number(r.kw_band);
+    const q = bucketQuery({ make: r.make, model: r.model, trim: r.trim1 ?? '', year: Number(r.year), fuel: r.fuel as Fuel, km: 0, kmBand: r.km_band == null ? null : Number(r.km_band), powerKw: kwBand == null ? null : Math.max(kwBand, 1) });
     if (!q) continue;
     const key = bucketKey(q);
     const cur = wanted.get(key);
