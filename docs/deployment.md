@@ -431,7 +431,8 @@ mit 175 $ Gebot als „−94 %“ ganz vorn. Seither bekommen Auktionen den Verg
 `refDiffSql()` (Upsert, Kursnachzug) schreiben `ref_diff_*` = NULL, die Abstandssortierung reiht sie damit hinten ein;
 `heavyMigrations` hat vorhandene Abstände von Auktionen einmalig gelöscht (Merker `ref_diff_auction_null`). Die
 Detailansicht erklärt das in einer Zeile (`refAuction`). Stand der Spalten ohne Datenbankzugang: `/api/health/reference`
-(Migrationsmerker, offene Inserate, Inserate mit Abstand, Auktionen mit Abstand – sollen 0 sein – samt drei Beispielen).
+(Migrationsmerker, offene Inserate, Inserate mit Abstand, Auktionen mit Abstand – sollen 0 sein – samt drei Beispielen);
+unter Schreiblast dauert die Antwort über 30 s, Probe deshalb mit `url <Adresse> timeout=120000`.
 
 **Turso-Schreibsperre (21.09.2026):** Nach den Massenläufen des Tages (Schlüssel-Reset über 273.000 Inserate, Nachzug
 der Sortierspalten, Nachhol-Lauf der Buckets) sperrte Turso alle Schreibzugriffe: „BLOCKED: … SQL write operations are

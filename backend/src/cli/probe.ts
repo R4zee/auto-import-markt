@@ -541,13 +541,22 @@ async function probeJapCarz(sort = 'upcoming_auctions', page = 1) {
   }
 }
 
-/** Beliebige Adresse anfragen: `probe url https://… Header:Wert …` */
+/**
+ * Beliebige Adresse anfragen: `probe url https://… Header:Wert … [timeout=120000]` – das Zeitlimit (ms, Standard 30 s)
+ * für langsame Diagnose-Endpunkte wie /api/health/reference, die unter Schreiblast über 30 s brauchen
+ */
 async function probeUrl(url: string, headerArgs: string[]) {
   const headers: Record<string, string> = { 'User-Agent': config.europe.userAgent, Accept: 'application/json, text/html;q=0.9, */*;q=0.8' };
-  for (const h of headerArgs) { const i = h.indexOf(':'); if (i > 0) headers[h.slice(0, i).trim()] = h.slice(i + 1).trim(); }
+  let timeoutMs = 30000;
+  for (const h of headerArgs) {
+    const t = h.match(/^timeout=(\d+)$/i);
+    if (t) { timeoutMs = Number(t[1]); continue; }
+    const i = h.indexOf(':');
+    if (i > 0) headers[h.slice(0, i).trim()] = h.slice(i + 1).trim();
+  }
   console.log(`\n=== ${url}`);
   const t0 = Date.now();
-  const res = await robustFetch(url, { headers, timeoutMs: 30000, proxyUrl, nodeOnly: true, tls: 'chrome' });
+  const res = await robustFetch(url, { headers, timeoutMs, proxyUrl, nodeOnly: true, tls: 'chrome' });
   const type = res.headers.get('content-type') ?? '?';
   // Bilder (CDN-Prüfung): nur Status, Typ und Größe – kein Binärmüll im Protokoll
   if (/^image\//i.test(type)) {
