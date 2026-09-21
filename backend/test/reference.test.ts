@@ -62,10 +62,13 @@ describe('Vergleichspreise DE – Suchtext und Fenster', () => {
     assert.ok(q);
     assert.equal(q.yearFrom, 2018); assert.equal(q.yearTo, 2020); assert.equal(q.description, 'Sportage'); assert.equal(q.generation, null); assert.equal(q.kmTo, 125_000);
     assert.equal(bucketKey(q), 'mobilede|kia|sportage|Diesel|2018-2020|km125000');
-    // Leistung bekannt → Leistungsband im Schlüssel und Suchfenster mit Rand (X6 xDrive30d 195 kW: Band 175–210 → 148–242 kW)
+    // Leistung bekannt → Leistungsband im Schlüssel und Suchfenster mit Rand (X6 xDrive30d 195 kW: Band 175–210 → 148–242 kW);
+    // OLX-Kategorie „X6 M“ mit Serienmotor in der Ausstattung → „X6“
     const kw = bucketQuery({ make: 'BMW', model: 'X6 M', trim: 'X6 xDrive30d M Sport', year: 2020, fuel: 'Diesel', km: 156_000, powerKw: 195 });
     assert.equal(kw?.kwFrom, 148); assert.equal(kw?.kwTo, 242);
-    assert.equal(bucketKey(kw!), 'mobilede|bmw|x6 m|Diesel|2019-2026|km225000|kw148-242');
+    assert.equal(bucketKey(kw!), 'mobilede|bmw|x6|Diesel|2019-2026|km225000|kw148-242');
+    assert.equal(variantText({ make: 'BMW', model: 'X6 M', trim: 'Competition · SUV' }), 'X6 M', 'echtes M-Modell bleibt');
+    assert.equal(variantText({ make: 'BMW', model: 'X5 M', trim: 'M50d 400cp' }), 'X5');
     assert.equal(bucketQuery({ make: 'BMW', model: 'X6 M', trim: 'Competition', year: 2020, fuel: 'Petrol', km: 50_000, powerKw: 460 })?.kwTo, 598);
     assert.equal(bucketQuery({ make: 'BMW', model: 'X6 M', trim: 'Competition', year: 2020, fuel: 'Petrol', km: 50_000, powerKw: 700 })?.kwTo, null, 'oberstes Band offen');
     // BMW 320d 2019 ohne Code: Familie 3er → F30 (2012–2019, Wechseljahr → auslaufende Reihe)
