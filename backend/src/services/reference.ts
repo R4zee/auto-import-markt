@@ -6,7 +6,7 @@ import { makeKey } from '../domain/makes.js';
 import { DEST_CODES } from '../domain/markets.js';
 import type { DecoratedListing, DestCode, Fuel, Listing, ReferenceSummary } from '../domain/types.js';
 import { HttpError, sleep } from '../providers/http.js';
-import { MobileDeReference, mobileMakeId, type RefQuery, type RefSample } from '../providers/mobilede.js';
+import { matchModel, MobileDeReference, mobileMakeId, type MobileModelItem, type RefQuery, type RefSample } from '../providers/mobilede.js';
 
 /**
  * Vergleichspreise aus dem deutschen Markt.
@@ -203,15 +203,46 @@ const MODEL_TTL_MS = 30 * 86400000;
 export interface ModelRef { modelId: number | null; modelGroupId: number | null; makeId?: number | null }
 const NO_MODEL: ModelRef = { modelId: null, modelGroupId: null };
 const modelMemo = new Map<string, ModelRef>();
+const modelListMemo = new Map<number, MobileModelItem[]>();
+
+/** Modellliste der Marke von mobile.de, 30 Tage in `meta` (eine Anfrage je Marke); leer, wenn unbekannte Marke */
+export async function modelListFor(make: string): Promise<MobileModelItem[]> {
+  const makeId = mobileMakeId(make);
+  if (makeId == null) return [];
+  const memo = modelListMemo.get(makeId);
+  if (memo) return memo;
+  const key = `mobile_models|${makeId}`;
+  const row = await one<{ value: string }>('SELECT value FROM meta WHERE key = ?', [key]);
+  if (row) {
+    try {
+      const v = JSON.parse(row.value) as { items: MobileModelItem[]; at: string };
+      if (Array.isArray(v.items) && v.items.length && Date.now() - new Date(v.at).getTime() < MODEL_TTL_MS) { modelListMemo.set(makeId, v.items); return v.items; }
+    } catch { /* neu laden */ }
+  }
+  const items = await source.fetchModelList(makeId);
+  if (items.length) {
+    await run("INSERT INTO meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [key, JSON.stringify({ items, at: new Date().toISOString() })]);
+    modelListMemo.set(makeId, items);
+  }
+  return items;
+}
 
 /**
- * mobile.de-Modell- bzw. Modellgruppen-ID für Marke + Modellname (z. B. "S-Class" → Gruppe S-Klasse = 16). Ergebnis
- * (auch „unbekannt“) liegt 30 Tage in `meta`, damit je Modell nur eine Anfrage anfällt. Baureihen-Codes im
- * Modellnamen ("S-Class W221") werden entfernt.
+ * mobile.de-Modell- bzw. Modellgruppen-ID für Marke + Modellname (+ Variantentext). Zuerst über die Modellliste der
+ * Marke („7-Series“ → Gruppe „7er Reihe“, „760i“ → Modell „760“, „X6 M“), sonst über die SEO-Modellseite
+ * (z. B. "S-Class" → Gruppe S-Klasse = 16); deren Ergebnis (auch „unbekannt“) liegt 30 Tage in `meta`.
+ * Baureihen-Codes im Modellnamen ("S-Class W221") werden entfernt.
  */
-export async function modelRefFor(make: string, model: string): Promise<ModelRef> {
+export async function modelRefFor(make: string, model: string, description = ''): Promise<ModelRef> {
   const clean = model.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\b[A-Z]{1,2}\d{2,3}\b/g, ' ').replace(/\s+/g, ' ').trim();
   if (!clean) return NO_MODEL;
+  try {
+    const items = await modelListFor(make);
+    const m = items.length ? matchModel(items, clean, description) : null;
+    if (m) return { modelId: m.modelId, modelGroupId: m.modelGroupId, makeId: mobileMakeId(make) };
+  } catch (e) {
+    if (e instanceof HttpError && (e.status === 403 || e.status === 429)) throw e;
+  }
   const key = `mobile_model|${makeKey(make)}|${clean.toLowerCase()}`;
   const memo = modelMemo.get(key);
   if (memo) return memo;
@@ -282,10 +313,23 @@ export function titleMatches(description: string, s: Pick<RefSample, 'title' | '
   return re.test(s.model ?? '') || re.test(s.title);
 }
 
+/**
+ * Mindestzahl vergleichbarer Angebote für einen Vergleichspreis (Kachel, Sortierung, Detailkarte). Ein einzelnes Angebot
+ * ist keine belastbare Referenz: für einen 760i aus Dubai fand sich in DE genau ein Wagen – gepanzert, 788.800 €.
+ */
+export const MIN_COMPARABLES = 2;
+
+/** Einzelstücke, die keinen Marktpreis abbilden (Panzerung, Unikate) */
+const ONE_OFF = /gepanzert|armou?red|\bvr[4-9]\b|panzer|\b1\s?of\s?1\b|unikat|einzelst(ü|ue)ck/i;
+
+export function isOneOff(title: string): boolean {
+  return ONE_OFF.test(title);
+}
+
 export function comparable(l: Pick<Listing, 'km' | 'engineCcm' | 'powerKw'>, b: RefBucket): { samples: RefSample[]; kmFrom: number; kmTo: number } {
   const { from, to } = kmWindow(l.km);
   const samples = b.samples
-    .filter((s) => s.km >= from && s.km <= to && engineMatches(l, s) && titleMatches(b.query.description, s))
+    .filter((s) => s.km >= from && s.km <= to && !isOneOff(s.title) && engineMatches(l, s) && titleMatches(b.query.description, s))
     .sort((a, c) => a.priceEur - c.priceEur);
   return { samples, kmFrom: from, kmTo: to };
 }
@@ -296,7 +340,7 @@ export function diffPct(landedEur: number, refEur: number): number {
 
 export function summarize(l: Pick<Listing, 'km' | 'engineCcm' | 'powerKw'>, landedEur: number, b: RefBucket): ReferenceSummary | null {
   const { samples, kmFrom, kmTo } = comparable(l, b);
-  if (!samples.length) return null;
+  if (samples.length < MIN_COMPARABLES) return null;
   const best = samples[0];
   return {
     source: b.source,
@@ -315,7 +359,8 @@ export function summarize(l: Pick<Listing, 'km' | 'engineCcm' | 'powerKw'>, land
 export function detailFrom(l: Pick<Listing, 'km' | 'engineCcm' | 'powerKw'>, landedEur: number, b: RefBucket): ReferencePrices {
   const { samples, kmFrom, kmTo } = comparable(l, b);
   const prices = samples.map((s) => s.priceEur);
-  const minEur = prices.length ? prices[0] : null;
+  // unter MIN_COMPARABLES: Treffer werden gezeigt (count, samples), aber kein Vergleichspreis/Abstand
+  const minEur = prices.length >= MIN_COMPARABLES ? prices[0] : null;
   return {
     source: b.source,
     count: samples.length,
@@ -405,7 +450,7 @@ export async function attachReferences(items: DecoratedListing[]): Promise<void>
 export async function fetchBucket(q: RefQuery): Promise<RefBucket> {
   const ref: ModelRef = q.modelId !== undefined || q.modelGroupId !== undefined
     ? { modelId: q.modelId ?? null, modelGroupId: q.modelGroupId ?? null }
-    : q.model ? await modelRefFor(q.make, q.model) : NO_MODEL;
+    : q.model ? await modelRefFor(q.make, q.model, q.description) : NO_MODEL;
   const query: RefQuery = { ...q, ...ref };
   const r = await source.fetchSamples(query);
   const matching = r.samples.filter((s) => titleMatches(q.description, s));
@@ -431,7 +476,8 @@ const REF_LISTING_COLS = 'id, km, engine_ccm, power_kw, landed_de, landed_at, la
 function referenceUpdates(rows: RefListingRow[], b: RefBucket): InStatement[] {
   return rows.map((r) => {
     const l = { km: Number(r.km), engineCcm: r.engine_ccm == null ? null : Number(r.engine_ccm), powerKw: r.power_kw == null ? null : Number(r.power_kw) };
-    const min = comparable(l, b).samples[0]?.priceEur ?? 0;
+    const samples = comparable(l, b).samples;
+    const min = samples.length >= MIN_COMPARABLES ? samples[0].priceEur : 0;
     const diff = (dest: DestCode): number | null => {
       const landed = r[`landed_${dest.toLowerCase()}` as keyof RefListingRow];
       return min > 0 && landed != null ? diffPct(Number(landed), min) : null;

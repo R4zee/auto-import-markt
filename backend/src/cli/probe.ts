@@ -7,7 +7,7 @@ import { mapSubito, SubitoProvider } from '../providers/subito.js';
 import { CopartProvider, copartSkipReason, mapCopart } from '../providers/copart.js';
 import { DubizzleProvider, dubizzleSkipReason, initialBands, mapDubizzle } from '../providers/dubizzle.js';
 import { japcarzSkipReason, mapJapCarz, type JapCarzItem } from '../providers/japcarz.js';
-import { extractItems, mapMobileItem, mobileApiUrl, mobileHeaders, mobileMakeId, mobileModelListUrls, MobileDeReference, mobileSearchUrl, mobileSeoUrl, type RefQuery } from '../providers/mobilede.js';
+import { extractItems, mapMobileItem, matchModel, mobileApiUrl, mobileHeaders, mobileMakeId, mobileModelListUrls, MobileDeReference, mobileSearchUrl, mobileSeoUrl, type RefQuery } from '../providers/mobilede.js';
 import { bucketKey, kmBandFor, kmWindow, kwWindow, summarize, titleMatches } from '../services/reference.js';
 import { yearBand } from '../domain/generations.js';
 import type { Fuel } from '../domain/types.js';
@@ -375,8 +375,18 @@ async function probeMobileModels(makeId: number, filter: string) {
 }
 
 /** Modell-ID von mobile.de über die SEO-Modellseite: `probe mobile-model Mercedes-Benz "S-Class"` */
-async function probeMobileModel(make: string, model: string): Promise<{ modelId: number | null; modelGroupId: number | null }> {
+async function probeMobileModel(make: string, model: string, description = ''): Promise<{ modelId: number | null; modelGroupId: number | null }> {
   const src = new MobileDeReference();
+  // 1) Modellliste der Marke (wie der Adapter zuerst), 2) SEO-Modellseite
+  const makeId = mobileMakeId(make);
+  if (makeId != null) {
+    try {
+      const items = await src.fetchModelList(makeId);
+      const m = items.length ? matchModel(items, model, description || model) : null;
+      console.log(`\n=== mobile.de Modellliste · ${make} (${makeId}): ${items.length} Einträge · "${model}"${description ? ` / "${description}"` : ''} → ${m ? `${m.label} (model=${m.modelId ?? '–'} group=${m.modelGroupId ?? '–'})` : 'kein Treffer'}`);
+      if (m) return { modelId: m.modelId, modelGroupId: m.modelGroupId };
+    } catch (e) { console.log('  ✖ Modellliste:', e instanceof Error ? e.message.slice(0, 160) : String(e)); }
+  }
   console.log(`\n=== mobile.de Modell-ID · ${make} "${model}" → ${mobileSeoUrl(make, model)}`);
   try {
     const r = await src.resolveModel(make, model);
@@ -396,7 +406,7 @@ async function probeMobile(make: string, description: string, year: number, fuel
   // Beschreibung darf einen Baureihen-Code enthalten ("S350 W221") → Bauzeitraum statt Baujahr ±1
   const band = yearBand({ make, model: description, trim: description, year }, config.reference.yearSpan);
   const cleanDesc = band.generation ? description.replace(new RegExp(`\\s*\\b${band.generation}\\b\\s*`, 'i'), ' ').trim() : description;
-  const ref = model ? await probeMobileModel(make, model) : { modelId: null, modelGroupId: null };
+  const ref = model ? await probeMobileModel(make, model, cleanDesc) : { modelId: null, modelGroupId: null };
   const power = kw ? kwWindow(kw) : null;
   const q: RefQuery = { make, description: cleanDesc, yearFrom: band.from, yearTo: band.to, fuel, generation: band.generation, kmTo: kmBandFor(km), ...ref, model: model ?? undefined, kwFrom: power?.from ?? null, kwTo: power?.to ?? null };
   const src = new MobileDeReference();

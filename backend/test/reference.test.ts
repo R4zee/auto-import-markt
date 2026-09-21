@@ -5,8 +5,8 @@ process.env.REFERENCE_ENABLED = 'true';
 process.env.REFERENCE_MAKE_IDS = '{"Hongqi": 99999}';
 
 const { copartBody, copartPhoto, copartSkipReason, mapCopart } = await import('../src/providers/copart.js');
-const { extractItems, extractResolvedModel, firstInt, mapMobileItem, mobileApiUrl, mobileMakeId, mobileSearchParams, mobileSeoUrl } = await import('../src/providers/mobilede.js');
-const { bucketKey, bucketQuery, detailFrom, diffPct, engineMatches, kmBandFor, kmWindow, summarize, titleMatches, variantText } = await import('../src/services/reference.js');
+const { extractItems, extractResolvedModel, firstInt, flattenModelList, mapMobileItem, matchModel, mobileApiUrl, mobileMakeId, mobileSearchParams, mobileSeoUrl, normModelLabel } = await import('../src/providers/mobilede.js');
+const { bucketKey, bucketQuery, detailFrom, diffPct, engineMatches, isOneOff, kmBandFor, kmWindow, summarize, titleMatches, variantText } = await import('../src/services/reference.js');
 const { powerKwFromText } = await import('../src/providers/types.js');
 const { generationOf, yearBand } = await import('../src/domain/generations.js');
 import type { RefBucket } from '../src/services/reference.js';
@@ -166,6 +166,18 @@ describe('Vergleichspreise DE – Zusammenfassung', () => {
     assert.equal(d.count, 0); assert.equal(d.minEur, null); assert.equal(d.diffPct, null);
   });
 
+  it('ein einzelnes Angebot ist keine Referenz; Einzelstücke (gepanzert, 1of1) zählen nicht mit', () => {
+    const one = { ...bucket, samples: [bucket.samples[1]] };
+    assert.equal(summarize({ km: 80_000, engineCcm: 1995 }, 18_060, one), null);
+    const d = detailFrom({ km: 80_000, engineCcm: 1995 }, 18_060, one);
+    assert.equal(d.count, 1); assert.equal(d.minEur, null); assert.equal(d.diffPct, null);
+    assert.ok(isOneOff('BMW 760i x Drive/VR9 Factory Armored,/2026/T1/No VAT'));
+    assert.ok(isOneOff('BMW X6 M Competition 1of1 Hamann Full Package 23"'));
+    assert.ok(!isOneOff('BMW X6 M Competition Panorama Soft-Close Vollleder'));
+    const armored = { ...bucket, samples: [...bucket.samples, { priceEur: 9_000, year: 2019, km: 50_000, kw: 140, ccm: 1995, title: 'BMW 320d gepanzert VR4', url: null }] };
+    assert.equal(summarize({ km: 80_000, engineCcm: 1995 }, 18_060, armored)?.minEur, 21_500, 'gepanzerter 9.000-€-Wagen bleibt außen vor');
+  });
+
   it('hohe Laufleistung nutzt +30 %; Angebote mit weniger km bleiben vergleichbar', () => {
     const s = summarize({ km: 160_000, engineCcm: null }, 20_000, bucket);
     assert.ok(s);
@@ -244,6 +256,21 @@ describe('mobile.de – URL und Antwort', () => {
     const { raw, ...ids } = r;
     assert.ok(raw);
     assert.deepEqual(ids, { makeId: 17200, modelId: null, modelGroupId: 16, label: 'Mercedes-Benz S-Klasse', url: 'u' });
+    // Modellliste (Probe 21.09.2026, BMW): Gruppen als optgroups, Einzelmodelle mit value/label
+    const list = flattenModelList([
+      { optgroupLabel: '7er Reihe', items: [{ value: '24', label: '7er Reihe (Alle)', isGroup: true }, { value: '33', label: '725' }, { value: '39', label: '760' }] },
+      { optgroupLabel: 'M-Modelle', items: [{ value: '25', label: 'M-Modelle (Alle)', isGroup: true }, { value: '99', label: 'M760' }, { value: '87', label: 'X6 M' }] },
+      { optgroupLabel: 'X-Reihe', items: [{ value: '26', label: 'X-Reihe (Alle)', isGroup: true }, { value: '49', label: 'X6' }] },
+      { value: '336', label: 'i7' },
+    ]);
+    assert.equal(list.length, 9);
+    assert.deepEqual(matchModel(list, '7-Series', '760i'), { modelId: 39, modelGroupId: null, label: '760' }, 'Variante vor Gruppe');
+    assert.deepEqual(matchModel(list, '7 Series', '7'), { modelId: null, modelGroupId: 24, label: '7er Reihe (Alle)' }, '„7 Series“ → Gruppe 7er');
+    assert.deepEqual(matchModel(list, 'X6 M', 'X6 M'), { modelId: 87, modelGroupId: null, label: 'X6 M' }, 'exakt vor Präfix („X6“)');
+    assert.deepEqual(matchModel(list, 'X6', 'X6'), { modelId: 49, modelGroupId: null, label: 'X6' });
+    assert.deepEqual(matchModel(list, '7 Series', 'M760e'), { modelId: 99, modelGroupId: null, label: 'M760' });
+    assert.equal(matchModel(list, 'Tucson', 'Tucson'), null);
+    assert.equal(normModelLabel('S-Class'), 'sklasse'); assert.equal(normModelLabel('S-Klasse (Alle)'), 'sklasse');
     assert.equal(extractResolvedModel({ filters: {} }, 'u').modelId, null);
   });
 

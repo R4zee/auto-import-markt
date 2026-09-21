@@ -33,12 +33,17 @@ export interface SautoItem {
 export interface SautoResponse { results?: SautoItem[]; pagination?: { total?: number; limit?: number; offset?: number } }
 
 /**
- * Bild-URL absolut machen. Ohne Größenparameter: das Seznam-CDN lieferte mit `?fl=exf|res,…` keine Bilder aus
- * (Sauto-Inserate ohne Fotos, 21.09.2026), die nackte URL liefert das Original.
+ * Größen-/Wasserzeichen-Parameter, den die Sauto-Seite selbst nutzt. Probe 21.09.2026 gegen d19-a.sdn.cz: nackte URL
+ * → HTTP 401, andere `fl=`-Varianten → HTTP 400, nur genau diese Form liefert image/jpeg (ohne Referer-Pflicht).
+ * Bei Änderung auch die Bestandskorrektur in db.ts (heavyMigrations, Merker sauto_photos_wrm) anpassen.
  */
+export const SAUTO_IMAGE_PARAMS = '?fl=exf|res,1024,768,1|wrm,/watermark/sauto.png,10,10|jpg,80,,1';
+
+/** Bild-URL absolut machen und mit dem einzigen vom CDN akzeptierten Parametersatz versehen */
 export function sautoImage(url: string | undefined): string | null {
   if (!url) return null;
-  return url.startsWith('//') ? `https:${url}` : url;
+  const abs = url.startsWith('//') ? `https:${url}` : url;
+  return `${abs.split('?')[0]}${SAUTO_IMAGE_PARAMS}`;
 }
 
 export function sautoYear(v: string | number | undefined): number | null {

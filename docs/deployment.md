@@ -408,7 +408,21 @@ außer in der Detailansicht.
 
 **Fotos (21.09.2026):** Die Detailseite zeigt alle Fotos der Quelle als Galerie (Hauptbild mit Blättern, alle Vorschaubilder
 darunter). Die vier Prüfblatt-Platzhalter (Front, Innenraum, Motorraum, Unterboden) erscheinen nur noch bei japanischen
-Auktionen ohne Fotos. Sauto-Bilder kommen ohne CDN-Größenparameter (`?fl=…`, das Seznam-CDN lieferte damit nichts).
+Auktionen ohne Fotos. Sauto-Bilder tragen genau den Parametersatz, den die Sauto-Seite selbst nutzt
+(`?fl=exf|res,1024,768,1|wrm,/watermark/sauto.png,10,10|jpg,80,,1`, `SAUTO_IMAGE_PARAMS`): Probe 21.09.2026 gegen
+d19-a.sdn.cz – nackte URL HTTP 401, andere `fl=`-Varianten HTTP 400, nur diese Form liefert das Bild (ohne Referer-Pflicht).
+Der Bestand wurde einmalig umgeschrieben (Merker `sauto_photos_wrm`).
+
+**Vergleichspreise je Leistungsband (21.09.2026):** mobile.de sortiert nach Preis; ohne Leistungsfilter zeigen die ersten
+Seiten nur die schwächsten Motoren eines Modells (ein X6 xDrive30d aus Rumänien wurde mit einem einzigen 101.990-€-Angebot
+verglichen, ein X6 M fand keins). Der Bucket-Schlüssel trägt deshalb das Leistungsband (`KW_BANDS`, Suchparameter
+`pw=<von>:<bis>` mit 15 % Rand); `REF_KEY_VERSION` 4 hat Schlüssel und Sortierspalten zurückgesetzt, die Buckets werden
+über die stündlichen Läufe neu geladen (~1.500 je 45 min). Modell-IDs kommen zuerst aus der Modellliste der Marke
+(`/consumer/api/search/reference-data/models/<makeId>`, 30 Tage in `meta`: „7-Series“ → Gruppe 7er, „760i“ → Modell 760,
+„X6 M“), erst dann über die SEO-Modellseite. Ein Vergleichspreis braucht mindestens zwei Angebote (`MIN_COMPARABLES`);
+Einzelstücke (gepanzert, „1of1“) zählen nicht – für einen 760i aus Dubai gab es in DE genau einen Wagen, gepanzert,
+788.800 €. Probe: `npm run probe -- mobile BMW "X6 M" 2020 Petrol 156000 "X6 M" 460` (Leistung in kW als letztes
+Argument), `mobile-models 3500 7`, `sauto-detail <id>`; auf dem Runner über den Workflow **Probe** (Feld `args`).
 
 **Transportkosten EU (21.09.2026):** Innerhalb der EU rechnet die Kalkulation mit 0,3 % Transportversicherung statt 1,1 %
 Seefracht-Versicherung (`FEES.insurancePctEU`) – ein 440.000-€-Fahrzeug aus Prag stand sonst mit über 5.000 € „Seefracht“ da.

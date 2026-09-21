@@ -86,7 +86,7 @@ const en = {
   photoHint: 'Photos on request', photoOf: 'Photo {i} of {n}',
   signInTitle: 'Accounts are coming soon', signInBody: 'Your watchlist and comparison are stored in this browser for now. Sign-in with synced lists and saved searches follows with the next release.',
   close: 'Close', ended: 'Ended', estimated: 'estimated',
-  refTitle: 'Reference · {source}', refLine: '{n} comparable offers · {yearFrom}–{yearTo}', refRange: 'Range', refNone: 'No comparable offers found.', refLoading: 'Loading reference prices…', refNote: 'Cheapest asking price of a comparable listing in Germany, not a valuation. Imports are typically cheaper than local stock.',
+  refTitle: 'Reference · {source}', refLine: '{n} comparable offers · {yearFrom}–{yearTo}', refRange: 'Range', refNone: 'No comparable offers found.', refTooFew: 'Only {n} offer in Germany – not a reliable reference.', refLoading: 'Loading reference prices…', refNote: 'Cheapest asking price of a comparable listing in Germany, not a valuation. Imports are typically cheaper than local stock.',
   refDeFrom: 'DE from {price}', refMin: 'Cheapest comparable offer', refDiff: 'Landed price vs. cheapest DE offer', refWindow: 'up to {kmTo} km · {years}',
   refTooltip: '{n} comparable offers in Germany (up to {kmTo} km, {years}). Percentage: landed price {landed} incl. duty, tax, TÜV and registration vs. the cheapest offer.',
 };
@@ -177,7 +177,7 @@ const de: typeof en = {
   photoHint: 'Fotos auf Anfrage', photoOf: 'Foto {i} von {n}',
   signInTitle: 'Konten folgen in Kürze', signInBody: 'Merkliste und Vergleich werden derzeit in diesem Browser gespeichert. Die Anmeldung mit synchronisierten Listen und gespeicherten Suchen kommt mit dem nächsten Release.',
   close: 'Schließen', ended: 'Beendet', estimated: 'geschätzt',
-  refTitle: 'Referenz · {source}', refLine: '{n} vergleichbare Angebote · {yearFrom}–{yearTo}', refRange: 'Spanne', refNone: 'Keine vergleichbaren Angebote gefunden.', refLoading: 'Referenzpreise werden geladen…', refNote: 'Günstigster Angebotspreis eines vergleichbaren Inserats in Deutschland, keine Bewertung. Importe liegen in der Regel unter dem heimischen Angebot.',
+  refTitle: 'Referenz · {source}', refLine: '{n} vergleichbare Angebote · {yearFrom}–{yearTo}', refRange: 'Spanne', refNone: 'Keine vergleichbaren Angebote gefunden.', refTooFew: 'Nur {n} Angebot in Deutschland – keine belastbare Referenz.', refLoading: 'Referenzpreise werden geladen…', refNote: 'Günstigster Angebotspreis eines vergleichbaren Inserats in Deutschland, keine Bewertung. Importe liegen in der Regel unter dem heimischen Angebot.',
   refDeFrom: 'DE ab {price}', refMin: 'Günstigstes vergleichbares Angebot', refDiff: 'Endpreis zum günstigsten DE-Angebot', refWindow: 'bis {kmTo} km · {years}',
   refTooltip: '{n} vergleichbare Angebote in Deutschland (bis {kmTo} km, {years}). Prozent: Endpreis {landed} inkl. Zoll, Steuer, TÜV und Zulassung gegenüber dem günstigsten Angebot.',
 };

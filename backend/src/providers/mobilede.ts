@@ -87,13 +87,65 @@ export function extractResolvedModel(json: unknown, url: string): ResolvedModel 
   };
 }
 
-/** Modellliste einer Marke (Referenzdaten der mobile.de-Web-App) – Kandidaten-Endpunkte, der erste mit JSON gewinnt */
+/**
+ * Modellliste einer Marke (Referenzdaten der mobile.de-Web-App; Probe 21.09.2026 für BMW: 23 Einträge, Gruppen als
+ * optgroups {optgroupLabel, items[{value,label,isGroup}]}, z. B. „7er Reihe (Alle)“ = Gruppe 24, „X6 M“, „760“).
+ */
 export function mobileModelListUrls(makeId: number): string[] {
   return [
     `https://www.mobile.de/consumer/api/search/reference-data/models/${makeId}`,
     `https://www.mobile.de/consumer/api/search/reference-data/models/${makeId}?vc=Car`,
-    `https://m.mobile.de/consumer/api/search/reference-data/models/${makeId}`,
   ];
+}
+
+export interface MobileModelItem { id: number; label: string; isGroup: boolean; group: string | null }
+
+/** Modellliste flach: optgroups mit items sowie Einzeleinträge {value,label} */
+export function flattenModelList(json: unknown): MobileModelItem[] {
+  const out: MobileModelItem[] = [];
+  const arr = Array.isArray(json) ? json : (Object.values((json ?? {}) as Record<string, unknown>).find(Array.isArray) as unknown[] | undefined);
+  for (const e of arr ?? []) {
+    const o = e as Record<string, unknown>;
+    if (Array.isArray(o.items)) {
+      const group = str(o.optgroupLabel) || null;
+      for (const it of o.items as Array<Record<string, unknown>>) {
+        const id = num(it.value);
+        if (id != null) out.push({ id, label: str(it.label), isGroup: it.isGroup === true, group });
+      }
+    } else {
+      const id = num(o.value);
+      if (id != null) out.push({ id, label: str(o.label), isGroup: o.isGroup === true, group: null });
+    }
+  }
+  return out;
+}
+
+/** Vergleichsform: ohne „(Alle)“/„Reihe“, „7 Series“/„7-Series“ → „7er“, „S-Class“ → „sklasse“, nur Kleinbuchstaben/Ziffern */
+export function normModelLabel(s: string): string {
+  return s.replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/[- ]?\b(class)\b/i, 'klasse').replace(/\b(\d)\s*[- ]?(series|serie)\b/i, '$1er')
+    .replace(/\b(reihe|modelle)\b/gi, ' ')
+    .normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+/**
+ * Modell bzw. Gruppe aus der Liste, in dieser Reihenfolge: (1) Beschreibung exakt („X6 M“, „S 350“), (2) Variante:
+ * Listeneintrag ist Präfix der Beschreibung mit höchstens zwei Restbuchstaben („760i“ → „760“, „E 220 d“ → „E 220“,
+ * „M760e“ → „M760“), (3) Modellname exakt („7-Series“ → Gruppe „7er Reihe (Alle)“). Längste Bezeichnung gewinnt.
+ */
+export function matchModel(items: MobileModelItem[], model: string, description: string): { modelId: number | null; modelGroupId: number | null; label: string } | null {
+  const desc = normModelLabel(description);
+  const mod = normModelLabel(model);
+  const scored = items.map((it) => ({ it, n: normModelLabel(it.label) })).filter((x) => x.n.length >= 2);
+  const pick = (c: typeof scored) => c.sort((a, b) => b.n.length - a.n.length)[0] as (typeof scored)[number] | undefined;
+  const exactDesc = pick(scored.filter((x) => x.n === desc));
+  const variant = pick(scored.filter((x) => !x.it.isGroup && /\d/.test(x.n) && desc.startsWith(x.n) && /^[a-z]{0,2}$/.test(desc.slice(x.n.length))));
+  const exactModel = pick(scored.filter((x) => x.n === mod));
+  const chosen = exactDesc ?? variant ?? exactModel;
+  if (!chosen) return null;
+  return chosen.it.isGroup
+    ? { modelId: null, modelGroupId: chosen.it.id, label: chosen.it.label }
+    : { modelId: chosen.it.id, modelGroupId: null, label: chosen.it.label };
 }
 
 /** mobile.de-Marken-IDs (Parameter `ms=<id>;;;<Beschreibung>`), Schlüssel = makeKey des kanonischen Namens */
@@ -246,6 +298,18 @@ export class MobileDeReference {
     let raw: unknown;
     try { raw = JSON.parse(body); } catch { throw new Error(`mobile.de: keine JSON-Antwort für ${seo}`); }
     return extractResolvedModel(raw, seo);
+  }
+
+  /** Modellliste der Marke (leer, wenn kein Endpunkt JSON liefert); 403/429 werden als HttpError durchgereicht */
+  async fetchModelList(makeId: number): Promise<MobileModelItem[]> {
+    for (const url of mobileModelListUrls(makeId)) {
+      const res = await robustFetch(url, { headers: mobileHeaders(), timeoutMs: 20000, proxyUrl: config.reference.proxyUrl || undefined, nodeOnly: true, tls: 'chrome' });
+      const body = await res.text();
+      if (res.status === 403 || res.status === 429) throw new HttpError(res.status, url, body, null);
+      if (!res.ok) continue;
+      try { return flattenModelList(JSON.parse(body)); } catch { /* nächster Kandidat */ }
+    }
+    return [];
   }
 
   /** Bis zu `pages` Seiten (günstigste zuerst); Stichproben preisaufsteigend */
