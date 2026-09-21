@@ -81,7 +81,10 @@ export const DESTINATIONS: Record<DestCode, DestMeta> = {
 
 /** Pauschalen (EUR) – Stand 09/2026. */
 export const FEES = {
+  /** Transportversicherung Seefracht (Anteil vom Fahrzeugwert) */
   insurancePct: 0.011,
+  /** Transportversicherung Straßentransport innerhalb der EU – 1,1 % ergaben bei einem 440.000-€-Aventador aus Prag über 5.000 € „Seefracht“ */
+  insurancePctEU: 0.003,
   clearingNonEU: 240,
   /** §21 StVZO Einzelabnahme inkl. Scheinwerfer-Umbau (Drittland) */
   inspectionNonEU: 780,

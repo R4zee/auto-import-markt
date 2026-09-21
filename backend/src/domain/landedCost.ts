@@ -30,7 +30,7 @@ export function calcLandedCost(p: LandedCostParams): LandedCost {
 
   const fob = p.price * p.fxRate;
   const freight = market.freightEur;
-  const insurance = fob * FEES.insurancePct;
+  const insurance = fob * (isEU ? FEES.insurancePctEU : FEES.insurancePct);
   const cif = fob + freight + insurance;
 
   let dutyRate: number;
@@ -50,7 +50,8 @@ export function calcLandedCost(p: LandedCostParams): LandedCost {
 
   const lines: CostLine[] = [
     { key: 'lFob', amountEur: round2(fob) },
-    { key: 'lFreight', amountEur: round2(freight + insurance) },
+    // EU: Straßentransport statt Seefracht (eigene Bezeichnung)
+    { key: isEU ? 'lFreightEU' : 'lFreight', amountEur: round2(freight + insurance) },
     { key: 'lCif', amountEur: round2(cif) },
   ];
   if (isEU) {

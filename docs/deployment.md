@@ -406,6 +406,15 @@ Kosten: der Job läuft auf GitHub Actions – im privaten Repository zählt er g
 Turso liest je Trefferseite bis zu 48 kleine Zeilen mehr. Auf Vercel entsteht keine zusätzliche externe Anfrage
 außer in der Detailansicht.
 
+**Fotos (21.09.2026):** Die Detailseite zeigt alle Fotos der Quelle als Galerie (Hauptbild mit Blättern, alle Vorschaubilder
+darunter). Die vier Prüfblatt-Platzhalter (Front, Innenraum, Motorraum, Unterboden) erscheinen nur noch bei japanischen
+Auktionen ohne Fotos. Sauto-Bilder kommen ohne CDN-Größenparameter (`?fl=…`, das Seznam-CDN lieferte damit nichts).
+
+**Transportkosten EU (21.09.2026):** Innerhalb der EU rechnet die Kalkulation mit 0,3 % Transportversicherung statt 1,1 %
+Seefracht-Versicherung (`FEES.insurancePctEU`) – ein 440.000-€-Fahrzeug aus Prag stand sonst mit über 5.000 € „Seefracht“ da.
+Nach Änderungen an Gebühren `LANDED_VERSION` in `services/sync.ts` hochzählen, dann rechnet der nächste Sync alle
+Endpreis-Spalten neu.
+
 ## Teil L – GitHub-Actions-Minuten: Läufe schlagen nach Sekunden fehl (Stand 20.09.2026)
 
 **Symptom:** Seit dem 18.09.2026 abends enden alle Läufe von „Sync Listings“ und „Reference Prices“ nach 3–40 Sekunden
