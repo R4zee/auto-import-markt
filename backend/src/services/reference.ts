@@ -480,9 +480,9 @@ export async function fetchBucket(q: RefQuery): Promise<RefBucket> {
 // --- Vergleichspreis-Spalten je Inserat (ref_min_eur, ref_diff_<Zielland>) -----------------------------------------
 
 interface RefListingRow extends Row {
-  id: string; km: number; engine_ccm: number | null; power_kw: number | null;
+  id: string; km: number; engine_ccm: number | null; power_kw: number | null; ref_min_eur: number | null;
 }
-const REF_LISTING_COLS = 'id, km, engine_ccm, power_kw';
+const REF_LISTING_COLS = 'id, km, engine_ccm, power_kw, ref_min_eur';
 
 /**
  * Abstände aus den Spalten der Zeile zum Schreibzeitpunkt (Endpreis, Angebotsart), der Vergleichspreis kommt als
@@ -498,11 +498,14 @@ const REF_DIFF_SET = DEST_CODES.map((d) => `ref_diff_${d.toLowerCase()} = ${refD
  * Auktionen bekommen den Vergleichspreis, aber keinen Abstand (offer_type <> 'auction' in refDiffSql, wie firmPrice()).
  */
 export function referenceUpdates(rows: RefListingRow[], b: RefBucket): InStatement[] {
-  return rows.map((r) => {
+  return rows.flatMap((r) => {
     const l = { km: Number(r.km), engineCcm: r.engine_ccm == null ? null : Number(r.engine_ccm), powerKw: r.power_kw == null ? null : Number(r.power_kw) };
     const samples = comparable(l, b).samples;
     const min = samples.length >= MIN_COMPARABLES ? samples[0].priceEur : 0;
-    return { sql: `UPDATE listings SET ref_min_eur = ?, ${REF_DIFF_SET} WHERE id = ?`, args: [min, ...DEST_CODES.flatMap(() => [min, min, min]), r.id] };
+    // Unverändert (gleicher Vergleichspreis, Abstände zieht der Kursnachzug nach) → nicht schreiben: jede Zeile kostet
+    // Turso-Schreibkontingent samt Indexeinträgen, und bei der wöchentlichen Bucket-Erneuerung bleibt der Preis meist
+    if (r.ref_min_eur != null && Number(r.ref_min_eur) === min) return [];
+    return [{ sql: `UPDATE listings SET ref_min_eur = ?, ${REF_DIFF_SET} WHERE id = ?`, args: [min, ...DEST_CODES.flatMap(() => [min, min, min]), r.id] }];
   });
 }
 

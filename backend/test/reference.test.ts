@@ -191,9 +191,11 @@ describe('Vergleichspreise DE – Zusammenfassung', () => {
     assert.equal(summarize({ km: 80_000, engineCcm: 1995, offerType: 'fixed' }, 18_060, bucket)?.diffPct, -16);
     // Job-Spalten: Abstand rechnet SQL aus Endpreis und Angebotsart der Zeile zum Schreibzeitpunkt (kein Schnappschuss)
     const stmts = referenceUpdates([
-      { id: 'copart:1', km: 80_000, engine_ccm: 1995, power_kw: null },
-      { id: 'x:2', km: 10_000, engine_ccm: 1995, power_kw: null },
+      { id: 'copart:1', km: 80_000, engine_ccm: 1995, power_kw: null, ref_min_eur: null },
+      { id: 'x:2', km: 10_000, engine_ccm: 1995, power_kw: null, ref_min_eur: null },
+      { id: 'x:3', km: 80_000, engine_ccm: 1995, power_kw: null, ref_min_eur: 21_500 },
     ], bucket);
+    assert.equal(stmts.length, 2, 'unveränderter Vergleichspreis wird nicht geschrieben (Schreibkontingent)');
     const s0 = stmts[0] as { sql: string; args: unknown[] };
     assert.match(s0.sql, /ref_diff_de = CASE WHEN \? > 0 AND landed_de IS NOT NULL AND offer_type <> 'auction' THEN ROUND\(\(landed_de - \?\) \* 1000\.0 \/ \?\) \/ 10\.0 ELSE NULL END/);
     assert.deepEqual(s0.args, [21_500, ...Array(12).fill(21_500), 'copart:1']);

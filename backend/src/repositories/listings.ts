@@ -338,12 +338,20 @@ export const listingsRepo = {
     };
   },
 
-  /** Vorberechnete EUR/Endpreis-Spalten mit aktuellen Kursen neu berechnen (z. B. nach Kursänderung). */
-  async recomputeDerived(source?: string): Promise<number> {
+  /**
+   * Vorberechnete EUR/Endpreis-Spalten mit aktuellen Kursen neu berechnen (z. B. nach Kursänderung) – optional nur für
+   * eine Quelle bzw. nur für Inserate in bestimmten Währungen (services/sync.ts: Kursschwelle je Währung).
+   */
+  async recomputeDerived(source?: string, currencies?: string[]): Promise<number> {
+    if (currencies && !currencies.length) return 0;
     // nur die Spalten lesen, die die Kalkulation braucht – nicht Fotos/Schäden
+    const where = ['active = 1'];
+    const args: InValue[] = [];
+    if (source) { where.push('source = ?'); args.push(source); }
+    if (currencies) { where.push(`currency IN (${currencies.map(() => '?').join(',')})`); args.push(...currencies); }
     const rows = await query<{ id: string; market: string; price: number; currency: string; classic: number; duty_rate_override: number | null; origin_proof: number; price_eur: number | null; landed_de: number | null; landed_at: number | null; landed_nl: number | null; landed_pl: number | null }>(
-      `SELECT id, market, price, currency, classic, duty_rate_override, origin_proof, price_eur, landed_de, landed_at, landed_nl, landed_pl FROM listings WHERE active = 1${source ? ' AND source = ?' : ''}`,
-      source ? [source] : [],
+      `SELECT id, market, price, currency, classic, duty_rate_override, origin_proof, price_eur, landed_de, landed_at, landed_nl, landed_pl FROM listings WHERE ${where.join(' AND ')}`,
+      args,
     );
     let n = 0;
     // Nur Zeilen schreiben, deren Werte sich ändern: eine Kalkulationsänderung für EU-Quellen (LANDED_VERSION 2) schrieb

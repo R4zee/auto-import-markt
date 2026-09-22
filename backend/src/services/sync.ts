@@ -87,15 +87,47 @@ export async function deactivateOrphans(): Promise<Record<string, number>> {
 /** Stand der Endpreis-Kalkulation (Gebühren, Versicherungssätze) – hochzählen, wenn sich calcLandedCost/FEES ändern */
 const LANDED_VERSION = '2';
 
-/** EUR-/Endpreis-Spalten neu berechnen, wenn sich der Kursstand oder die Kalkulation seit dem letzten Mal geändert hat. */
+/** Kursabweichung, ab der die vorberechneten Endpreise einer Währung neu geschrieben werden (0,5 %) */
+export const FX_RECOMPUTE_THRESHOLD = 0.005;
+
+interface AppliedFx { version: string; rates: Record<string, number> }
+
+/**
+ * Welche Währungen neu gerechnet werden müssen: alle, wenn sich die Kalkulation geändert hat oder noch kein Stand
+ * gespeichert ist; sonst nur die, deren Kurs seit dem letzten Schreiben um mindestens FX_RECOMPUTE_THRESHOLD abweicht.
+ */
+export function currenciesToRecompute(current: Record<string, number>, applied: AppliedFx | null): string[] | 'all' {
+  if (!applied || applied.version !== LANDED_VERSION) return 'all';
+  return Object.entries(current)
+    .filter(([ccy, rate]) => ccy !== 'EUR' && (applied.rates[ccy] == null || Math.abs(rate / applied.rates[ccy] - 1) >= FX_RECOMPUTE_THRESHOLD))
+    .map(([ccy]) => ccy);
+}
+
+/**
+ * EUR-/Endpreis-Spalten neu berechnen – nur für Währungen, deren Kurs seit dem letzten Schreiben spürbar abweicht
+ * (FX_RECOMPUTE_THRESHOLD), oder komplett nach einer Kalkulationsänderung (LANDED_VERSION). Bis 22.09.2026 schrieb jeder
+ * Sync nach dem täglichen EZB-Kurs alle ~200.000 Zeilen samt sechs Indizes neu (Lauf 59: 197.029 Zeilen, 21 min) – der
+ * größte Posten im Turso-Schreibkontingent, das am 21. und 22.09.2026 erschöpft war. Die Website rechnet den angezeigten
+ * Endpreis ohnehin live mit dem Tageskurs; die Spalten dienen Sortierung und Filter, dort ist < 0,5 % Drift unerheblich.
+ * Gespeichert wird je Währung der zuletzt angewandte Kurs (`derived_fx_rates`); der alte Tagesstempel `derived_fx_as_of`
+ * wird einmalig als „Spalten sind aktuell“ übernommen, damit die Umstellung selbst keinen Volldurchlauf auslöst.
+ */
 export async function recomputeDerivedIfFxChanged(): Promise<number> {
-  const asOf = fxSync().asOf;
-  if (!asOf || asOf === 'fallback') return 0;
-  const stamp = `${asOf}|v${LANDED_VERSION}`;
-  const last = await one<{ value: string }>("SELECT value FROM meta WHERE key = 'derived_fx_as_of'");
-  if (last?.value === stamp) return 0;
-  const n = await listingsRepo.recomputeDerived();
-  await run("INSERT INTO meta(key, value) VALUES ('derived_fx_as_of', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [stamp]);
+  const fx = fxSync();
+  if (!fx.asOf || fx.asOf === 'fallback') return 0;
+  const stored = await one<{ value: string }>("SELECT value FROM meta WHERE key = 'derived_fx_rates'");
+  let applied: AppliedFx | null = null;
+  try { applied = stored ? (JSON.parse(stored.value) as AppliedFx) : null; } catch { applied = null; }
+  const save = (rates: Record<string, number>) =>
+    run("INSERT INTO meta(key, value) VALUES ('derived_fx_rates', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [JSON.stringify({ version: LANDED_VERSION, rates } satisfies AppliedFx)]);
+  if (!applied) {
+    const legacy = await one<{ value: string }>("SELECT value FROM meta WHERE key = 'derived_fx_as_of'");
+    if (legacy?.value.endsWith(`|v${LANDED_VERSION}`)) { await save({ ...fx.rates }); return 0; }
+  }
+  const due = currenciesToRecompute(fx.rates, applied);
+  if (due !== 'all' && !due.length) return 0;
+  const n = await listingsRepo.recomputeDerived(undefined, due === 'all' ? undefined : due);
+  await save(due === 'all' ? { ...fx.rates } : { ...applied!.rates, ...Object.fromEntries(due.map((c) => [c, fx.rates[c]])) });
   return n;
 }
 

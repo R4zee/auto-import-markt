@@ -446,7 +446,12 @@ Sperre auf Vercel ab (`isWriteBlocked`, `dbReadOnly`) und die Website läuft les
 `writes: BLOCKED …`. Jobs (Sync, Vergleichspreise) schlagen bis zur Freigabe fehl. Prüfen: Turso-Dashboard → Usage
 (Rows written, Storage) und Plan; Abhilfe: Plan erhöhen oder auf den Monatswechsel warten. Jede UPDATE-Zeile zählt
 mit ihren Indexeinträgen (abdeckender Suchindex v3 mit 24 Spalten) mehrfach – Massenläufe wie der Schlüssel-Reset sind
-deshalb teuer und sollten selten bleiben.
+deshalb teuer und sollten selten bleiben. Am 22.09.2026 (05:46 UTC) war auch das hochgestufte Kontingent erschöpft;
+Hauptposten laut Sync-Protokoll: der Kursnachzug schrieb nach jedem neuen EZB-Tageskurs alle ~197.000 Zeilen neu
+(Lauf 59: 21 min). Seither rechnet `recomputeDerivedIfFxChanged` nur Währungen nach, deren Kurs seit dem letzten
+Schreiben um ≥ 0,5 % abweicht (`FX_RECOMPUTE_THRESHOLD`, Stand je Währung in `meta.derived_fx_rates`), und der
+Vergleichspreis-Job schreibt Zeilen mit unverändertem Vergleichspreis nicht mehr. Angezeigte Endpreise rechnet die
+Website live mit dem Tageskurs; die Spalten dienen nur Sortierung/Filter.
 
 **Transportkosten EU (21.09.2026):** Innerhalb der EU rechnet die Kalkulation mit 0,3 % Transportversicherung statt 1,1 %
 Seefracht-Versicherung (`FEES.insurancePctEU`) – ein 440.000-€-Fahrzeug aus Prag stand sonst mit über 5.000 € „Seefracht“ da.

@@ -110,3 +110,18 @@ describe('Sync: Teilquellen, Duplikate und unveränderte Inserate', async () => 
     assert.deepEqual(await canonicalizeStoredMakes(), { listings: 0, makes: 0 }, 'zweiter Lauf ändert nichts');
   });
 });
+
+describe('Kursnachzug nur bei spürbarer Kursänderung (Turso-Schreibkontingent)', async () => {
+  const { currenciesToRecompute, FX_RECOMPUTE_THRESHOLD } = await import('../src/services/sync.js');
+  const current = { EUR: 1, USD: 0.87, JPY: 0.0058, KRW: 0.00064 };
+  it('ohne gespeicherten Stand oder nach Kalkulationsänderung alles', () => {
+    assert.equal(currenciesToRecompute(current, null), 'all');
+    assert.equal(currenciesToRecompute(current, { version: '1', rates: current }), 'all');
+  });
+  it('nur Währungen mit Abweichung ab der Schwelle, EUR nie', () => {
+    assert.deepEqual(currenciesToRecompute(current, { version: '2', rates: current }), []);
+    const moved = { ...current, USD: 0.87 * (1 + FX_RECOMPUTE_THRESHOLD + 0.001), JPY: 0.0058 * 1.001 };
+    assert.deepEqual(currenciesToRecompute(moved, { version: '2', rates: current }), ['USD']);
+    assert.deepEqual(currenciesToRecompute({ ...current, AED: 0.24 }, { version: '2', rates: current }), ['AED'], 'neue Währung ohne Stand');
+  });
+});
