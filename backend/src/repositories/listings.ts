@@ -1,5 +1,5 @@
 import type { InStatement, InValue } from '@libsql/client';
-import { db, one, query, refDiffSql, run, type Row } from '../db.js';
+import { db, one, query, queryPaged, refDiffSql, run, type Row } from '../db.js';
 import { calcLandedCost } from '../domain/landedCost.js';
 import { DEST_CODES } from '../domain/markets.js';
 import type { DestCode, Listing, ListingQuery, Partner } from '../domain/types.js';
@@ -254,7 +254,8 @@ export const listingsRepo = {
   /** Nur IDs (und Preis/km) einer Quelle – für Abgleiche ohne den ganzen Datensatz zu laden. */
   async activeIdsBySource(source: string, includeSubSources = false): Promise<Map<string, { price: number; km: number }>> {
     const src = sourceClause(source, includeSubSources);
-    const rows = await query<{ id: string; price: number; km: number }>(`SELECT id, price, km FROM listings WHERE ${src.sql} AND active = 1`, src.args);
+    // blockweise: Encar liefert ~147.000 Zeilen, mehr als das Antwortlimit von sqld (Standard 10 MB)
+    const rows = await queryPaged<{ id: string; price: number; km: number }>('listings', 'id, price, km', `${src.sql} AND active = 1`, src.args);
     return new Map(rows.map((r) => [r.id, { price: Number(r.price), km: Number(r.km) }]));
   },
 
@@ -351,9 +352,8 @@ export const listingsRepo = {
     const args: InValue[] = [];
     if (source) { where.push('source = ?'); args.push(source); }
     if (currencies) { where.push(`currency IN (${currencies.map(() => '?').join(',')})`); args.push(...currencies); }
-    const rows = await query<{ id: string; market: string; price: number; currency: string; classic: number; duty_rate_override: number | null; origin_proof: number; price_eur: number | null; landed_de: number | null; landed_at: number | null; landed_nl: number | null; landed_pl: number | null }>(
-      `SELECT id, market, price, currency, classic, duty_rate_override, origin_proof, price_eur, landed_de, landed_at, landed_nl, landed_pl FROM listings WHERE ${where.join(' AND ')}`,
-      args,
+    const rows = await queryPaged<{ id: string; market: string; price: number; currency: string; classic: number; duty_rate_override: number | null; origin_proof: number; price_eur: number | null; landed_de: number | null; landed_at: number | null; landed_nl: number | null; landed_pl: number | null }>(
+      'listings', 'id, market, price, currency, classic, duty_rate_override, origin_proof, price_eur, landed_de, landed_at, landed_nl, landed_pl', where.join(' AND '), args,
     );
     let n = 0;
     // Nur Zeilen schreiben, deren Werte sich ändern: eine Kalkulationsänderung für EU-Quellen (LANDED_VERSION 2) schrieb
