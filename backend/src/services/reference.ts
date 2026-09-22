@@ -426,9 +426,18 @@ export const referenceRepo = {
   },
   /** Nur Schlüssel + Zeitstempel aller Buckets (für die Frische-Prüfung im Refresh-Job) */
   async fetchedAt(): Promise<Map<string, string>> {
-    // blockweise: ~99.000 Zeilen überschritten das Antwortlimit von sqld (RESPONSE_TOO_LARGE, 22.09.2026)
-    const rows = await queryPaged<{ key: string; fetched_at: string }>('ref_prices', 'key, fetched_at', '1 = 1');
-    return new Map(rows.map((r) => [r.key, r.fetched_at]));
+    // Blockweise nach Schlüssel über den abdeckenden Index (key, fetched_at): ~99.000 Zeilen überschritten in einer
+    // Antwort das Limit von sqld (RESPONSE_TOO_LARGE), und ein Lauf über die Zeilen selbst (Angebote als JSON) las
+    // Gigabytes – Lauf 48 stand hier nach 38 Minuten noch (22.09.2026)
+    const out = new Map<string, string>();
+    let last = '';
+    for (;;) {
+      const rows = await query<{ key: string; fetched_at: string }>('SELECT key, fetched_at FROM ref_prices INDEXED BY idx_ref_prices_key_fetched WHERE key > ? ORDER BY key LIMIT 20000', [last]);
+      for (const r of rows) out.set(r.key, r.fetched_at);
+      if (rows.length < 20000) break;
+      last = rows[rows.length - 1].key;
+    }
+    return out;
   },
   async count(): Promise<number> {
     const r = await one<{ n: number }>('SELECT COUNT(*) AS n FROM ref_prices');
