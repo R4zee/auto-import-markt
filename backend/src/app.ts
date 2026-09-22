@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { config, databaseMissing, isServerless } from './config.js';
 import { dbReadOnly, one, query, ready } from './db.js';
 import { listingsRepo } from './repositories/listings.js';
+import { getFacets } from './services/facets.js';
 import { adminRoutes } from './routes/admin.js';
 import { calcRoutes } from './routes/calc.js';
 import { enquiryRoutes } from './routes/enquiries.js';
@@ -30,12 +31,17 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     try { done(null, JSON.parse(text)); } catch (e) { done(e as Error, undefined); }
   });
 
+  // Bestand je Markt aus dem Facetten-Cache (eine kleine Zeile) statt Zählung über alle aktiven Inserate: die kostete
+  // auf Turso 25 s und auf dem eigenen libsql-Server über eine Minute je Aufruf. Je Quelle: /api/admin/status.
   app.get('/api/health', async () => ({
     ok: !databaseMissing,
-    listings: await listingsRepo.countBySource(),
+    listings: (await getFacets()).marketCounts.all,
+    total: (await getFacets()).total,
     serverless: isServerless,
+    // Schema und Indizes pflegen die Jobs (Sync, Vergleichspreise); die Function fasst die Datenbank beim Start nicht an
+    migrations: isServerless ? 'job' : 'app',
     // Turso sperrt Schreibzugriffe bei erschöpftem Plan-Kontingent; die Website liest dann weiter, Jobs schlagen fehl
-    writes: dbReadOnly() ? 'BLOCKED – Turso-Kontingent (Usage/Plan) prüfen; Sync und Vergleichspreise schreiben nicht' : 'ok',
+    writes: dbReadOnly() ? 'BLOCKED – Turso-Kontingent (Usage/Plan) prüfen; Sync und Vergleichspreise schreiben nicht' : isServerless ? 'nicht geprüft – die Function schreibt nicht, Schreibfehler zeigen die Job-Protokolle' : 'ok',
     database: databaseMissing ? 'MISSING – TURSO_DATABASE_URL/TURSO_AUTH_TOKEN setzen und redeployen' : config.database.url.startsWith('file:') ? 'local-file' : config.database.url === ':memory:' ? 'memory' : 'remote',
     time: new Date().toISOString(),
   }));

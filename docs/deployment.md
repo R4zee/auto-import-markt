@@ -550,6 +550,13 @@ Caddy davor (holt das TLS-Zertifikat selbst). `.env` neben der Datei: `LIBSQL_HO
 - Ab dann fallen bei Turso keine Schreibvorgänge mehr an; die Turso-Datenbank kann als Rückfall stehen bleiben oder
   am Monatsanfang gelöscht werden. Zurück zu Turso geht genauso (DB Copy in Gegenrichtung mit vertauschten Secrets).
 
+**Maschinengröße (Erfahrung 22.09.2026):** Mit 512 MB Speicher passt die Datenbank (~1,5 GB samt Indizes) nicht in
+den Seitencache; Vollscans wie die Bucket-Aggregation des Vergleichspreis-Jobs oder die Zählung der Startseite dauerten
+Minuten, der Job lief in das 5-Minuten-Limit von undici, Vercel scheiterte beim Kaltstart hinter dem laufenden Scan.
+Abhilfe: `fly scale memory 2048` (≈ 10,70 USD/Monat) – und im Code: Gesamtzahl der ungefilterten Suche aus dem
+Facetten-Cache, `/api/health` ohne Vollzählung, HTTP-Zeitlimit für entfernte Datenbanken 30 min (`db.ts`,
+`REMOTE_HEADERS_TIMEOUT_MS`), keine Migration beim Kaltstart der Function (Schema pflegen die Jobs).
+
 Hinweise: sqld schreibt in ein lokales SQLite-File auf dem Volume – Sicherung per `fly volumes snapshots` (Fly legt
 täglich Snapshots an) bzw. Kopie des Docker-Volumes. Ein einzelner Schreiber wie bei Turso; die Drosselung aus Teil K
 (Pausen zwischen Schreibblöcken) bleibt sinnvoll. Weitere Tokens: `LIBSQL_PRIVATE_KEY_PEM="<privater Schlüssel>"
