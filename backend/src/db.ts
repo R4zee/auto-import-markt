@@ -156,9 +156,12 @@ export async function queryPaged<T extends Row = Row>(table: string, columns: st
       `SELECT rowid AS __rid, ${columns} FROM ${from} WHERE (${where}) AND rowid > ? ORDER BY rowid LIMIT ?`,
       [...args, last, batch],
     );
+    // rowid der letzten Zeile VOR dem Entfernen der Hilfsspalte lesen: bis 22.09.2026 stand das dahinter, `last` blieb 0,
+    // und jede Abfrage mit mehr als `batch` Treffern las den ersten Block endlos neu (Sync: Encar-Bestand 147.000 Zeilen →
+    // „JavaScript heap out of memory“ nach 38 bzw. 77 Minuten; Vergleichspreis-Lauf 47: 24 Minuten in der Bucket-Liste)
+    if (rows.length) last = Number((rows[rows.length - 1] as Record<string, unknown>).__rid ?? last);
     for (const r of rows) { delete (r as Record<string, unknown>).__rid; out.push(r); }
     if (rows.length < batch) break;
-    last = Number((rows[rows.length - 1] as Record<string, unknown>).__rid ?? last);
   }
   return out;
 }

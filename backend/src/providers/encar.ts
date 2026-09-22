@@ -269,7 +269,7 @@ export class EncarProvider implements MarketProvider {
         const p = partQueue.shift()!;
         // Fortschritt samt Heap: der Lauf schwieg sonst 40 Minuten – Lauf 63 (22.09.2026) brach ohne Hinweis mit
         // „heap out of memory“ ab; so ist zu sehen, ab welcher Teilabfrage der Speicher wegläuft
-        if (++done % 25 === 0 || done === parts.length) {
+        if (++done % 10 === 0 || done === parts.length) {
           console.log(`  Encar: ${done}/${parts.length} Teilabfragen · ${items.size} Inserate · Heap ${Math.round(process.memoryUsage().heapUsed / 1048576)} MB · ${Math.round((Date.now() - started) / 60000)} min`);
         }
         try {
