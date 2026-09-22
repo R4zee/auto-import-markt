@@ -16,6 +16,8 @@
     "sync:turso": "node --import tsx --env-file=.env.turso src/cli/sync.ts",
     "probe": "node --import tsx --env-file-if-exists=.env src/cli/probe.ts",
     "reference": "node --import tsx --env-file-if-exists=.env src/cli/reference.ts",
+    "db:copy": "node --import tsx --env-file-if-exists=.env src/cli/dbcopy.ts",
+    "libsql:token": "node --import tsx src/cli/libsql-token.ts",
     "check:xapikorea": "node --import tsx --env-file-if-exists=.env src/cli/check-xapikorea.ts"
   },
   "dependencies": {

@@ -1,0 +1,36 @@
+# Eigener libsql-Server (sqld) als Ersatz für Turso – Teil M in docs/deployment.md.
+# Voraussetzungen: ein Server mit Docker, ein DNS-Name (LIBSQL_HOST) auf seine IP, Ports 80/443 offen.
+# .env neben dieser Datei:  LIBSQL_HOST=db.example.de   SQLD_AUTH_JWT_KEY=<Ausgabe von npm run libsql:token>
+# Start: docker compose up -d   ·   Logs: docker compose logs -f   ·   Update: docker compose pull && docker compose up -d
+services:
+  libsql:
+    image: ghcr.io/tursodatabase/libsql-server:latest
+    restart: unless-stopped
+    environment:
+      SQLD_NODE: primary
+      SQLD_HTTP_LISTEN_ADDR: 0.0.0.0:8080
+      # öffentlicher Ed25519-Schlüssel (Base64-URL); nur Tokens mit passender Signatur dürfen zugreifen
+      SQLD_AUTH_JWT_KEY: ${SQLD_AUTH_JWT_KEY}
+    volumes:
+      - libsql-data:/var/lib/sqld
+    # kein ports-Eintrag: nur Caddy (TLS) erreicht den Server
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      LIBSQL_HOST: ${LIBSQL_HOST}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - libsql
+
+volumes:
+  libsql-data: {}
+  caddy-data: {}
+  caddy-config: {}

@@ -1,0 +1,5 @@
+# TLS-Endpunkt vor dem libsql-Server (Zertifikat holt Caddy automatisch von Let's Encrypt).
+# Client-URL danach: https://<LIBSQL_HOST>  (TURSO_DATABASE_URL), Token aus npm run libsql:token (TURSO_AUTH_TOKEN)
+{$LIBSQL_HOST} {
+	reverse_proxy libsql:8080
+}

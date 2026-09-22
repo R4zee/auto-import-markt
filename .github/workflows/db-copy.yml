@@ -1,0 +1,44 @@
+name: DB Copy
+
+# Datenbank von Turso in einen eigenen libsql-Server kopieren (Teil M in docs/deployment.md). Quelle sind die bestehenden
+# Secrets TURSO_DATABASE_URL/TURSO_AUTH_TOKEN (Lesen geht auch bei Schreibsperre), Ziel die Secrets NEW_DATABASE_URL/
+# NEW_AUTH_TOKEN. Wiederholbar (INSERT OR REPLACE). Danach TURSO_* in Vercel und GitHub auf das Ziel umstellen.
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Nur diese Tabellen (kommagetrennt, z. B. listings,meta) – leer = alle'
+        required: false
+        default: ''
+      batch:
+        description: 'Zeilen je Schreibblock (Standard 500)'
+        required: false
+        default: '500'
+
+concurrency:
+  group: db-copy
+  cancel-in-progress: false
+
+jobs:
+  copy:
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Kopieren Turso → Ziel
+        working-directory: backend
+        env:
+          SOURCE_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          SOURCE_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          TARGET_DATABASE_URL: ${{ secrets.NEW_DATABASE_URL }}
+          TARGET_AUTH_TOKEN: ${{ secrets.NEW_AUTH_TOKEN }}
+          ONLY: ${{ github.event.inputs.only }}
+          BATCH: ${{ github.event.inputs.batch || '500' }}
+        run: |
+          if [ -n "$ONLY" ]; then set -- --only "$ONLY"; fi
+          node --import tsx src/cli/dbcopy.ts "$@" --batch "$BATCH"
