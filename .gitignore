@@ -9,3 +9,6 @@ backend/data/
 *.log
 .DS_Store
 Thumbs.db
+
+# Schlüssel/Token für den eigenen libsql-Server (Teil M) – nie einchecken
+libsql-keys*.txt
