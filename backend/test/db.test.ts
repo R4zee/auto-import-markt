@@ -15,6 +15,39 @@ describe('Datenbank: Schreibsperre von Turso erkennen', () => {
   });
 });
 
+describe('Datenbank: kurze Aussetzer des Servers wiederholen', async () => {
+  const { isTransient, withRetries } = await import('../src/db.js');
+  it('erkennt Gateway-Fehler und Verbindungsabbrüche, keine SQL-Fehler', () => {
+    assert.ok(isTransient(new Error('SERVER_ERROR: Server returned HTTP status 502')));
+    assert.ok(isTransient(new Error('fetch failed')));
+    assert.ok(isTransient(Object.assign(new Error('TypeError: fetch failed'), { cause: new Error('ECONNRESET') })));
+    assert.ok(!isTransient(new Error('SQLITE_ERROR: no such table: listings')));
+    assert.ok(!isTransient(new Error('HTTP status 401')));
+  });
+  it('wiederholt execute/batch nach einem 502, gibt SQL-Fehler sofort weiter', async () => {
+    let calls = 0;
+    const fake = {
+      execute: async (stmt: unknown) => { calls++; if (calls < 3) throw new Error('SERVER_ERROR: Server returned HTTP status 502'); return { stmt, rows: [] }; },
+      batch: async () => { throw new Error('SQLITE_CONSTRAINT: UNIQUE constraint failed'); },
+      close: () => undefined,
+    };
+    const warn = console.warn;
+    console.warn = () => undefined;
+    try {
+      const c = withRetries(fake as never, [1, 1, 1]);
+      const r = await c.execute({ sql: 'SELECT 1', args: [] });
+      assert.equal(calls, 3);
+      assert.deepEqual((r as unknown as { stmt: unknown }).stmt, { sql: 'SELECT 1', args: [] });
+      await assert.rejects(c.batch([], 'write'), /UNIQUE constraint/);
+      // nach dem letzten Versuch kommt der Fehler durch
+      calls = -10;
+      await assert.rejects(c.execute('SELECT 1'), /HTTP status 502/);
+    } finally {
+      console.warn = warn;
+    }
+  });
+});
+
 describe('remoteFetch: Request-Objekt des hrana-Clients an undici weitergeben', async () => {
   const { remoteFetch } = await import('../src/db.js');
   const { createServer } = await import('node:http');

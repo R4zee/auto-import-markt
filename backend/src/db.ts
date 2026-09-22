@@ -34,11 +34,50 @@ export async function remoteFetch(input: string | URL | Request, init?: RequestI
   return undiciFetch(input as string | URL, opts) as unknown as Promise<Response>;
 }
 
+/**
+ * Kurze Aussetzer des entfernten Servers: der Fly-Proxy antwortet mit HTTP 502/503/504, wenn sqld gerade nicht
+ * erreichbar ist (Checkpoint, Neustart) – Lauf 49 verlor so zwei Buckets, Sync-Lauf 65 starb beim ersten Statement
+ * (22.09.2026). Solche Fehler werden mit Pause wiederholt; alle Schreibanweisungen sind wiederholbar (UPSERT, UPDATE,
+ * IF NOT EXISTS), ein doppelter sync_runs-Eintrag wäre unschädlich.
+ */
+const TRANSIENT = /HTTP status 50[234]|fetch failed|ECONNRESET|ECONNREFUSED|UND_ERR_SOCKET|other side closed/i;
+export function isTransient(e: unknown): boolean {
+  return TRANSIENT.test(e instanceof Error ? `${e.message} ${(e as { cause?: { message?: string } }).cause?.message ?? ''}` : String(e));
+}
+export const RETRY_DELAYS_MS = [2000, 5000, 10000];
+
+/** execute/batch/executeMultiple des Clients bei kurzen Aussetzern wiederholen (Pausen aus `delays`). */
+export function withRetries(c: Client, delays: number[] = RETRY_DELAYS_MS): Client {
+  const retry = async <T>(what: string, fn: () => Promise<T>): Promise<T> => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await fn();
+      } catch (e) {
+        if (attempt >= delays.length || !isTransient(e)) throw e;
+        console.warn(`Datenbank: ${what} – ${e instanceof Error ? e.message : String(e)} · Versuch ${attempt + 2}/${delays.length + 1} in ${delays[attempt] / 1000} s`);
+        await new Promise((r) => setTimeout(r, delays[attempt]));
+      }
+    }
+  };
+  const target = c as unknown as Record<string, unknown>;
+  return new Proxy(c, {
+    get(_t, prop, receiver) {
+      if (prop === 'execute' || prop === 'batch' || prop === 'executeMultiple') {
+        const fn = target[prop] as (...a: unknown[]) => Promise<unknown>;
+        return (...args: unknown[]) => retry(prop, () => fn.apply(c, args));
+      }
+      const v = Reflect.get(c, prop, receiver);
+      return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(c) : v;
+    },
+  });
+}
+
 function create(): Client {
   const url = config.database.url;
   if (url.startsWith('file:')) mkdirSync(dirname(url.slice('file:'.length)), { recursive: true });
   const remote = /^(https?|libsql|wss?):\/\//.test(url);
-  return createClient({ url, authToken: config.database.authToken, ...(remote ? { fetch: remoteFetch } : {}) });
+  const c = createClient({ url, authToken: config.database.authToken, ...(remote ? { fetch: remoteFetch } : {}) });
+  return remote ? withRetries(c) : c;
 }
 
 /** Roher Client (nur nach `ready()` verwenden). */
