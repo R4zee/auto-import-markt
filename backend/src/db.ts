@@ -1,6 +1,7 @@
 import { createClient, type Client, type InValue } from '@libsql/client';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { Agent, fetch as undiciFetch } from 'undici';
 import { config, isServerless } from './config.js';
 
 let client: Client | null = null;
@@ -8,10 +9,25 @@ let migration: Promise<void> | null = null;
 
 export type Row = Record<string, InValue>;
 
+/**
+ * HTTP-Zeitlimits für entfernte Datenbanken: undici bricht eine Antwort ab, deren Kopfzeilen nach 300 s nicht da sind
+ * („Headers Timeout Error“). Auf einem kleinen eigenen libsql-Server (Teil M) brauchten Vollscans wie die
+ * Bucket-Aggregation des Vergleichspreis-Jobs länger – der Job starb, obwohl der Server noch rechnete. 30 Minuten je
+ * Anfrage; die Vercel-Function ist ohnehin durch ihre maxDuration begrenzt.
+ */
+const REMOTE_HEADERS_TIMEOUT_MS = 30 * 60 * 1000;
+let remoteAgent: Agent | null = null;
+type UndiciInit = NonNullable<Parameters<typeof undiciFetch>[1]>;
+function remoteFetch(input: Parameters<typeof undiciFetch>[0], init?: UndiciInit): ReturnType<typeof undiciFetch> {
+  remoteAgent ??= new Agent({ headersTimeout: REMOTE_HEADERS_TIMEOUT_MS, bodyTimeout: REMOTE_HEADERS_TIMEOUT_MS });
+  return undiciFetch(input, { ...init, dispatcher: remoteAgent });
+}
+
 function create(): Client {
   const url = config.database.url;
   if (url.startsWith('file:')) mkdirSync(dirname(url.slice('file:'.length)), { recursive: true });
-  return createClient({ url, authToken: config.database.authToken });
+  const remote = /^(https?|libsql|wss?):\/\//.test(url);
+  return createClient({ url, authToken: config.database.authToken, ...(remote ? { fetch: remoteFetch as unknown as typeof fetch } : {}) });
 }
 
 /** Roher Client (nur nach `ready()` verwenden). */
@@ -35,8 +51,14 @@ export function dbReadOnly(): boolean {
   return readOnly;
 }
 
-/** Stellt sicher, dass Schema und Verbindung bereitstehen. */
+/**
+ * Stellt sicher, dass Schema und Verbindung bereitstehen. Auf Vercel mit entfernter Datenbank läuft keine Migration:
+ * Schema und Indizes pflegen die Jobs (Sync, Vergleichspreise), und ein Kaltstart soll die Datenbank nicht mit
+ * zwei Dutzend Anweisungen anfassen – hinter einem laufenden Vollscan des Jobs scheiterte so jede Anfrage mit
+ * „startup_failed“ (22.09.2026). Lokal/in-memory und in den Jobs bleibt die Migration wie bisher.
+ */
 export async function ready(): Promise<Client> {
+  if (!migration && isServerless && config.database.url !== ':memory:' && !config.database.url.startsWith('file:')) migration = Promise.resolve();
   if (!migration) migration = migrate().catch((e) => {
     // Schreibsperre auf Vercel: lesend weiterlaufen. Das Schema stammt vollständig vom letzten Job, die Website braucht
     // nur Leseabfragen – ohne diesen Fall meldete jede Anfrage „startup_failed“, obwohl alle Daten lesbar waren.

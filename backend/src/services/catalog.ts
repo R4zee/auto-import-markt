@@ -39,18 +39,32 @@ export function invalidateListingCache(): void {
   invalidateFacets();
 }
 
+/**
+ * Nur Markt und Angebotsart gesetzt (Startseite, Marktreiter): die Gesamtzahl kommt aus den Marktzählern des
+ * Facetten-Caches statt aus einer Zählung über alle aktiven Inserate (bis zum nächsten Sync minimal veraltet, dafür
+ * ohne ~280.000 Indexeinträge je Seitenaufruf – auf dem eigenen libsql-Server dauerte die Zählung 45 s).
+ */
+export function countableFromFacets(q: ListingQuery): boolean {
+  return !q.make && !q.model && !q.location && q.yearFrom == null && q.yearTo == null && q.maxKm == null
+    && !q.fuels?.length && !q.transmissions?.length && !q.cocOnly && !q.titles?.length && q.maxLandedEur == null && !(q.q ?? '').trim();
+}
+
 export async function search(q: ListingQuery): Promise<SearchResult> {
   const dest = q.dest ?? 'DE';
-  const [res, facets] = await Promise.all([listingsRepo.search(q, dest), getFacets()]);
+  const fromFacets = countableFromFacets(q);
+  const [res, facets] = await Promise.all([listingsRepo.search(q, dest, { countTotal: !fromFacets }), getFacets()]);
   const byOffer = q.offer === 'auction' ? facets.marketCounts.auction : q.offer === 'fixed' ? facets.marketCounts.fixed : facets.marketCounts.all;
   const marketCounts: Record<string, number> = {};
   for (const m of MARKET_CODES) marketCounts[m] = byOffer[m] ?? 0;
+  const total = fromFacets
+    ? (q.markets?.length ? q.markets : MARKET_CODES).reduce((sum, m) => sum + (byOffer[m] ?? 0), 0)
+    : res.total;
   const items = res.items.map((l) => decorate(l, dest));
   // Vergleichspreise DE aus dem Cache (eine Abfrage je Seite; ohne REFERENCE_ENABLED keine)
   await attachReferences(items);
   return {
     items,
-    total: res.total,
+    total,
     page: res.page,
     pageSize: res.pageSize,
     marketCounts,

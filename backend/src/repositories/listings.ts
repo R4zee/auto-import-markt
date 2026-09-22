@@ -282,7 +282,7 @@ export const listingsRepo = {
    * Suche/Filter/Sortierung/Paginierung in SQL – zwei Abfragen (Seite + Gesamtzahl), beide indexgestützt.
    * Filterlisten und Marktzähler kommen nicht mehr aus dieser Abfrage, sondern aus dem Facetten-Cache.
    */
-  async search(q: ListingQuery, dest: DestCode): Promise<SqlSearchResult> {
+  async search(q: ListingQuery, dest: DestCode, opts: { countTotal?: boolean } = {}): Promise<SqlSearchResult> {
     const { whereSql, args, selective } = buildWhere(q, dest);
     const page = Math.max(1, q.page ?? 1);
     const pageSize = Math.min(200, Math.max(1, q.pageSize ?? 48));
@@ -301,12 +301,14 @@ export const listingsRepo = {
       return { items: rows.map(rowToListing), total, page, pageSize };
     }
 
-    // Ohne selektiven Filter: geordneter Lauf über den Sortier-Index mit frühem Abbruch, Zählung über den abdeckenden Index
+    // Ohne selektiven Filter: geordneter Lauf über den Sortier-Index mit frühem Abbruch. Die Zählung läuft über den
+    // abdeckenden Index – bei der ungefilterten Startseite trotzdem ~280.000 Indexeinträge je Anfrage (auf einem kleinen
+    // Server 45 s); der Aufrufer nimmt dort die Summe aus dem Facetten-Cache (countTotal: false → total -1).
     const [rows, totalRow] = await Promise.all([
       query<ListingRow>(`SELECT ${listColumns()} FROM listings WHERE ${whereSql} ORDER BY ${orderBy(q.sort, dest)} LIMIT ? OFFSET ?`, [...args, ...limitArgs]),
-      one<{ n: number }>(`SELECT COUNT(*) AS n FROM listings WHERE ${whereSql}`, args),
+      opts.countTotal === false ? Promise.resolve(null) : one<{ n: number }>(`SELECT COUNT(*) AS n FROM listings WHERE ${whereSql}`, args),
     ]);
-    return { items: rows.map(rowToListing), total: Number(totalRow?.n ?? 0), page, pageSize };
+    return { items: rows.map(rowToListing), total: totalRow ? Number(totalRow.n ?? 0) : -1, page, pageSize };
   },
 
   /** Filterlisten und Marktzähler über den abdeckenden Index berechnen (nach jedem Sync, nicht je Anfrage). */

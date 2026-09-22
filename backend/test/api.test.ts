@@ -26,7 +26,10 @@ describe('API', async () => {
   it('GET /api/health', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/health' });
     assert.equal(res.statusCode, 200);
-    assert.equal(res.json().listings.mock, 14);
+    // Bestand je Markt aus dem Facetten-Cache (keine Vollzählung je Aufruf)
+    assert.equal(res.json().total, 14);
+    assert.equal(res.json().listings.JP, 3);
+    assert.equal(res.json().migrations, 'app');
   });
 
   it('GET /api/listings liefert 14 Fahrzeuge, sortiert nach Endpreis', async () => {
@@ -174,6 +177,9 @@ describe('API', async () => {
     assert.equal(await listingsRepo.deactivateEndedAuctions(), 0);
     const n = await listingsRepo.deactivateEndedAuctions(new Date(Date.now() + 365 * 86400000));
     assert.equal(n, 6);
+    // Gesamtzahl ohne Filter kommt aus dem Facetten-Cache, den der Sync nach dem Deaktivieren neu berechnet
+    const { refreshFacets } = await import('../src/services/facets.js');
+    await refreshFacets();
     const after = await app.inject({ method: 'GET', url: '/api/listings?offer=auction' });
     assert.equal(after.json().total, 0);
     const all = await app.inject({ method: 'GET', url: '/api/listings' });
