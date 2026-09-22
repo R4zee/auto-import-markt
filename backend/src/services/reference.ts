@@ -627,6 +627,29 @@ export interface RefreshReport {
 }
 
 /**
+ * Offene Inserate (Vergleichspreis nie berechnet), deren Schlüssel die SQL-Gruppierung nicht trifft, als Kandidaten
+ * ergänzen – Bucket aus den vollen Feldern des Inserats wie beim Schlüssel selbst (refKeyFor). Die Gruppierung sieht
+ * nur das erste Ausstattungswort: steht der Baureihen-Code dahinter („320d Touring F31“) oder trennt ein Komma statt
+ * Leerzeichen, ergibt sie einen anderen Schlüssel, und das Inserat bliebe für immer offen (Lauf 50, 22.09.2026:
+ * 4.390 offene Inserate bei 0 fälligen Buckets). Liefert die Zahl der ergänzten Buckets.
+ */
+export async function addPendingCandidates(wanted: Map<string, { q: RefQuery; n: number }>): Promise<number> {
+  type PendingRow = { make: string; model: string; trim: string; year: number; fuel: string; km: number; power_kw: number | null; ref_key: string };
+  const rows = await queryPaged<PendingRow>('listings', 'make, model, trim, year, fuel, km, power_kw, ref_key', "ref_min_eur IS NULL AND active = 1 AND ref_key <> ''", [], 20000, 'idx_listings_ref_pending');
+  let added = 0;
+  for (const r of rows) {
+    const cur = wanted.get(r.ref_key);
+    if (cur) { cur.n++; continue; }
+    const q = bucketQuery({ make: r.make, model: r.model, trim: r.trim, year: Number(r.year), fuel: r.fuel as Fuel, km: Number(r.km), powerKw: r.power_kw == null ? null : Number(r.power_kw) });
+    // Schlüssel aus einer älteren Bucket-Logik (REF_KEY_VERSION setzt ihn im Job zurück) → hier nichts zu laden
+    if (!q || bucketKey(q) !== r.ref_key) continue;
+    wanted.set(r.ref_key, { q, n: 1 });
+    added++;
+  }
+  return added;
+}
+
+/**
  * Buckets aller aktiven Inserate bestimmen (Gruppierung in SQL nach Marke, Modell, erstem Ausstattungswort,
  * Kraftstoff, Baujahr), die häufigsten zuerst, fehlende oder abgelaufene bis `limit` nachladen.
  * Bricht bei Sperre (403/429) ab, damit der Job nicht in eine Blockade läuft.
@@ -659,6 +682,7 @@ export async function refreshReferenceBuckets(opts: { limit?: number; maxMs?: nu
     const cur = wanted.get(key);
     if (cur) cur.n += Number(r.n); else wanted.set(key, { q, n: Number(r.n) });
   }
+  const orphans = await addPendingCandidates(wanted);
   const existing = await referenceRepo.fetchedAt();
   const cutoff = Date.now() - config.reference.ttlDays * 86400000;
   const due = [...wanted.entries()]
@@ -667,7 +691,7 @@ export async function refreshReferenceBuckets(opts: { limit?: number; maxMs?: nu
   const report: RefreshReport = { candidates: wanted.size, fetched: 0, fresh: wanted.size - due.length, failed: 0, aborted: null, stopped: null, samples: 0, withSamples: 0 };
   const todo = due.slice(0, limit);
   const concurrency = Math.max(1, config.reference.concurrency);
-  log(`Buckets: ${wanted.size} gesamt · ${report.fresh} aktuell · ${due.length} fällig · Limit ${limit} · Zeitbudget ${Math.round(maxMs / 60000)} min · ${concurrency} parallel`);
+  log(`Buckets: ${wanted.size} gesamt (${orphans} nur aus offenen Inseraten) · ${report.fresh} aktuell · ${due.length} fällig · Limit ${limit} · Zeitbudget ${Math.round(maxMs / 60000)} min · ${concurrency} parallel`);
   // Mehrere Buckets parallel (REFERENCE_CONCURRENCY): jede mobile.de-Anfrage wartet ~1–2 s auf die Antwort
   let next = 0;
   const worker = async () => {
