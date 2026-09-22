@@ -17,7 +17,9 @@
     "sync": "npm run sync -w backend",
     "test": "npm test -w backend",
     "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend",
-    "sync:turso": "npm run sync:turso -w backend"
+    "sync:turso": "npm run sync:turso -w backend",
+    "db:copy": "npm run db:copy -w backend --",
+    "libsql:token": "npm run libsql:token -w backend"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.1",

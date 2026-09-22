@@ -1,0 +1,32 @@
+# Eigener libsql-Server (sqld) auf Fly.io – Teil M in docs/deployment.md. TLS und Domain (<app>.fly.dev) liefert Fly.
+# Einrichtung (einmalig, im Ordner deploy/libsql):
+#   fly launch --no-deploy --copy-config --name auto-import-markt-db --region fra
+#   fly volumes create libsql_data --region fra --size 5
+#   fly secrets set SQLD_AUTH_JWT_KEY=<Ausgabe von npm run libsql:token>
+#   fly deploy
+# Client-URL danach: https://auto-import-markt-db.fly.dev (TURSO_DATABASE_URL), Token als TURSO_AUTH_TOKEN.
+app = "auto-import-markt-db"
+primary_region = "fra"
+
+[build]
+  image = "ghcr.io/tursodatabase/libsql-server:latest"
+
+[env]
+  SQLD_NODE = "primary"
+  SQLD_HTTP_LISTEN_ADDR = "0.0.0.0:8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Datenbank immer an: kein Kaltstart für die Vercel-Function, ein Schreiber ohne Unterbrechung
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[mounts]]
+  source = "libsql_data"
+  destination = "/var/lib/sqld"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

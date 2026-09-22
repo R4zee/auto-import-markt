@@ -498,3 +498,56 @@ Kontingent war nach gut zwei Tagen aufgebraucht. Nachsehen: Profil → Settings 
 
 Solange nichts davon greift, bleiben Bestand und Vergleichspreise auf dem Stand vom 18.09.; die Website läuft
 unverändert weiter (Vercel und Turso sind nicht betroffen).
+
+## Teil M – Turso-Schreibkontingent erschöpft: eigener libsql-Server als Ersatz (Stand 22.09.2026)
+
+Turso zählt jede geschriebene Zeile samt Indexeinträgen gegen ein Monatskontingent; ist es aufgebraucht, sperrt Turso
+alle Schreibzugriffe („writes are blocked, do you need to upgrade your plan?“). Am 21.09. war das Kontingent des
+Basisplans erschöpft, am 22.09. um 05:46 UTC auch das des hochgestuften Plans (Ursache und Gegenmaßnahmen: Teil K,
+„Turso-Schreibsperre“). Die Website läuft lesend weiter (Teil K), aber Sync und Vergleichspreise stehen bis zum
+Monatswechsel. Die nächste Turso-Stufe lohnt für diesen Arbeitsumfang nicht.
+
+**Lösung: derselbe Datenbankserver selbst betreiben.** Turso ist ein gehosteter libsql-Server (sqld); das Programm ist
+offen (`ghcr.io/tursodatabase/libsql-server`) und spricht dasselbe Protokoll. `@libsql/client` braucht nur eine andere
+Adresse und ein anderes Token – kein Code ändert sich, Schema und Indizes werden 1:1 kopiert, Kontingente gibt es
+nicht. Zwei Wege, beide ≈ 4 € im Monat:
+
+**Weg 1 – Fly.io (TLS und Domain inklusive, ~20 Minuten):**
+1. Fly-CLI installieren (`https://fly.io/docs/flyctl/install/`), `fly auth signup` bzw. `fly auth login`
+   (Zahlungsmittel nötig; shared-cpu-1x mit 512 MB ≈ 3 USD/Monat, 5 GB Volume ≈ 0,75 USD).
+2. Zugangsschlüssel erzeugen: im Repository `npm run libsql:token` (Windows: `npm.cmd run libsql:token`). Ausgabe
+   aufheben: `SQLD_AUTH_JWT_KEY=…` (öffentlicher Schlüssel für den Server), das Token (für Vercel/GitHub) und den
+   privaten Schlüssel (nur zum späteren Ausstellen weiterer Tokens).
+3. Im Ordner `deploy/libsql`:
+   `fly launch --no-deploy --copy-config --name auto-import-markt-db --region fra` ·
+   `fly volumes create libsql_data --region fra --size 5` ·
+   `fly secrets set SQLD_AUTH_JWT_KEY=<Wert aus Schritt 2>` · `fly deploy`.
+   Die Datenbank ist dann unter `https://auto-import-markt-db.fly.dev` erreichbar (`fly.toml` hält die Maschine
+   dauerhaft an, damit die Vercel-Function keinen Kaltstart der Datenbank abwartet).
+
+**Weg 2 – eigener Server mit Docker (Hetzner CX22 o. ä., DNS-Name nötig):** `deploy/libsql/docker-compose.yml` mit
+Caddy davor (holt das TLS-Zertifikat selbst). `.env` neben der Datei: `LIBSQL_HOST=db.<deine-domain>` und
+`SQLD_AUTH_JWT_KEY=…` aus Schritt 2; dann `docker compose up -d`. Adresse: `https://db.<deine-domain>`.
+
+**Daten kopieren (Lesen bleibt bei Turso auch mit Schreibsperre erlaubt):**
+1. GitHub → Settings → Secrets → Actions: `NEW_DATABASE_URL` = neue Adresse (`https://…`), `NEW_AUTH_TOKEN` = Token.
+2. Actions → **DB Copy** → Run workflow. Der Runner kopiert Schema, alle Tabellen (rowid-weise in 500er-Blöcken,
+   `INSERT OR REPLACE`, also wiederholbar) und danach die Indizes; ~300.000 Inserate plus ~100.000 Buckets brauchen
+   grob 20–40 Minuten. Feld `only` erlaubt Teilkopien (z. B. `listings,meta`). Lokal: `npm run db:copy` mit
+   `SOURCE_*`/`TARGET_*` in `backend/.env`.
+3. Prüfen: Probe **`url https://<neue-adresse>/health`** (sqld antwortet `Ok`) und nach dem Umstellen
+   `/api/health/reference` (Zahlen wie vorher).
+
+**Umstellen:**
+- Vercel → Settings → Environment Variables: `TURSO_DATABASE_URL` = neue Adresse, `TURSO_AUTH_TOKEN` = Token → Redeploy
+  (Deployments → ⋯ → Redeploy); `/api/health` zeigt danach `writes: ok`.
+- GitHub → Secrets: dieselben zwei Werte überschreiben (Sync, Vergleichspreise, Probe nutzen sie). Der nächste Lauf
+  legt fehlende Indizes selbst an (`heavyMigrations`), alle Merker sind mitkopiert – kein Volldurchlauf.
+- Ab dann fallen bei Turso keine Schreibvorgänge mehr an; die Turso-Datenbank kann als Rückfall stehen bleiben oder
+  am Monatsanfang gelöscht werden. Zurück zu Turso geht genauso (DB Copy in Gegenrichtung mit vertauschten Secrets).
+
+Hinweise: sqld schreibt in ein lokales SQLite-File auf dem Volume – Sicherung per `fly volumes snapshots` (Fly legt
+täglich Snapshots an) bzw. Kopie des Docker-Volumes. Ein einzelner Schreiber wie bei Turso; die Drosselung aus Teil K
+(Pausen zwischen Schreibblöcken) bleibt sinnvoll. Weitere Tokens: `LIBSQL_PRIVATE_KEY_PEM="<privater Schlüssel>"
+npm run libsql:token`. Als Alternative zur eigenen Datenbank lohnt ein Blick in Turso → Billing, ob der Plan
+nutzungsabhängige Zusatzkosten („Overages“) statt eines Stufenwechsels zulässt – das kann für 8 Tage günstiger sein.
