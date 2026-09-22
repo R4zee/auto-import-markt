@@ -49,24 +49,31 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   /**
    * Stand der Vergleichspreis-Spalten (Diagnose ohne Datenbankzugang, 21.09.2026): Migrationsmerker, offene Inserate
    * (Teilindex), Inserate mit Abstand sowie Auktionen, die entgegen firmPrice() noch einen Abstand tragen (sollen 0 sein).
-   * Zählungen laufen über den abdeckenden Suchindex (wenige Sekunden), nicht über die Zeilen.
+   * Indizes erzwingen: ohne Tabellenstatistik las der Planer für die offenen Inserate und die Auktions-Prüfung alle
+   * aktiven Zeilen einzeln (131 s auf dem eigenen Server, 22.09.2026). Die Auktions-Prüfung läuft nur über die Märkte,
+   * die laut Facetten-Cache Auktionen haben (US, CA, JP: ~10.000 Zeilen über den Marktindex) – der abdeckende Suchindex
+   * enthält den Suchtext und ist für einen Lauf über alle 284.000 aktiven Einträge zu breit (67 s). `timingsMs` je Teil.
    */
   app.get('/api/health/reference', async () => {
+    const timed = async <T>(p: Promise<T>): Promise<[T, number]> => { const t = Date.now(); const v = await p; return [v, Date.now() - t]; };
     const meta = await query<{ key: string; value: string }>("SELECT key, value FROM meta WHERE key IN ('ref_key_version', 'ref_diff_auction_null', 'ref_diff_auction_null_v2')");
-    // Indizes erzwingen (Teilindex der offenen Inserate, abdeckender Suchindex): ohne Statistik las der Planer für die
-    // Zählung der offenen und die Auktions-Suche alle aktiven Zeilen einzeln – 131 s auf dem eigenen Server (22.09.2026)
-    const [pending, withDiff, auctionsWithDiff, topAuctions] = await Promise.all([
-      one<{ n: number }>("SELECT COUNT(*) AS n FROM listings INDEXED BY idx_listings_ref_pending WHERE ref_min_eur IS NULL AND active = 1 AND ref_key <> ''"),
-      one<{ n: number }>('SELECT COUNT(*) AS n FROM listings WHERE active = 1 AND ref_diff_de IS NOT NULL'),
-      one<{ n: number }>("SELECT COUNT(*) AS n FROM listings INDEXED BY idx_listings_search_v3 WHERE active = 1 AND offer_type = 'auction' AND ref_diff_de IS NOT NULL"),
-      query<{ id: string; ref_diff_de: number; fetched_at: string }>("SELECT id, ref_diff_de, fetched_at FROM listings INDEXED BY idx_listings_search_v3 WHERE active = 1 AND offer_type = 'auction' AND ref_diff_de IS NOT NULL ORDER BY ref_diff_de DESC LIMIT 3"),
+    const auctionMarkets = Object.entries((await getFacets()).marketCounts.auction).filter(([, n]) => n > 0).map(([m]) => m);
+    const marks = auctionMarkets.map(() => '?').join(',');
+    const auctionWhere = `market IN (${marks}) AND active = 1 AND offer_type = 'auction' AND ref_diff_de IS NOT NULL`;
+    const [[pending, tPending], [withDiff, tWithDiff], [auctionsWithDiff, tAuctions], [topAuctions, tTop]] = await Promise.all([
+      timed(one<{ n: number }>("SELECT COUNT(*) AS n FROM listings INDEXED BY idx_listings_ref_pending WHERE ref_min_eur IS NULL AND active = 1 AND ref_key <> ''")),
+      timed(one<{ n: number }>('SELECT COUNT(*) AS n FROM listings WHERE active = 1 AND ref_diff_de IS NOT NULL')),
+      timed(auctionMarkets.length ? one<{ n: number }>(`SELECT COUNT(*) AS n FROM listings INDEXED BY idx_listings_market WHERE ${auctionWhere}`, auctionMarkets) : Promise.resolve(null)),
+      timed(auctionMarkets.length ? query<{ id: string; ref_diff_de: number; fetched_at: string }>(`SELECT id, ref_diff_de, fetched_at FROM listings INDEXED BY idx_listings_market WHERE ${auctionWhere} ORDER BY ref_diff_de DESC LIMIT 3`, auctionMarkets) : Promise.resolve([])),
     ]);
     return {
       meta: Object.fromEntries(meta.map((r) => [r.key, r.value])),
       pending: Number(pending?.n ?? 0),
       withDiff: Number(withDiff?.n ?? 0),
       auctionsWithDiff: Number(auctionsWithDiff?.n ?? 0),
+      auctionMarkets,
       topAuctions,
+      timingsMs: { pending: tPending, withDiff: tWithDiff, auctionsWithDiff: tAuctions, topAuctions: tTop },
       time: new Date().toISOString(),
     };
   });

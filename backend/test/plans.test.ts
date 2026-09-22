@@ -47,9 +47,9 @@ describe('Abfragepläne: Job- und Diagnoseabfragen laufen über die gedachten In
 
   it('Diagnose /api/health/reference: Teilindex und abdeckender Suchindex statt Zeilenzugriffen', async () => {
     assert.match(await plan("SELECT COUNT(*) AS n FROM listings INDEXED BY idx_listings_ref_pending WHERE ref_min_eur IS NULL AND active = 1 AND ref_key <> ''"), /idx_listings_ref_pending/);
-    // Angebotsart und Abstand werden im Index geprüft, Zeilen nur für Treffer gelesen (id steht nicht im Index)
-    const top = await plan("SELECT id, ref_diff_de FROM listings INDEXED BY idx_listings_search_v3 WHERE active = 1 AND offer_type = 'auction' AND ref_diff_de IS NOT NULL ORDER BY ref_diff_de DESC LIMIT 3");
-    assert.match(top, /INDEX idx_listings_search_v3/);
-    assert.match(await plan("SELECT COUNT(*) AS n FROM listings INDEXED BY idx_listings_search_v3 WHERE active = 1 AND offer_type = 'auction' AND ref_diff_de IS NOT NULL"), /COVERING INDEX idx_listings_search_v3/);
+    // Auktions-Prüfung nur über die Auktionsmärkte (Marktindex, ~10.000 Zeilen) statt über alle aktiven Einträge des breiten Suchindex
+    const auctions = "market IN (?,?,?) AND active = 1 AND offer_type = 'auction' AND ref_diff_de IS NOT NULL";
+    assert.match(await plan(`SELECT COUNT(*) AS n FROM listings INDEXED BY idx_listings_market WHERE ${auctions}`, ['US', 'CA', 'JP']), /idx_listings_market \(market=\? AND active=\?\)/);
+    assert.match(await plan(`SELECT id, ref_diff_de FROM listings INDEXED BY idx_listings_market WHERE ${auctions} ORDER BY ref_diff_de DESC LIMIT 3`, ['US', 'CA', 'JP']), /idx_listings_market \(market=\? AND active=\?\)/);
   });
 });
