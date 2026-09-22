@@ -241,6 +241,9 @@ async function migrate(): Promise<void> {
       fetched_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_ref_prices_fetched ON ref_prices(fetched_at);
+    -- Frische-Prüfung im Job (Schlüssel + Zeitstempel aller Buckets) abdeckend aus dem Index: die Zeilen tragen die
+    -- Angebote als JSON, ein Lauf über alle ~99.000 Zeilen las Gigabytes (Lauf 48 auf dem eigenen Server: über 10 min)
+    CREATE INDEX IF NOT EXISTS idx_ref_prices_key_fetched ON ref_prices(key, fetched_at);
 
     -- Übersetzungs-/Spezifikations-Cache je Encar-Ausstattungskombination (Hersteller, Modell, Badge → englische Namen, Hubraum)
     CREATE TABLE IF NOT EXISTS encar_grades (

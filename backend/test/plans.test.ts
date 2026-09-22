@@ -45,6 +45,12 @@ describe('Abfragepläne: Job- und Diagnoseabfragen laufen über die gedachten In
     assert.doesNotMatch(sub, /SCAN listings(?! USING)/);
   });
 
+  it('Frische-Prüfung der Buckets abdeckend aus dem Index (key, fetched_at), ohne Zeilen mit Angebots-JSON zu lesen', async () => {
+    const p = await plan('SELECT key, fetched_at FROM ref_prices INDEXED BY idx_ref_prices_key_fetched WHERE key > ? ORDER BY key LIMIT 20000', ['']);
+    assert.match(p, /COVERING INDEX idx_ref_prices_key_fetched \(key>\?\)/);
+    assert.doesNotMatch(p, /TEMP B-TREE/);
+  });
+
   it('Diagnose /api/health/reference: Teilindex und abdeckender Suchindex statt Zeilenzugriffen', async () => {
     assert.match(await plan("SELECT COUNT(*) AS n FROM listings INDEXED BY idx_listings_ref_pending WHERE ref_min_eur IS NULL AND active = 1 AND ref_key <> ''"), /idx_listings_ref_pending/);
     // Auktions-Prüfung nur über die Auktionsmärkte (Marktindex, ~10.000 Zeilen) statt über alle aktiven Einträge des breiten Suchindex
