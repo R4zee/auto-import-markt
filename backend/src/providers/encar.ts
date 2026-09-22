@@ -260,11 +260,18 @@ export class EncarProvider implements MarketProvider {
     // 1) Alle Partitionen seitenweise laden – mehrere Partitionen parallel (jede Anfrage kostet über Proxy ~1 s)
     const items = new Map<string, EncarListItem>();
     let failed = 0;
+    let done = 0;
     const partQueue = [...parts];
     let flushing: Promise<void> = Promise.resolve();
+    const started = Date.now();
     const partWorker = async () => {
       while (partQueue.length) {
         const p = partQueue.shift()!;
+        // Fortschritt samt Heap: der Lauf schwieg sonst 40 Minuten – Lauf 63 (22.09.2026) brach ohne Hinweis mit
+        // „heap out of memory“ ab; so ist zu sehen, ab welcher Teilabfrage der Speicher wegläuft
+        if (++done % 25 === 0 || done === parts.length) {
+          console.log(`  Encar: ${done}/${parts.length} Teilabfragen · ${items.size} Inserate · Heap ${Math.round(process.memoryUsage().heapUsed / 1048576)} MB · ${Math.round((Date.now() - started) / 60000)} min`);
+        }
         try {
           const cap = config.encar.limitPartition > 0 ? Math.min(p.count, config.encar.limitPartition) : p.count;
           const fresh: EncarListItem[] = [];
