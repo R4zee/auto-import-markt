@@ -5,7 +5,8 @@ name: Reference Prices
 # als REFERENCE_TTL_DAYS sind. Abschalten: Variable REFERENCE_ENABLED=false.
 # Hinweis 21.09.2026: nach dem Wechsel auf „öffentlich“ feuerte der Zeitplan ab 07:12 UTC nicht mehr (auch der Sync
 # nicht); eine Änderung an der Workflow-Datei auf main registriert den Zeitplan neu. Bleibt er aus: Actions →
-# Workflow → „Enable workflow“ prüfen.
+# Workflow → „Enable workflow“ prüfen. 22.09.2026: 15:45, 16:45 und 17:45 UTC ohne Lauf (GitHub lässt Zeitpläne bei
+# Last aus oder verzögert sie) – Datei angefasst, damit der Zeitplan neu registriert wird.
 on:
   schedule:
     - cron: '45 * * * *'
