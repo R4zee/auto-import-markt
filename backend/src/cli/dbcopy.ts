@@ -16,11 +16,14 @@ const need = (name: string): string => {
   return v;
 };
 
-const srcUrl = need('SOURCE_DATABASE_URL');
-const dstUrl = need('TARGET_DATABASE_URL');
+// Zeilenumbrüche/Leerzeichen entfernen: aus der Konsole kopierte Tokens brechen am Fensterrand um (Lauf 1, 22.09.2026:
+// „Headers.set: … is an invalid header value“); Adressen ohne Schrägstrich am Ende
+const clean = (v: string | undefined): string | undefined => v?.replace(/\s+/g, '') || undefined;
+const srcUrl = need('SOURCE_DATABASE_URL').trim().replace(/\/+$/, '');
+const dstUrl = need('TARGET_DATABASE_URL').trim().replace(/\/+$/, '');
 if (srcUrl === dstUrl) { console.error('Quelle und Ziel sind dieselbe Datenbank'); process.exit(2); }
-const src = createClient({ url: srcUrl, authToken: process.env.SOURCE_AUTH_TOKEN });
-const dst = createClient({ url: dstUrl, authToken: process.env.TARGET_AUTH_TOKEN });
+const src = createClient({ url: srcUrl, authToken: clean(process.env.SOURCE_AUTH_TOKEN) });
+const dst = createClient({ url: dstUrl, authToken: clean(process.env.TARGET_AUTH_TOKEN) });
 
 const only = arg('only')?.split(',').map((s) => s.trim()).filter(Boolean);
 const started = Date.now();

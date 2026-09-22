@@ -150,7 +150,9 @@ export const config = {
   cronSecret: env.CRON_SECRET ?? '',
   database: {
     url: databaseUrl(),
-    authToken: env.TURSO_AUTH_TOKEN || env.DATABASE_AUTH_TOKEN || undefined,
+    // Zeilenumbrüche/Leerzeichen aus dem Token entfernen: aus der PowerShell-Konsole kopierte Tokens brechen am
+    // Fensterrand um, der Umbruch landet im Secret („Headers.set: … is an invalid header value“, 22.09.2026)
+    authToken: (env.TURSO_AUTH_TOKEN || env.DATABASE_AUTH_TOKEN || '').replace(/\s+/g, '') || undefined,
   },
   syncIntervalMin: num(env.SYNC_INTERVAL_MIN, 0),
   /** CDN-Cache-Dauer für öffentliche Lese-Antworten in Sekunden (0 = aus). Standard 10 Minuten. */

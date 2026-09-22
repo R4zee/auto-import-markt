@@ -4,6 +4,8 @@ import { makeKeys, makeToken } from '../services/libsqlAuth.js';
  * Schlüssel und Zugangstoken für den eigenen libsql-Server erzeugen (Teil M):
  *   npm run libsql:token            → neues Schlüsselpaar + Token (10 Jahre)
  *   LIBSQL_PRIVATE_KEY_PEM=… npm run libsql:token → weiteres Token zu einem vorhandenen Schlüssel
+ * Ausgabe am besten in eine Datei leiten (npm run libsql:token > libsql-keys.txt) und von dort kopieren: aus der
+ * Konsole kopierte Zeilen brechen am Fensterrand um, der Umbruch landet im Secret (Kopierlauf 1, 22.09.2026).
  */
 const existing = process.env.LIBSQL_PRIVATE_KEY_PEM?.replace(/\\n/g, '\n');
 const keys = existing ? null : makeKeys();

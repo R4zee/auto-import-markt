@@ -515,9 +515,13 @@ nicht. Zwei Wege, beide ≈ 4 € im Monat:
 **Weg 1 – Fly.io (TLS und Domain inklusive, ~20 Minuten):**
 1. Fly-CLI installieren (`https://fly.io/docs/flyctl/install/`), `fly auth signup` bzw. `fly auth login`
    (Zahlungsmittel nötig; shared-cpu-1x mit 512 MB ≈ 3 USD/Monat, 5 GB Volume ≈ 0,75 USD).
-2. Zugangsschlüssel erzeugen: im Repository `npm run libsql:token` (Windows: `npm.cmd run libsql:token`). Ausgabe
-   aufheben: `SQLD_AUTH_JWT_KEY=…` (öffentlicher Schlüssel für den Server), das Token (für Vercel/GitHub) und den
-   privaten Schlüssel (nur zum späteren Ausstellen weiterer Tokens).
+2. Zugangsschlüssel erzeugen: im Repository `npm run libsql:token > libsql-keys.txt` (Windows:
+   `npm.cmd run libsql:token > libsql-keys.txt`; die Datei steht in `.gitignore`) und die Datei im Editor öffnen.
+   Nicht aus der Konsole kopieren: lange Zeilen brechen dort am Fensterrand um, der Umbruch landet im Secret und der
+   Client meldet „Headers.set: … is an invalid header value“ (Kopierlauf 1). Aufheben: `SQLD_AUTH_JWT_KEY=…`
+   (öffentlicher Schlüssel für den Server), das Token (letzte Zeile, für Vercel/GitHub) und den privaten Schlüssel
+   (nur zum späteren Ausstellen weiterer Tokens). Die Anwendung entfernt Leerzeichen und Umbrüche aus dem Token
+   inzwischen selbst.
 3. Im Ordner `deploy/libsql`:
    `fly launch --no-deploy --copy-config --name auto-import-markt-db --region fra` ·
    `fly volumes create libsql_data --region fra --size 5` ·
