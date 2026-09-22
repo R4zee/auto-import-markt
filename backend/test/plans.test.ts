@@ -31,6 +31,19 @@ describe('Abfragepläne: Job- und Diagnoseabfragen laufen über die gedachten In
     assert.deepEqual(await queryPaged('listings', 'id', "ref_min_eur IS NULL AND active = 1 AND ref_key <> ''", [], 20000, 'idx_listings_ref_pending'), []);
   });
 
+  it('queryPaged liest mehr als einen Block vollständig und ohne Wiederholung (rowid rückt vor)', async () => {
+    const { run } = await import('../src/db.js');
+    await run('CREATE TABLE IF NOT EXISTS paged_probe (v INTEGER NOT NULL)');
+    for (let i = 1; i <= 20; i++) await run('INSERT INTO paged_probe(v) VALUES (?)', [i]);
+    // 20 Zeilen in Blöcken von 7 → 7, 7, 6; vor der Korrektur (22.09.2026) blieb der rowid-Anker auf 0 stehen und der
+    // erste Block kam endlos zurück (Sync: heap out of memory nach 147.000 Encar-Zeilen)
+    const rows = await queryPaged<{ v: number }>('paged_probe', 'v', 'v > ?', [0], 7);
+    assert.deepEqual(rows.map((r) => Number(r.v)), Array.from({ length: 20 }, (_, i) => i + 1));
+    assert.ok(!('__rid' in rows[0]), 'Hilfsspalte entfernt');
+    // genau ein voller Block: zweite Abfrage liefert 0 Zeilen und beendet die Schleife
+    assert.equal((await queryPaged('paged_probe', 'v', 'v <= ?', [7], 7)).length, 7);
+  });
+
   it('Inserate ohne Bucket-Schlüssel über den ref_key-Index (+active)', async () => {
     assert.match(await plan('SELECT id FROM listings WHERE ref_key IS NULL AND +active = 1 LIMIT 5000'), /idx_listings_ref_key/);
   });
