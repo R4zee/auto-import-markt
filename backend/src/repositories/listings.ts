@@ -210,11 +210,17 @@ function orderBy(sort: ListingQuery['sort'], dest: DestCode, alias = ''): string
   }[sort ?? 'landed-asc'];
 }
 
-/** Quellenbedingung: nur die Quelle selbst oder zusätzlich ihre Teilquellen ("<id>-…"). */
-function sourceClause(source: string, includeSubSources: boolean): { sql: string; args: InValue[] } {
-  return includeSubSources
-    ? { sql: '(source = ? OR source LIKE ?)', args: [source, `${source}-%`] }
-    : { sql: 'source = ?', args: [source] };
+/**
+ * Quellen im Bestand: nur die Quelle selbst oder zusätzlich ihre Teilquellen ("<id>-…", z. B. olx → olx-pl, olx-ro).
+ * Gleichheit und Bereich auf dem Quellen-Index statt `source LIKE 'olx-%'`: für LIKE gibt es keinen Indexzugriff, der
+ * Planer nahm dann einen (active, …)-Index über alle aktiven Inserate mit Zeilenzugriff und Sortierung. Die Aufrufer
+ * fragen je Quelle ab (`source = ? AND +active = 1` → idx_listings_source in rowid-Reihenfolge, ohne Sortierung).
+ */
+async function sourcesOf(source: string, includeSubSources: boolean): Promise<string[]> {
+  if (!includeSubSources) return [source];
+  // '.' ist das Zeichen nach '-' – der Bereich [source-, source.) umfasst genau die Teilquellen
+  const rows = await query<{ source: string }>('SELECT DISTINCT source FROM listings WHERE source = ? OR (source >= ? AND source < ?)', [source, `${source}-`, `${source}.`]);
+  return rows.map((r) => r.source);
 }
 
 export const listingsRepo = {
@@ -232,10 +238,12 @@ export const listingsRepo = {
    * `includeSubSources` nimmt auch Teilquellen des Providers mit ("olx" → olx-pl, olx-ro …, "autoapi" → autoapi-dubizzle).
    */
   async deactivateMissing(source: string, keepIds: string[], includeSubSources = false): Promise<number> {
-    const src = sourceClause(source, includeSubSources);
-    const rows = await query<{ id: string }>(`SELECT id FROM listings WHERE ${src.sql} AND active = 1`, src.args);
     const keep = new Set(keepIds);
-    const stale = rows.map((r) => r.id).filter((id) => !keep.has(id));
+    const stale: string[] = [];
+    for (const s of await sourcesOf(source, includeSubSources)) {
+      const rows = await queryPaged<{ id: string }>('listings', 'id', 'source = ? AND +active = 1', [s]);
+      for (const r of rows) if (!keep.has(r.id)) stale.push(r.id);
+    }
     for (let i = 0; i < stale.length; i += 500) {
       await db().batch(stale.slice(i, i + 500).map((id) => ({ sql: 'UPDATE listings SET active = 0 WHERE id = ?', args: [id] })), 'write');
     }
@@ -253,10 +261,13 @@ export const listingsRepo = {
 
   /** Nur IDs (und Preis/km) einer Quelle – für Abgleiche ohne den ganzen Datensatz zu laden. */
   async activeIdsBySource(source: string, includeSubSources = false): Promise<Map<string, { price: number; km: number }>> {
-    const src = sourceClause(source, includeSubSources);
-    // blockweise: Encar liefert ~147.000 Zeilen, mehr als das Antwortlimit von sqld (Standard 10 MB)
-    const rows = await queryPaged<{ id: string; price: number; km: number }>('listings', 'id, price, km', `${src.sql} AND active = 1`, src.args);
-    return new Map(rows.map((r) => [r.id, { price: Number(r.price), km: Number(r.km) }]));
+    const out = new Map<string, { price: number; km: number }>();
+    for (const s of await sourcesOf(source, includeSubSources)) {
+      // blockweise: Encar liefert ~147.000 Zeilen, mehr als das Antwortlimit von sqld (Standard 10 MB)
+      const rows = await queryPaged<{ id: string; price: number; km: number }>('listings', 'id, price, km', 'source = ? AND +active = 1', [s]);
+      for (const r of rows) out.set(r.id, { price: Number(r.price), km: Number(r.km) });
+    }
+    return out;
   },
 
   async allActive(): Promise<Listing[]> {
@@ -347,8 +358,9 @@ export const listingsRepo = {
    */
   async recomputeDerived(source?: string, currencies?: string[]): Promise<number> {
     if (currencies && !currencies.length) return 0;
-    // nur die Spalten lesen, die die Kalkulation braucht – nicht Fotos/Schäden
-    const where = ['active = 1'];
+    // nur die Spalten lesen, die die Kalkulation braucht – nicht Fotos/Schäden. `+active`: mit Quelle über den Quellen-Index,
+    // sonst in rowid-Reihenfolge (sequenziell) statt über einen (active, …)-Index mit Zeilenzugriff je Eintrag und Sortierung
+    const where = ['+active = 1'];
     const args: InValue[] = [];
     if (source) { where.push('source = ?'); args.push(source); }
     if (currencies) { where.push(`currency IN (${currencies.map(() => '?').join(',')})`); args.push(...currencies); }
