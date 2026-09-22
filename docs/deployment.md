@@ -556,6 +556,10 @@ Minuten, der Job lief in das 5-Minuten-Limit von undici, Vercel scheiterte beim 
 Abhilfe: `fly scale memory 2048` (≈ 10,70 USD/Monat) – und im Code: Gesamtzahl der ungefilterten Suche aus dem
 Facetten-Cache, `/api/health` ohne Vollzählung, HTTP-Zeitlimit für entfernte Datenbanken 30 min (`db.ts`,
 `REMOTE_HEADERS_TIMEOUT_MS`), keine Migration beim Kaltstart der Function (Schema pflegen die Jobs).
+Antwortlimit: sqld begrenzt eine Antwort auf 10 MB (`RESPONSE_TOO_LARGE` beim Lesen der ~99.000 Buckets);
+`fly.toml` setzt `SQLD_MAX_RESPONSE_SIZE=200MB`/`SQLD_MAX_TOTAL_RESPONSE_SIZE=500MB` (bestehende App:
+`fly secrets set …`), und die großen Leseabfragen laufen seither in Blöcken (`queryPaged` in `db.ts`, Aggregation je
+20 Marken).
 
 Hinweise: sqld schreibt in ein lokales SQLite-File auf dem Volume – Sicherung per `fly volumes snapshots` (Fly legt
 täglich Snapshots an) bzw. Kopie des Docker-Volumes. Ein einzelner Schreiber wie bei Turso; die Drosselung aus Teil K

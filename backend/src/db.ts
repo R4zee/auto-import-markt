@@ -102,6 +102,25 @@ export async function one<T extends Row = Row>(sql: string, args: InValue[] = []
   return rows[0] ?? null;
 }
 
+/**
+ * Große Leseabfragen in rowid-Blöcken: sqld begrenzt eine Antwort (Standard 10 MB, Turso großzügiger) – die Bucket-Liste
+ * mit ~99.000 Zeilen scheiterte mit RESPONSE_TOO_LARGE (22.09.2026). `where` ohne rowid-Bedingung; Ergebnis komplett.
+ */
+export async function queryPaged<T extends Row = Row>(table: string, columns: string, where: string, args: InValue[] = [], batch = 20000): Promise<T[]> {
+  const out: T[] = [];
+  let last = 0;
+  for (;;) {
+    const rows = await query<T & { __rid: number }>(
+      `SELECT rowid AS __rid, ${columns} FROM ${table} WHERE (${where}) AND rowid > ? ORDER BY rowid LIMIT ?`,
+      [...args, last, batch],
+    );
+    for (const r of rows) { delete (r as Record<string, unknown>).__rid; out.push(r); }
+    if (rows.length < batch) break;
+    last = Number((rows[rows.length - 1] as Record<string, unknown>).__rid ?? last);
+  }
+  return out;
+}
+
 export async function run(sql: string, args: InValue[] = []): Promise<{ rowsAffected: number; lastInsertRowid: bigint | undefined }> {
   const res = await db().execute({ sql, args });
   return { rowsAffected: res.rowsAffected, lastInsertRowid: res.lastInsertRowid };

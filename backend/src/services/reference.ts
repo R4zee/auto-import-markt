@@ -1,6 +1,6 @@
 import type { InStatement } from '@libsql/client';
 import { config, isServerless } from '../config.js';
-import { db, one, query, refDiffSql, run, type Row } from '../db.js';
+import { db, one, query, queryPaged, refDiffSql, run, type Row } from '../db.js';
 import { yearBand } from '../domain/generations.js';
 import { makeKey } from '../domain/makes.js';
 import { DEST_CODES } from '../domain/markets.js';
@@ -426,7 +426,8 @@ export const referenceRepo = {
   },
   /** Nur Schlüssel + Zeitstempel aller Buckets (für die Frische-Prüfung im Refresh-Job) */
   async fetchedAt(): Promise<Map<string, string>> {
-    const rows = await query<{ key: string; fetched_at: string }>('SELECT key, fetched_at FROM ref_prices');
+    // blockweise: ~99.000 Zeilen überschritten das Antwortlimit von sqld (RESPONSE_TOO_LARGE, 22.09.2026)
+    const rows = await queryPaged<{ key: string; fetched_at: string }>('ref_prices', 'key, fetched_at', '1 = 1');
     return new Map(rows.map((r) => [r.key, r.fetched_at]));
   },
   async count(): Promise<number> {
@@ -562,7 +563,7 @@ export async function backfillReferenceColumns(opts: { maxMs?: number; log?: (li
     if (report.keyed % 25000 < 5000) log(`  … ${report.keyed} Inserate mit Bucket-Schlüssel · ${Math.round((Date.now() - started) / 60000)} min`);
   }
   // Offene Inserate (Teilindex idx_listings_ref_pending: ref_min_eur IS NULL AND active = 1) nach Bucket gruppieren
-  const pending = await query<RefListingRow & { ref_key: string }>(`SELECT ${REF_LISTING_COLS}, ref_key FROM listings WHERE ref_min_eur IS NULL AND active = 1 AND ref_key <> ''`);
+  const pending = await queryPaged<RefListingRow & { ref_key: string }>('listings', `${REF_LISTING_COLS}, ref_key`, "ref_min_eur IS NULL AND active = 1 AND ref_key <> ''");
   report.pending = pending.length;
   const byKey = new Map<string, RefListingRow[]>();
   for (const r of pending) { const list = byKey.get(r.ref_key); if (list) list.push(r); else byKey.set(r.ref_key, [r]); }
@@ -623,10 +624,19 @@ export async function refreshReferenceBuckets(opts: { limit?: number; maxMs?: nu
   const maxMs = opts.maxMs ?? config.reference.maxMinutes * 60000;
   const started = Date.now();
   const log = opts.log ?? (() => undefined);
-  const rows = await query<{ make: string; model: string; trim1: string; fuel: string; year: number; km_band: number | null; kw_band: number | null; n: number }>(
-    `SELECT make, model, substr(trim, 1, instr(trim || ' ', ' ') - 1) AS trim1, fuel, year, ${kmBandSql()} AS km_band, ${kwBandSql()} AS kw_band, COUNT(*) AS n
-     FROM listings WHERE active = 1 GROUP BY make, model, trim1, fuel, year, km_band, kw_band`,
-  );
+  // Aggregation je Marke in Gruppen von 20 Marken: die eine Abfrage über alles liefert ~100.000 Gruppen und stieße
+  // an das Antwortlimit von sqld (RESPONSE_TOO_LARGE, 22.09.2026)
+  const makes = (await query<{ make: string }>('SELECT DISTINCT make FROM listings WHERE active = 1 ORDER BY make')).map((r) => r.make);
+  type CandidateRow = { make: string; model: string; trim1: string; fuel: string; year: number; km_band: number | null; kw_band: number | null; n: number };
+  const rows: CandidateRow[] = [];
+  for (let i = 0; i < makes.length; i += 20) {
+    const chunk = makes.slice(i, i + 20);
+    rows.push(...await query<CandidateRow>(
+      `SELECT make, model, substr(trim, 1, instr(trim || ' ', ' ') - 1) AS trim1, fuel, year, ${kmBandSql()} AS km_band, ${kwBandSql()} AS kw_band, COUNT(*) AS n
+       FROM listings WHERE active = 1 AND make IN (${chunk.map(() => '?').join(',')}) GROUP BY make, model, trim1, fuel, year, km_band, kw_band`,
+      chunk,
+    ));
+  }
   const wanted = new Map<string, { q: RefQuery; n: number }>();
   for (const r of rows) {
     // kw_band = untere Bandgrenze; sie liegt im Band, also ergibt sie dasselbe Fenster wie jede Leistung des Bands
