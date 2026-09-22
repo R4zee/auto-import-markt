@@ -53,11 +53,13 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
    */
   app.get('/api/health/reference', async () => {
     const meta = await query<{ key: string; value: string }>("SELECT key, value FROM meta WHERE key IN ('ref_key_version', 'ref_diff_auction_null', 'ref_diff_auction_null_v2')");
+    // Indizes erzwingen (Teilindex der offenen Inserate, abdeckender Suchindex): ohne Statistik las der Planer für die
+    // Zählung der offenen und die Auktions-Suche alle aktiven Zeilen einzeln – 131 s auf dem eigenen Server (22.09.2026)
     const [pending, withDiff, auctionsWithDiff, topAuctions] = await Promise.all([
-      one<{ n: number }>("SELECT COUNT(*) AS n FROM listings WHERE ref_min_eur IS NULL AND active = 1 AND ref_key <> ''"),
+      one<{ n: number }>("SELECT COUNT(*) AS n FROM listings INDEXED BY idx_listings_ref_pending WHERE ref_min_eur IS NULL AND active = 1 AND ref_key <> ''"),
       one<{ n: number }>('SELECT COUNT(*) AS n FROM listings WHERE active = 1 AND ref_diff_de IS NOT NULL'),
-      one<{ n: number }>("SELECT COUNT(*) AS n FROM listings WHERE active = 1 AND offer_type = 'auction' AND ref_diff_de IS NOT NULL"),
-      query<{ id: string; ref_diff_de: number; fetched_at: string }>("SELECT id, ref_diff_de, fetched_at FROM listings WHERE active = 1 AND offer_type = 'auction' AND ref_diff_de IS NOT NULL ORDER BY ref_diff_de DESC LIMIT 3"),
+      one<{ n: number }>("SELECT COUNT(*) AS n FROM listings INDEXED BY idx_listings_search_v3 WHERE active = 1 AND offer_type = 'auction' AND ref_diff_de IS NOT NULL"),
+      query<{ id: string; ref_diff_de: number; fetched_at: string }>("SELECT id, ref_diff_de, fetched_at FROM listings INDEXED BY idx_listings_search_v3 WHERE active = 1 AND offer_type = 'auction' AND ref_diff_de IS NOT NULL ORDER BY ref_diff_de DESC LIMIT 3"),
     ]);
     return {
       meta: Object.fromEntries(meta.map((r) => [r.key, r.value])),

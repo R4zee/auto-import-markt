@@ -105,13 +105,16 @@ export async function one<T extends Row = Row>(sql: string, args: InValue[] = []
 /**
  * Große Leseabfragen in rowid-Blöcken: sqld begrenzt eine Antwort (Standard 10 MB, Turso großzügiger) – die Bucket-Liste
  * mit ~99.000 Zeilen scheiterte mit RESPONSE_TOO_LARGE (22.09.2026). `where` ohne rowid-Bedingung; Ergebnis komplett.
+ * `indexedBy` erzwingt einen Index (INDEXED BY): ohne Tabellenstatistik hält der Planer `active = 1` für selektiv und
+ * läuft für die offenen Inserate über alle ~284.000 aktiven Indexeinträge samt Zeilenzugriff statt über den Teilindex.
  */
-export async function queryPaged<T extends Row = Row>(table: string, columns: string, where: string, args: InValue[] = [], batch = 20000): Promise<T[]> {
+export async function queryPaged<T extends Row = Row>(table: string, columns: string, where: string, args: InValue[] = [], batch = 20000, indexedBy?: string): Promise<T[]> {
   const out: T[] = [];
   let last = 0;
+  const from = indexedBy ? `${table} INDEXED BY ${indexedBy}` : table;
   for (;;) {
     const rows = await query<T & { __rid: number }>(
-      `SELECT rowid AS __rid, ${columns} FROM ${table} WHERE (${where}) AND rowid > ? ORDER BY rowid LIMIT ?`,
+      `SELECT rowid AS __rid, ${columns} FROM ${from} WHERE (${where}) AND rowid > ? ORDER BY rowid LIMIT ?`,
       [...args, last, batch],
     );
     for (const r of rows) { delete (r as Record<string, unknown>).__rid; out.push(r); }

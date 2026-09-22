@@ -551,8 +551,9 @@ export async function backfillReferenceColumns(opts: { maxMs?: number; log?: (li
   const report: BackfillReport = { keyed: 0, pending: 0, updated: 0, buckets: 0, stopped: null };
   for (;;) {
     if (Date.now() - started > maxMs) { report.stopped = `Zeitbudget von ${Math.round(maxMs / 60000)} min erreicht`; return report; }
+    // `+active`: Index auf ref_key (IS NULL) statt eines (active, …)-Index über alle aktiven Inserate (siehe queryPaged)
     const rows = await query<{ id: string; make: string; model: string; trim: string; year: number; fuel: string; km: number; power_kw: number | null }>(
-      'SELECT id, make, model, trim, year, fuel, km, power_kw FROM listings WHERE ref_key IS NULL AND active = 1 LIMIT 5000',
+      'SELECT id, make, model, trim, year, fuel, km, power_kw FROM listings WHERE ref_key IS NULL AND +active = 1 LIMIT 5000',
     );
     if (!rows.length) break;
     await writeBatches(rows.map((r) => ({
@@ -562,8 +563,10 @@ export async function backfillReferenceColumns(opts: { maxMs?: number; log?: (li
     report.keyed += rows.length;
     if (report.keyed % 25000 < 5000) log(`  … ${report.keyed} Inserate mit Bucket-Schlüssel · ${Math.round((Date.now() - started) / 60000)} min`);
   }
-  // Offene Inserate (Teilindex idx_listings_ref_pending: ref_min_eur IS NULL AND active = 1) nach Bucket gruppieren
-  const pending = await queryPaged<RefListingRow & { ref_key: string }>('listings', `${REF_LISTING_COLS}, ref_key`, "ref_min_eur IS NULL AND active = 1 AND ref_key <> ''");
+  // Offene Inserate (Teilindex idx_listings_ref_pending: ref_min_eur IS NULL AND active = 1) nach Bucket gruppieren.
+  // Index erzwingen: der Planer nahm sonst idx_listings_active_refdiff_pl (active=?) und las alle aktiven Zeilen –
+  // auf dem eigenen libsql-Server stand Lauf 47 damit 24 Minuten vor dem ersten Schreiben (22.09.2026)
+  const pending = await queryPaged<RefListingRow & { ref_key: string }>('listings', `${REF_LISTING_COLS}, ref_key`, "ref_min_eur IS NULL AND active = 1 AND ref_key <> ''", [], 20000, 'idx_listings_ref_pending');
   report.pending = pending.length;
   const byKey = new Map<string, RefListingRow[]>();
   for (const r of pending) { const list = byKey.get(r.ref_key); if (list) list.push(r); else byKey.set(r.ref_key, [r]); }
