@@ -18,16 +18,27 @@ export type Row = Record<string, InValue>;
 const REMOTE_HEADERS_TIMEOUT_MS = 30 * 60 * 1000;
 let remoteAgent: Agent | null = null;
 type UndiciInit = NonNullable<Parameters<typeof undiciFetch>[1]>;
-function remoteFetch(input: Parameters<typeof undiciFetch>[0], init?: UndiciInit): ReturnType<typeof undiciFetch> {
+/**
+ * fetch für @libsql/client mit eigenem Zeitlimit. Der hrana-Client übergibt ein globales `Request`-Objekt; undicis
+ * fetch kennt nur seine eigene Request-Klasse („Failed to parse URL from [object Request]“, 22.09.2026) – deshalb
+ * Adresse, Methode, Kopfzeilen und Rumpf einzeln übergeben.
+ */
+export async function remoteFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   remoteAgent ??= new Agent({ headersTimeout: REMOTE_HEADERS_TIMEOUT_MS, bodyTimeout: REMOTE_HEADERS_TIMEOUT_MS });
-  return undiciFetch(input, { ...init, dispatcher: remoteAgent });
+  if (typeof input === 'object' && !(input instanceof URL) && typeof input.url === 'string') {
+    const body = input.method === 'GET' || input.method === 'HEAD' ? undefined : Buffer.from(await input.arrayBuffer());
+    const opts: UndiciInit = { method: input.method, headers: Object.fromEntries(input.headers.entries()), body, dispatcher: remoteAgent };
+    return undiciFetch(input.url, opts) as unknown as Promise<Response>;
+  }
+  const opts = { ...(init as object), dispatcher: remoteAgent } as UndiciInit;
+  return undiciFetch(input as string | URL, opts) as unknown as Promise<Response>;
 }
 
 function create(): Client {
   const url = config.database.url;
   if (url.startsWith('file:')) mkdirSync(dirname(url.slice('file:'.length)), { recursive: true });
   const remote = /^(https?|libsql|wss?):\/\//.test(url);
-  return createClient({ url, authToken: config.database.authToken, ...(remote ? { fetch: remoteFetch as unknown as typeof fetch } : {}) });
+  return createClient({ url, authToken: config.database.authToken, ...(remote ? { fetch: remoteFetch } : {}) });
 }
 
 /** Roher Client (nur nach `ready()` verwenden). */
