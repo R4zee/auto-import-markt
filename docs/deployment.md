@@ -514,7 +514,7 @@ nicht. Zwei Wege, beide ≈ 4 € im Monat:
 
 **Weg 1 – Fly.io (TLS und Domain inklusive, ~20 Minuten):**
 1. Fly-CLI installieren (`https://fly.io/docs/flyctl/install/`), `fly auth signup` bzw. `fly auth login`
-   (Zahlungsmittel nötig; shared-cpu-1x mit 512 MB ≈ 3 USD/Monat, 5 GB Volume ≈ 0,75 USD).
+   (Zahlungsmittel nötig; shared-cpu-1x mit 512 MB ≈ 3 USD/Monat, 10 GB Volume ≈ 1,50 USD).
 2. Zugangsschlüssel erzeugen: im Repository `npm run libsql:token > libsql-keys.txt` (Windows:
    `npm.cmd run libsql:token > libsql-keys.txt`; die Datei steht in `.gitignore`) und die Datei im Editor öffnen.
    Nicht aus der Konsole kopieren: lange Zeilen brechen dort am Fensterrand um, der Umbruch landet im Secret und der
@@ -524,7 +524,7 @@ nicht. Zwei Wege, beide ≈ 4 € im Monat:
    inzwischen selbst.
 3. Im Ordner `deploy/libsql`:
    `fly launch --no-deploy --copy-config --name auto-import-markt-db --region fra` ·
-   `fly volumes create libsql_data --region fra --size 5` ·
+   `fly volumes create libsql_data --region fra --size 10` ·
    `fly secrets set SQLD_AUTH_JWT_KEY=<Wert aus Schritt 2>` · `fly deploy`.
    Die Datenbank ist dann unter `https://auto-import-markt-db.fly.dev` erreichbar (`fly.toml` hält die Maschine
    dauerhaft an, damit die Vercel-Function keinen Kaltstart der Datenbank abwartet).
@@ -560,6 +560,20 @@ Antwortlimit: sqld begrenzt eine Antwort auf 10 MB (`RESPONSE_TOO_LARGE` beim Le
 `fly.toml` setzt `SQLD_MAX_RESPONSE_SIZE=200MB`/`SQLD_MAX_TOTAL_RESPONSE_SIZE=500MB` (bestehende App:
 `fly secrets set …`), und die großen Leseabfragen laufen seither in Blöcken (`queryPaged` in `db.ts`, Aggregation je
 20 Marken).
+
+**Rechenzeit (22.09.2026):** Ein `shared-cpu-1x` hat nur eine Basisquote von etwa 1/16 Kern und darf nur mit
+angesparten Guthaben schneller laufen; nach der Datenbankkopie und den ersten Job-Läufen war das Guthaben aufgebraucht,
+indizierte Abfragen über 5.000 Einträge brauchten 10 s, über 150.000 Einträge 110 s. `fly scale vm performance-1x
+--memory 2048` (≈ 31 USD/Monat, sekundengenau) brachte alles auf Millisekunden. Rückstufung prüfen, sobald die Jobs
+ein paar Tage ruhig laufen.
+
+**Plattenplatz (23.09.2026):** Die Datenbank belegt ~3,5 GB; sqld braucht bei jeder Log-Kompaktierung zusätzlich Platz
+für Snapshot und Replikationslog. Mit dem 5-GB-Volume kam `No space left on device` beim Snapshot, sqld stürzte ab
+(`failed to compact log … exiting`), Fly startete die Maschine neu, und die Jobs sahen für 40–90 s HTTP 502 (die
+Datenbankschicht wiederholt solche Aussetzer inzwischen dreimal). Abhilfe: `fly volumes extend <vol-id> -s 10`, dann
+`fly machine restart <machine-id>` (das Dateisystem wächst beim Start); prüfen mit
+`fly ssh console -C "df -h /var/lib/sqld"`. Bei Wachstum: `du -sh /var/lib/sqld/iku.db/*` zeigt, ob Datenbank, Log
+oder Snapshots den Platz belegen.
 
 Hinweise: sqld schreibt in ein lokales SQLite-File auf dem Volume – Sicherung per `fly volumes snapshots` (Fly legt
 täglich Snapshots an) bzw. Kopie des Docker-Volumes. Ein einzelner Schreiber wie bei Turso; die Drosselung aus Teil K
