@@ -1,7 +1,10 @@
 # Eigener libsql-Server (sqld) auf Fly.io – Teil M in docs/deployment.md. TLS und Domain (<app>.fly.dev) liefert Fly.
 # Einrichtung (einmalig, im Ordner deploy/libsql):
 #   fly launch --no-deploy --copy-config --name auto-import-markt-db --region fra
-#   fly volumes create libsql_data --region fra --size 5
+#   fly volumes create libsql_data --region fra --size 10
+#   (10 GB: die Datenbank belegt ~3,5 GB, und sqld braucht bei jeder Log-Kompaktierung zusätzlich Platz für Snapshot
+#    und Replikationslog – mit 5 GB lief das Volume am 23.09.2026 voll, sqld stürzte ab und antwortete mit HTTP 502.
+#    Nachträglich: fly volumes extend <vol-id> -s 10, dann fly machine restart <machine-id>)
 #   fly secrets set SQLD_AUTH_JWT_KEY=<Ausgabe von npm run libsql:token>
 #   fly deploy
 # Client-URL danach: https://auto-import-markt-db.fly.dev (TURSO_DATABASE_URL), Token als TURSO_AUTH_TOKEN.
