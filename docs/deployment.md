@@ -555,7 +555,14 @@ den Seitencache; Vollscans wie die Bucket-Aggregation des Vergleichspreis-Jobs o
 Minuten, der Job lief in das 5-Minuten-Limit von undici, Vercel scheiterte beim Kaltstart hinter dem laufenden Scan.
 Abhilfe: `fly scale memory 2048` (≈ 10,70 USD/Monat) – und im Code: Gesamtzahl der ungefilterten Suche aus dem
 Facetten-Cache, `/api/health` ohne Vollzählung, HTTP-Zeitlimit für entfernte Datenbanken 30 min (`db.ts`,
-`REMOTE_HEADERS_TIMEOUT_MS`), keine Migration beim Kaltstart der Function (Schema pflegen die Jobs).
+`REMOTE_HEADERS_TIMEOUT_MS`; seit 25.09.2026 10 min, weil die Vollscans weg sind), keine Migration beim Kaltstart der
+Function (Schema pflegen die Jobs).
+
+**Blockierter Schreiber (24./25.09.2026):** Lesen ging, aber jeder Schreibbefehl (schon `CREATE … IF NOT EXISTS` beim
+Jobstart) blieb ohne Antwort, die Jobs hingen 4 × 30 Minuten und endeten rot; `/health` des Servers antwortete `Ok`.
+Ursache serverseitig (WAL-Checkpoint/Kompaktierung kommt nicht voran, siehe Plattenplatz). Abhilfe: `fly machine restart
+<machine-id>`; danach Sync manuell starten. Die Datenbankschicht wiederholt Zeitüberschreitungen seither nicht mehr
+und meldet den Zustand nach 10 Minuten.
 Antwortlimit: sqld begrenzt eine Antwort auf 10 MB (`RESPONSE_TOO_LARGE` beim Lesen der ~99.000 Buckets);
 `fly.toml` setzt `SQLD_MAX_RESPONSE_SIZE=200MB`/`SQLD_MAX_TOTAL_RESPONSE_SIZE=500MB` (bestehende App:
 `fly secrets set …`), und die großen Leseabfragen laufen seither in Blöcken (`queryPaged` in `db.ts`, Aggregation je

@@ -12,10 +12,12 @@ export type Row = Record<string, InValue>;
 /**
  * HTTP-Zeitlimits für entfernte Datenbanken: undici bricht eine Antwort ab, deren Kopfzeilen nach 300 s nicht da sind
  * („Headers Timeout Error“). Auf einem kleinen eigenen libsql-Server (Teil M) brauchten Vollscans wie die
- * Bucket-Aggregation des Vergleichspreis-Jobs länger – der Job starb, obwohl der Server noch rechnete. 30 Minuten je
- * Anfrage; die Vercel-Function ist ohnehin durch ihre maxDuration begrenzt.
+ * Bucket-Aggregation des Vergleichspreis-Jobs länger – der Job starb, obwohl der Server noch rechnete; deshalb zunächst
+ * 30 Minuten. Seit die Vollscans weg sind (Indizes, Blöcke), dauert die längste Abfrage Sekunden; 10 Minuten reichen,
+ * und ein Server, der Schreibbefehle gar nicht mehr annimmt (WAL-Checkpoint blockiert, 24./25.09.2026: jeder Job hing
+ * 4 × 30 Minuten), fällt so nach 10 statt 120 Minuten auf. Die Vercel-Function ist ohnehin durch maxDuration begrenzt.
  */
-const REMOTE_HEADERS_TIMEOUT_MS = 30 * 60 * 1000;
+const REMOTE_HEADERS_TIMEOUT_MS = 10 * 60 * 1000;
 let remoteAgent: Agent | null = null;
 type UndiciInit = NonNullable<Parameters<typeof undiciFetch>[1]>;
 /**
@@ -38,11 +40,20 @@ export async function remoteFetch(input: string | URL | Request, init?: RequestI
  * Kurze Aussetzer des entfernten Servers: der Fly-Proxy antwortet mit HTTP 502/503/504, wenn sqld gerade nicht
  * erreichbar ist (Checkpoint, Neustart) – Lauf 49 verlor so zwei Buckets, Sync-Lauf 65 starb beim ersten Statement
  * (22.09.2026). Solche Fehler werden mit Pause wiederholt; alle Schreibanweisungen sind wiederholbar (UPSERT, UPDATE,
- * IF NOT EXISTS), ein doppelter sync_runs-Eintrag wäre unschädlich.
+ * IF NOT EXISTS), ein doppelter sync_runs-Eintrag wäre unschädlich. Kein Wiederholen bei Zeitüberschreitung der
+ * Antwort (UND_ERR_HEADERS_TIMEOUT): der Server hat die Anfrage angenommen und antwortet nicht – ein blockierter
+ * Schreiber löst sich nicht in 10 Sekunden, die Wiederholungen kosteten nur weitere 3 × 30 Minuten (24./25.09.2026).
  */
 const TRANSIENT = /HTTP status 50[234]|fetch failed|ECONNRESET|ECONNREFUSED|UND_ERR_SOCKET|other side closed/i;
+const NOT_TRANSIENT = /UND_ERR_HEADERS_TIMEOUT|UND_ERR_BODY_TIMEOUT|Headers Timeout|Body Timeout/i;
 export function isTransient(e: unknown): boolean {
-  return TRANSIENT.test(e instanceof Error ? `${e.message} ${(e as { cause?: { message?: string } }).cause?.message ?? ''}` : String(e));
+  const text = e instanceof Error ? `${e.message} ${describeCause(e)}` : String(e);
+  return TRANSIENT.test(text) && !NOT_TRANSIENT.test(text);
+}
+function describeCause(e: Error): string {
+  const c = (e as { cause?: unknown }).cause;
+  if (!(c instanceof Error)) return '';
+  return `${c.name} ${(c as { code?: string }).code ?? ''} ${c.message}`;
 }
 export const RETRY_DELAYS_MS = [2000, 5000, 10000];
 

@@ -23,6 +23,9 @@ describe('Datenbank: kurze Aussetzer des Servers wiederholen', async () => {
     assert.ok(isTransient(Object.assign(new Error('TypeError: fetch failed'), { cause: new Error('ECONNRESET') })));
     assert.ok(!isTransient(new Error('SQLITE_ERROR: no such table: listings')));
     assert.ok(!isTransient(new Error('HTTP status 401')));
+    // Server antwortet gar nicht (blockierter Schreiber): nicht wiederholen, sonst 4 × Zeitlimit
+    const timeout = Object.assign(new Error('Headers Timeout Error'), { name: 'HeadersTimeoutError', code: 'UND_ERR_HEADERS_TIMEOUT' });
+    assert.ok(!isTransient(Object.assign(new TypeError('fetch failed'), { cause: timeout })));
   });
   it('wiederholt execute/batch nach einem 502, gibt SQL-Fehler sofort weiter', async () => {
     let calls = 0;
