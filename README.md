@@ -42,6 +42,7 @@ Alternativ über die Claude-Code-Vorschau: `.claude/launch.json` enthält die Ko
 | Route | Zweck |
 |---|---|
 | `GET /api/health` | Status + Listings je Quelle |
+| `GET /api/health/stock` | Bestandsdiagnose: Alter der Inserate und Dubletten je Quelle (nur lesend) |
 | `GET /api/config` | Märkte, Zielländer, Steuersätze, Wechselkurse (EZB via frankfurter.dev, 6 h Cache) |
 | `GET /api/listings?…` | Suche/Filter/Sortierung (seitenweise, `page`/`pageSize`, Standard 48), jede Position mit `landed`-Kalkulation für `dest`; Trefferliste trägt nur das erste Foto |
 | `GET /api/listings/:id?dest=` | Detail inkl. Partner und Kfz-Steuer (nur DE) |
