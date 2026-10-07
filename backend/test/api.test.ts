@@ -32,6 +32,21 @@ describe('API', async () => {
     assert.equal(res.json().migrations, 'app');
   });
 
+  it('GET /api/health/stock: Alter und Dubletten je Quelle (nur lesend)', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/health/stock' });
+    assert.equal(res.statusCode, 200);
+    const body = res.json();
+    const mock = body.sources.find((s: { source: string }) => s.source === 'mock');
+    assert.ok(mock, JSON.stringify(body.sources));
+    assert.equal(mock.active, 14);
+    assert.equal(mock.total, 14);
+    // frisch geschrieben: nichts älter als einen Tag
+    assert.equal(mock.olderThan.d1, 0);
+    assert.ok(Array.isArray(body.duplicates.withinSource) && Array.isArray(body.duplicates.acrossSources));
+    assert.ok(body.lastOkRuns.mock, 'Erstbefüllung als erfolgreicher Lauf vermerkt');
+    assert.ok(body.timingsMs.sources >= 0);
+  });
+
   it('GET /api/listings liefert 14 Fahrzeuge, sortiert nach Endpreis', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/listings?dest=DE' });
     const body = res.json();

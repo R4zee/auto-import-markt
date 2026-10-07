@@ -10,6 +10,7 @@ import { calcRoutes } from './routes/calc.js';
 import { enquiryRoutes } from './routes/enquiries.js';
 import { listingRoutes } from './routes/listings.js';
 import { invalidateListingCache } from './services/catalog.js';
+import { stockReport } from './services/stock.js';
 import { syncAll } from './services/sync.js';
 
 export async function buildApp(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
@@ -77,6 +78,9 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
       time: new Date().toISOString(),
     };
   });
+
+  /** Alter und Dubletten im Bestand je Quelle (nur lesend; Grundlage der Bereinigung) – siehe services/stock.ts */
+  app.get('/api/health/stock', async () => stockReport());
 
   /** Vercel Cron (GET) – Header "Authorization: Bearer <CRON_SECRET>"; alternativ x-admin-key */
   app.get('/api/cron/sync', async (req, reply) => {
