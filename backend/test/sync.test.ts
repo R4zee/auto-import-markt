@@ -186,6 +186,29 @@ describe('Sync: Teilquellen, Duplikate und unveränderte Inserate', async () => 
     assert.deepEqual(after.map((x) => [x.id, Number(x.active)]), [[listingId('olx-pl', '20'), 1], [listingId('olx-pl', '21'), 0], [listingId('olx-pl', '22'), 0]]);
   });
 
+  it('inaktive Inserate werden nach SYNC_PURGE_DAYS gelöscht; Altbestand ohne Zeitpunkt zählt ab dem Stichtag', async () => {
+    const { purgeInactive } = await import('../src/services/sync.js');
+    const inactive = async () => Number((await query<{ n: number }>('SELECT COUNT(*) AS n FROM listings WHERE active = 0'))[0].n);
+    const before = await inactive();
+    assert.ok(before >= 3, `inaktive Zeilen aus den vorigen Tests: ${before}`);
+    // alle heute deaktiviert → nichts zu löschen; der Stichtag wird dabei gesetzt
+    assert.equal(await purgeInactive(), 0);
+    assert.equal(await inactive(), before);
+    assert.ok((await query<{ value: string }>("SELECT value FROM meta WHERE key = 'purge_epoch'"))[0]?.value);
+    // vor 10 Tagen deaktiviert → weg
+    await run('UPDATE listings SET deactivated_at = ? WHERE id = ?', [daysAgo(10), listingId('olx-pl', '21')]);
+    assert.equal(await purgeInactive(), 1);
+    assert.equal((await query('SELECT id FROM listings WHERE id = ?', [listingId('olx-pl', '21')])).length, 0);
+    // Altbestand ohne Zeitpunkt: erst löschen, wenn der Stichtag älter als die Frist ist
+    await run('UPDATE listings SET deactivated_at = NULL WHERE id = ?', [listingId('olx-pl', '22')]);
+    assert.equal(await purgeInactive(), 0);
+    await run("UPDATE meta SET value = ? WHERE key = 'purge_epoch'", [daysAgo(10)]);
+    assert.equal(await purgeInactive(), 1);
+    assert.equal((await query('SELECT id FROM listings WHERE id = ?', [listingId('olx-pl', '22')])).length, 0);
+    // aktive Inserate bleiben unberührt
+    assert.deepEqual(await listingsRepo.countBySource(), { 'olx-pl': 2, 'olx-ro': 1 });
+  });
+
   it('touchIds: nur unveränderte, alte Inserate; über TOUCH_MAX hinaus die ältesten zuerst', async () => {
     const { touchIds, TOUCH_MAX, staleIds } = await import('../src/services/sync.js');
     const existing = new Map<string, { price: number; km: number; fetchedAt: string }>();

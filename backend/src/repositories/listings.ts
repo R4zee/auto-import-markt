@@ -93,7 +93,7 @@ ON CONFLICT(id) DO UPDATE SET
   photo_count = excluded.photo_count, damage_json = excluded.damage_json, fetched_at = excluded.fetched_at, active = 1,
   price_eur = excluded.price_eur, landed_de = excluded.landed_de, landed_at = excluded.landed_at,
   landed_nl = excluded.landed_nl, landed_pl = excluded.landed_pl, auction_ends_at = excluded.auction_ends_at,
-  search_text = excluded.search_text, power_kw = excluded.power_kw, title_kind = excluded.title_kind,
+  search_text = excluded.search_text, power_kw = excluded.power_kw, title_kind = excluded.title_kind, deactivated_at = NULL,
   -- Vergleichspreis-Spalten: bleibt der Bucket gleich, Abstände mit dem neuen Endpreis nachziehen; sonst bis zum
   -- nächsten Vergleichspreis-Lauf leer (IS vergleicht NULL-sicher)
   ref_key = excluded.ref_key,
@@ -256,12 +256,31 @@ export const listingsRepo = {
    * das Schreibvolumen (Replikationslog auf dem 10-GB-Volume) klein, ohne die Datenbank minutenlang zu sperren.
    * Liefert die Zahl der übergebenen IDs.
    */
-  async deactivateIds(ids: string[]): Promise<number> {
+  async deactivateIds(ids: string[], at = new Date().toISOString()): Promise<number> {
     for (let i = 0; i < ids.length; i += 1000) {
       const chunk = ids.slice(i, i + 1000);
-      await run(`UPDATE listings SET active = 0 WHERE id IN (${chunk.map(() => '?').join(',')})`, chunk);
+      await run(`UPDATE listings SET active = 0, deactivated_at = ? WHERE id IN (${chunk.map(() => '?').join(',')})`, [at, ...chunk]);
     }
     return ids.length;
+  },
+
+  /**
+   * Inaktive Inserate löschen, die seit `cutoff` deaktiviert sind (Zeilen ohne Zeitpunkt – Bestand von vor der Spalte –
+   * gelten als zum Stichtag `epoch` deaktiviert). Deaktivieren allein spart keinen Platz: das libsql-Volume war am
+   * 07.10.2026 zu 58 % belegt, über 350.000 der 430.000 Zeilen inaktiv. Blockweise mit Pausen, damit die Datenbank
+   * nicht minutenlang exklusiv gehalten wird; freigegebene Seiten nutzt SQLite für neue Zeilen (die Datei schrumpft erst
+   * durch VACUUM). Ein gelöschtes Inserat, das eine Quelle wieder liefert, wird vom Upsert einfach neu angelegt.
+   */
+  async purgeInactive(cutoff: string, epoch: string, batch = 5000): Promise<number> {
+    let total = 0;
+    for (;;) {
+      const r = await run(`DELETE FROM listings WHERE rowid IN (
+        SELECT rowid FROM listings INDEXED BY idx_listings_active_year WHERE active = 0 AND COALESCE(deactivated_at, ?) < ? LIMIT ?)`, [epoch, cutoff, batch]);
+      total += r.rowsAffected;
+      if (r.rowsAffected < batch) break;
+      await new Promise((res) => setTimeout(res, 150));
+    }
+    return total;
   },
 
   /**
@@ -285,15 +304,15 @@ export const listingsRepo = {
    * gesucht – je Inserat ein Indexzugriff statt eines Laufs über die ganze Quelle; die IN-Unterabfrage ist unabhängig
    * von der Zeile und wird vor dem Schreiben einmal ausgewertet (Entscheidung auf dem Stand vor dem UPDATE).
    */
-  async deactivateDuplicates(source: string, includeSubSources = false): Promise<number> {
+  async deactivateDuplicates(source: string, includeSubSources = false, at = new Date().toISOString()): Promise<number> {
     let n = 0;
     for (const s of await sourcesOf(source, includeSubSources)) {
-      const r = await run(`UPDATE listings SET active = 0 WHERE rowid IN (
+      const r = await run(`UPDATE listings SET active = 0, deactivated_at = ? WHERE rowid IN (
         SELECT a.rowid FROM listings a INDEXED BY idx_listings_source WHERE a.source = ? AND +a.active = 1 AND EXISTS (
           SELECT 1 FROM listings b INDEXED BY idx_listings_search_v3
           WHERE b.active = 1 AND b.make = a.make AND b.model = a.model AND b.year = a.year AND b.km = a.km
             AND b.source = a.source AND b.price = a.price AND b.rowid <> a.rowid
-            AND (b.fetched_at > a.fetched_at OR (b.fetched_at = a.fetched_at AND b.rowid > a.rowid))))`, [s]);
+            AND (b.fetched_at > a.fetched_at OR (b.fetched_at = a.fetched_at AND b.rowid > a.rowid))))`, [at, s]);
       n += r.rowsAffected;
     }
     return n;
@@ -304,7 +323,7 @@ export const listingsRepo = {
    * einen Ausschnitt, dort bleibt sonst jedes beendete Los stehen). Liefert die Zahl der deaktivierten Inserate.
    */
   async deactivateEndedAuctions(now = new Date()): Promise<number> {
-    const r = await run("UPDATE listings SET active = 0 WHERE active = 1 AND offer_type = 'auction' AND auction_ends_at IS NOT NULL AND auction_ends_at <= ?", [now.toISOString()]);
+    const r = await run("UPDATE listings SET active = 0, deactivated_at = ? WHERE active = 1 AND offer_type = 'auction' AND auction_ends_at IS NOT NULL AND auction_ends_at <= ?", [now.toISOString(), now.toISOString()]);
     return r.rowsAffected;
   },
 

@@ -162,6 +162,12 @@ export const config = {
      * war voll mit verkauften Fahrzeugen, weil diese Quellen nie deaktivierten). 0 = aus.
      */
     staleDays: num(env.SYNC_STALE_DAYS, 7),
+    /**
+     * Inaktive Inserate so viele Tage nach der Deaktivierung löschen (Plattenplatz des libsql-Volumes; 07.10.2026:
+     * 350.000 von 430.000 Zeilen inaktiv). Die Frist lässt Encar-Inserate aus gesperrten Teilabfragen zurückkommen,
+     * bevor sie gelöscht werden; ein gelöschtes Inserat legt der Upsert bei Bedarf neu an. 0 = aus.
+     */
+    purgeDays: num(env.SYNC_PURGE_DAYS, 7),
   },
   /** CDN-Cache-Dauer für öffentliche Lese-Antworten in Sekunden (0 = aus). Standard 10 Minuten. */
   apiCacheSeconds: num(env.API_CACHE_SECONDS, 600),

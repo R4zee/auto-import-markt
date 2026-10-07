@@ -77,6 +77,8 @@ jobs:
           SAUTO_ENABLED: ${{ vars.SAUTO_ENABLED || 'false' }}
           # Altersregel (07.10.2026): Inserate, die so viele Tage in keinem Lauf mehr kamen, werden deaktiviert (leer = 7, 0 = aus)
           SYNC_STALE_DAYS: ${{ vars.SYNC_STALE_DAYS }}
+          # Inaktive Inserate so viele Tage nach der Deaktivierung löschen (Plattenplatz; leer = 7, 0 = aus)
+          SYNC_PURGE_DAYS: ${{ vars.SYNC_PURGE_DAYS }}
           # Optionaler Residential-Proxy für die Europa-Seiten (leer = direkt vom Runner)
           EUROPE_PROXY_URL: ${{ secrets.EUROPE_PROXY_URL }}
           # Partner-Feeds (JSON-Array, leer = keine)

@@ -204,6 +204,22 @@ export async function canonicalizeStoredMakes(): Promise<{ listings: number; mak
   return { listings, makes };
 }
 
+/**
+ * Inaktive Inserate löschen, die seit SYNC_PURGE_DAYS deaktiviert sind. Zeilen aus der Zeit vor `deactivated_at`
+ * gelten als zum Stichtag `purge_epoch` deaktiviert (einmalig beim ersten Lauf in `meta` gesetzt) – so bekommen auch sie
+ * die Frist, statt beim ersten Lauf auf einen Schlag zu verschwinden. Liefert die Zahl der gelöschten Zeilen.
+ */
+export async function purgeInactive(now = new Date()): Promise<number> {
+  if (config.sync.purgeDays <= 0) return 0;
+  let epoch = (await one<{ value: string }>("SELECT value FROM meta WHERE key = 'purge_epoch'"))?.value;
+  if (!epoch) {
+    epoch = now.toISOString();
+    await run("INSERT INTO meta(key, value) VALUES ('purge_epoch', ?) ON CONFLICT(key) DO NOTHING", [epoch]);
+  }
+  const cutoff = new Date(now.getTime() - config.sync.purgeDays * 86400000).toISOString();
+  return listingsRepo.purgeInactive(cutoff, epoch);
+}
+
 export async function syncAll(): Promise<SyncReport[]> {
   const reports: SyncReport[] = [];
   for (const p of activeProviders()) reports.push(await syncProvider(p));
@@ -215,6 +231,10 @@ export async function syncAll(): Promise<SyncReport[]> {
   const ta = Date.now();
   const ended = await listingsRepo.deactivateEndedAuctions();
   if (ended > 0) reports.push({ provider: 'auctions', status: 'ok', upserted: 0, deactivated: ended, warnings: ['Auktionen mit abgelaufenem Termin deaktiviert'], durationMs: Date.now() - ta });
+  // Inaktive Zeilen nach der Frist löschen – Deaktivieren allein spart keinen Plattenplatz
+  const tp = Date.now();
+  const purged = await purgeInactive();
+  if (purged > 0) reports.push({ provider: 'purge', status: 'ok', upserted: 0, deactivated: purged, warnings: [`${purged} seit über ${config.sync.purgeDays} Tagen inaktive Inserate gelöscht`], durationMs: Date.now() - tp });
   const tm = Date.now();
   const canon = await canonicalizeStoredMakes();
   if (canon.listings > 0) reports.push({ provider: 'makes', status: 'ok', upserted: canon.listings, deactivated: 0, warnings: [`${canon.makes} Markenschreibweisen vereinheitlicht`], durationMs: Date.now() - tm });
