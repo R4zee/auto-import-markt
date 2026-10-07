@@ -250,10 +250,15 @@ export const listingsRepo = {
     return this.deactivateIds(stale);
   },
 
-  /** Inserate per ID deaktivieren (Blöcke von 200 je Anweisung). Liefert die Zahl der übergebenen IDs. */
+  /**
+   * Inserate per ID deaktivieren. Blöcke von 1.000 je Anweisung: jede Deaktivierung schreibt ~14 Indexeinträge um, und
+   * sqld protokolliert je Transaktion jede geänderte Seite einmal – größere Blöcke teilen sich Indexseiten und halten
+   * das Schreibvolumen (Replikationslog auf dem 10-GB-Volume) klein, ohne die Datenbank minutenlang zu sperren.
+   * Liefert die Zahl der übergebenen IDs.
+   */
   async deactivateIds(ids: string[]): Promise<number> {
-    for (let i = 0; i < ids.length; i += 200) {
-      const chunk = ids.slice(i, i + 200);
+    for (let i = 0; i < ids.length; i += 1000) {
+      const chunk = ids.slice(i, i + 1000);
       await run(`UPDATE listings SET active = 0 WHERE id IN (${chunk.map(() => '?').join(',')})`, chunk);
     }
     return ids.length;
@@ -262,11 +267,11 @@ export const listingsRepo = {
   /**
    * Abrufzeit unveränderter, aber weiterhin gelieferter Inserate nachführen. Der Upsert schreibt ein Inserat nur bei
    * neuem Preis/km – `fetched_at` bliebe sonst beim ersten Abruf stehen und das Inserat gälte nach SYNC_STALE_DAYS als
-   * Altlast. Nur die Spalte, kein Index (fetched_at steht in keinem Listings-Index), Blöcke von 200 je Anweisung.
+   * Altlast. Nur die Spalte, kein Index (fetched_at steht in keinem Listings-Index), Blöcke von 1.000 je Anweisung.
    */
   async touchFetchedAt(ids: string[], at: string): Promise<number> {
-    for (let i = 0; i < ids.length; i += 200) {
-      const chunk = ids.slice(i, i + 200);
+    for (let i = 0; i < ids.length; i += 1000) {
+      const chunk = ids.slice(i, i + 1000);
       await run(`UPDATE listings SET fetched_at = ? WHERE id IN (${chunk.map(() => '?').join(',')})`, [at, ...chunk]);
     }
     return ids.length;
