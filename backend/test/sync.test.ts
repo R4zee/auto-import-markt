@@ -45,9 +45,10 @@ describe('Sync: Teilquellen, Duplikate und unveränderte Inserate', async () => 
   after(async () => { await closeDb(); });
 
   it('erster Lauf schreibt jede ID einmal – doppelte (beworbene) Anzeigen werden zusammengeführt', async () => {
+    // olx-pl:2 mit anderem km-Stand: zwei IDs mit identischem Fahrzeug gälten sonst als Dublette (siehe unten)
     p.result = {
       complete: false,
-      listings: [listing('olx-pl', '1'), listing('olx-pl', '2'), listing('olx-ro', '7', { currency: 'EUR', price: 15_000 }), listing('olx-pl', '1')],
+      listings: [listing('olx-pl', '1'), listing('olx-pl', '2', { km: 95_000 }), listing('olx-ro', '7', { currency: 'EUR', price: 15_000 }), listing('olx-pl', '1')],
     };
     const r = await syncProvider(p);
     assert.equal(r.status, 'ok');
@@ -57,7 +58,7 @@ describe('Sync: Teilquellen, Duplikate und unveränderte Inserate', async () => 
   });
 
   it('zweiter Lauf ohne Änderungen schreibt nichts – Vergleich findet die Teilquellen olx-pl/olx-ro', async () => {
-    p.result = { complete: false, listings: [listing('olx-pl', '1'), listing('olx-pl', '2'), listing('olx-ro', '7', { currency: 'EUR', price: 15_000 })] };
+    p.result = { complete: false, listings: [listing('olx-pl', '1'), listing('olx-pl', '2', { km: 95_000 }), listing('olx-ro', '7', { currency: 'EUR', price: 15_000 })] };
     const r = await syncProvider(p);
     assert.equal(r.upserted, 0);
     assert.ok(r.warnings?.includes('3 unverändert übersprungen'), JSON.stringify(r.warnings));
@@ -66,7 +67,7 @@ describe('Sync: Teilquellen, Duplikate und unveränderte Inserate', async () => 
   it('Preisänderung wird geschrieben, Rechtslenker werden ignoriert', async () => {
     p.result = {
       complete: false,
-      listings: [listing('olx-pl', '1', { price: 85_000 }), listing('olx-pl', '2'), listing('olx-ro', '7', { currency: 'EUR', price: 15_000 }), listing('olx-pl', '9', { steering: 'RHD' })],
+      listings: [listing('olx-pl', '1', { price: 85_000 }), listing('olx-pl', '2', { km: 95_000 }), listing('olx-ro', '7', { currency: 'EUR', price: 15_000 }), listing('olx-pl', '9', { steering: 'RHD' })],
     };
     const r = await syncProvider(p);
     assert.equal(r.upserted, 1);
@@ -74,7 +75,7 @@ describe('Sync: Teilquellen, Duplikate und unveränderte Inserate', async () => 
   });
 
   it('vollständiger Bestand deaktiviert fehlende Inserate über alle Teilquellen', async () => {
-    p.result = { complete: true, listings: [listing('olx-pl', '2')] };
+    p.result = { complete: true, listings: [listing('olx-pl', '2', { km: 95_000 })] };
     const r = await syncProvider(p);
     assert.equal(r.deactivated, 2);
     assert.deepEqual(await listingsRepo.countBySource(), { 'olx-pl': 1 });
@@ -153,6 +154,26 @@ describe('Sync: Teilquellen, Duplikate und unveränderte Inserate', async () => 
     // der Lauf gilt nun als frisch – ein zweiter Lauf führt nichts nach
     const again = await syncProvider(p);
     assert.ok(!again.warnings?.some((w) => w.endsWith('Abrufzeit nachgeführt')), JSON.stringify(again.warnings));
+  });
+
+  it('Dubletten innerhalb einer Quelle (gleiches Fahrzeug unter neuer ID): nur das jüngste Inserat bleibt aktiv', async () => {
+    // zwei neue IDs mit identischem Fahrzeug (gleiche Abrufzeit → die später eingefügte Zeile bleibt), dazu ein
+    // drittes mit anderem Preis, das nicht als Dublette gilt
+    p.result = { complete: false, listings: [listing('olx-pl', '20', { km: 123_456, price: 77_000 }), listing('olx-pl', '21', { km: 123_456, price: 77_000 }), listing('olx-pl', '22', { km: 123_456, price: 76_000 })] };
+    const r = await syncProvider(p);
+    assert.equal(r.upserted, 3);
+    assert.equal(r.deactivated, 1, JSON.stringify(r.warnings));
+    assert.ok(r.warnings?.includes('1 Dubletten (gleiches Fahrzeug unter neuer ID) deaktiviert'), JSON.stringify(r.warnings));
+    const rows = await query<{ id: string; active: number }>("SELECT id, active FROM listings WHERE km = 123456 ORDER BY id");
+    assert.deepEqual(rows.map((x) => [x.id, Number(x.active)]), [[listingId('olx-pl', '20'), 0], [listingId('olx-pl', '21'), 1], [listingId('olx-pl', '22'), 1]]);
+    // Die deaktivierte ID 20 kommt mit jüngerer Abrufzeit zurück (Upsert reaktiviert sie), 21 unverändert (Abrufzeit wird
+    // auf den Laufbeginn nachgeführt, liegt also vor der von 20) → 20 bleibt, 21 geht; 22 (Stand 15.09.) fehlt → Altersregel
+    p.result = { complete: false, listings: [listing('olx-pl', '20', { km: 123_456, price: 77_000, fetchedAt: new Date(Date.now() + 3600000).toISOString() }), listing('olx-pl', '21', { km: 123_456, price: 77_000 })] };
+    const again = await syncProvider(p);
+    assert.equal(again.deactivated, 2, JSON.stringify(again.warnings));
+    assert.ok(again.warnings?.includes('1 Dubletten (gleiches Fahrzeug unter neuer ID) deaktiviert'), JSON.stringify(again.warnings));
+    const after = await query<{ id: string; active: number }>("SELECT id, active FROM listings WHERE km = 123456 ORDER BY id");
+    assert.deepEqual(after.map((x) => [x.id, Number(x.active)]), [[listingId('olx-pl', '20'), 1], [listingId('olx-pl', '21'), 0], [listingId('olx-pl', '22'), 0]]);
   });
 
   it('touchIds: nur unveränderte, alte Inserate; über TOUCH_MAX hinaus die ältesten zuerst', async () => {

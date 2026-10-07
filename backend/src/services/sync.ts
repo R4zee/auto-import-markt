@@ -91,6 +91,11 @@ export async function syncProvider(p: MarketProvider): Promise<SyncReport> {
     // TOUCH_AFTER_DAYS nachführen, höchstens TOUCH_MAX je Lauf (älteste zuerst) – begrenzt das Schreibvolumen je Lauf
     const touched = await listingsRepo.touchFetchedAt(touchIds(lhd, existing, isChanged, new Date(started.getTime() - TOUCH_AFTER_DAYS * 86400000).toISOString()), started.toISOString());
     if (touched) warnings.push(`${touched} Abrufzeit nachgeführt`);
+    // Dasselbe Fahrzeug unter neuer ID (gleiches Marke/Modell/Baujahr/km/Preis): nur das jüngste Inserat bleibt aktiv
+    if (lhd.length) {
+      const dupes = await listingsRepo.deactivateDuplicates(p.id, true);
+      if (dupes) { deactivated += dupes; warnings.push(`${dupes} Dubletten (gleiches Fahrzeug unter neuer ID) deaktiviert`); }
+    }
     if (duplicates > 0) warnings.push(`${duplicates} Duplikate zusammengeführt`);
     if (lhd.length !== upserted) warnings.push(`${lhd.length - upserted} unverändert übersprungen`);
     if (written.size) warnings.push(`${written.size} bereits während des Ladens geschrieben`);

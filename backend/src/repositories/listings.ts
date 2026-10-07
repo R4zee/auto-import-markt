@@ -273,6 +273,28 @@ export const listingsRepo = {
   },
 
   /**
+   * Dubletten innerhalb einer Quelle deaktivieren: gleiches (Marke, Modell, Baujahr, km, Preis) unter mehreren IDs –
+   * neu eingestellte Anzeigen desselben Fahrzeugs, deren alte ID nie deaktiviert wurde (Encar: 48.000 Gruppen,
+   * Subito 3.300, Dubizzle 1.100 am 07.10.2026). Je Gruppe bleibt das zuletzt abgerufene Inserat, bei Gleichstand die
+   * zuletzt eingefügte Zeile. Der Vergleichspartner wird über den abdeckenden Suchindex (active, make, model, year, km …)
+   * gesucht – je Inserat ein Indexzugriff statt eines Laufs über die ganze Quelle; die IN-Unterabfrage ist unabhängig
+   * von der Zeile und wird vor dem Schreiben einmal ausgewertet (Entscheidung auf dem Stand vor dem UPDATE).
+   */
+  async deactivateDuplicates(source: string, includeSubSources = false): Promise<number> {
+    let n = 0;
+    for (const s of await sourcesOf(source, includeSubSources)) {
+      const r = await run(`UPDATE listings SET active = 0 WHERE rowid IN (
+        SELECT a.rowid FROM listings a INDEXED BY idx_listings_source WHERE a.source = ? AND +a.active = 1 AND EXISTS (
+          SELECT 1 FROM listings b INDEXED BY idx_listings_search_v3
+          WHERE b.active = 1 AND b.make = a.make AND b.model = a.model AND b.year = a.year AND b.km = a.km
+            AND b.source = a.source AND b.price = a.price AND b.rowid <> a.rowid
+            AND (b.fetched_at > a.fetched_at OR (b.fetched_at = a.fetched_at AND b.rowid > a.rowid))))`, [s]);
+      n += r.rowsAffected;
+    }
+    return n;
+  },
+
+  /**
    * Auktionen mit abgelaufenem Termin deaktivieren – für Quellen ohne Vollabgleich (Copart liefert je Lauf nur
    * einen Ausschnitt, dort bleibt sonst jedes beendete Los stehen). Liefert die Zahl der deaktivierten Inserate.
    */

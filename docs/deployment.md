@@ -288,8 +288,11 @@ Läufe (Encar, OLX/Subito/Sauto mit Seitenlimit, Copart/Apibara/AutoApi/eBay) di
 das `SYNC_STALE_DAYS` (Standard 7) lang in keinem Lauf mehr geliefert wurde, wird deaktiviert; ein Inserat aus einer
 gesperrten Teilabfrage überlebt die Sperre, solange sie kürzer dauert. Weiter gelieferte, unveränderte Inserate bekommen
 alle 3 Tage die Abrufzeit nachgeführt (höchstens 50.000 je Provider und Lauf, die ältesten zuerst), sonst würden sie
-selbst zur Altlast – der Upsert schreibt nur bei neuem Preis oder Kilometerstand. Alter und Dubletten je Quelle zeigt
-`/api/health/stock` (nur lesend, Probe `url https://auto-import-markt.vercel.app/api/health/stock timeout=280000`).
+selbst zur Altlast – der Upsert schreibt nur bei neuem Preis oder Kilometerstand. Nach jedem Provider-Lauf werden
+außerdem **Dubletten** innerhalb der Quelle deaktiviert: gleiches Fahrzeug (Marke, Modell, Baujahr, km, Preis) unter
+mehreren IDs – neu eingestellte Anzeigen, deren alte ID stehen blieb (Encar hatte 48.000 solcher Gruppen) –, es bleibt
+das zuletzt abgerufene Inserat. Alter und Dubletten je Quelle zeigt `/api/health/stock` (nur lesend, Probe
+`url https://auto-import-markt.vercel.app/api/health/stock timeout=280000 chars=60000`).
 
 **Schritt 1 – Secrets im GitHub-Repository**
 1. <https://github.com/R4zee/auto-import-markt> → **Settings** (Tab oben) → linke Leiste
