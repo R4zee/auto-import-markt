@@ -127,6 +127,16 @@ describe('Sync: Teilquellen, Duplikate und unveränderte Inserate', async () => 
     assert.equal(Number(gone[0].active), 0);
   });
 
+  it('ohne Vollabgleich: ein Lauf mit geringer Abdeckung (gesperrte Teilabfragen) setzt die Altersregel aus', async () => {
+    // olx-ro:5 ist 30 Tage alt und fehlt – bei coverage 0.4 bleibt es trotzdem aktiv (Lauf 123: Encar 30.000 von 147.000)
+    await run('UPDATE listings SET fetched_at = ? WHERE id = ?', [daysAgo(30), listingId('olx-ro', '5')]);
+    p.result = { complete: false, coverage: 0.4, listings: [listing('olx-pl', '8')] };
+    const r = await syncProvider(p);
+    assert.equal(r.deactivated, 0);
+    assert.ok(r.warnings?.includes('Altersregel ausgesetzt: nur 40 % der Teilabfragen geladen'), JSON.stringify(r.warnings));
+    assert.deepEqual(await listingsRepo.countBySource(), { 'olx-pl': 1, 'olx-ro': 1 });
+  });
+
   it('ohne Vollabgleich: ein leerer Lauf deaktiviert nichts', async () => {
     await run('UPDATE listings SET fetched_at = ? WHERE id = ?', [daysAgo(30), listingId('olx-ro', '5')]);
     p.result = { complete: false, listings: [] };

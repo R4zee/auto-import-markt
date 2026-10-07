@@ -24,6 +24,12 @@ export interface SyncReport {
 export const TOUCH_AFTER_DAYS = 3;
 /** Höchstens so viele Abrufzeiten je Provider und Lauf (nach der Schreibsperre stünden sonst ~310.000 an) */
 export const TOUCH_MAX = 50_000;
+/**
+ * Altersregel nur, wenn der Lauf mindestens diesen Anteil des Bestands abfragen konnte (ProviderResult.coverage).
+ * Lauf 123 (07.10.2026): Encar sperrte die meisten Teilabfragen, der Lauf lieferte 30.000 von 147.000 Inseraten, und die
+ * Altersregel deaktivierte die übrigen 116.000, weil nach zwei Wochen Schreibsperre jede Abrufzeit älter als 7 Tage war.
+ */
+export const STALE_MIN_COVERAGE = 0.9;
 
 /** Aktive Inserate der Quelle, die in diesem Lauf fehlen und deren Abrufzeit vor `cutoff` liegt */
 export function staleIds(existing: Map<string, ActiveStub>, seen: Set<string>, cutoff: string): string[] {
@@ -79,6 +85,10 @@ export async function syncProvider(p: MarketProvider): Promise<SyncReport> {
     let deactivated = 0;
     if (result.complete) {
       deactivated = await listingsRepo.deactivateMissing(p.id, lhd.map((l) => l.id), true);
+    } else if (lhd.length && config.sync.staleDays > 0 && (result.coverage ?? 1) < STALE_MIN_COVERAGE) {
+      // Der Lauf hat einen großen Teil des Bestands gar nicht abfragen können (Encar-Sperre): nicht gelieferte Inserate
+      // sagen dann nichts über den Bestand aus – Altersregel aussetzen, sonst verschwindet der Bestand mit der Sperre
+      warnings.push(`Altersregel ausgesetzt: nur ${Math.round((result.coverage ?? 1) * 100)} % der Teilabfragen geladen`);
     } else if (lhd.length && config.sync.staleDays > 0) {
       // Kein Vollabgleich (gesperrte Encar-Teilabfragen, Seitenlimit bei OLX/Subito/Copart): nicht gelieferte Inserate
       // erst deaktivieren, wenn sie SYNC_STALE_DAYS lang in keinem Lauf mehr kamen – bis 07.10.2026 blieb bei diesen

@@ -30,6 +30,12 @@ export interface ProviderResult {
    * Dann werden fehlende Listings dieser Quelle deaktiviert.
    */
   complete: boolean;
+  /**
+   * Anteil des Bestands, den dieser Lauf tatsächlich abfragen konnte (0–1; fehlt = 1). Encar: Anteil der geladenen
+   * Teilabfragen. Unter STALE_MIN_COVERAGE setzt der Sync die Altersregel aus – am 07.10.2026 lieferte Encar wegen
+   * gesperrter Teilabfragen nur 30.000 von 147.000 Inseraten, und die Altersregel deaktivierte den Rest.
+   */
+  coverage?: number;
   /** Nicht-fatale Probleme (z. B. gedrosselte Teilquellen) – landen im Sync-Protokoll */
   warnings?: string[];
 }
