@@ -286,7 +286,11 @@ Encar gesperrte Teilabfragen (HTTP 403/404) und zählt als unvollständig – bi
 praktisch nie etwas deaktiviert, verkaufte Fahrzeuge blieben Wochen im Bestand. Seitdem gilt für unvollständige
 Läufe (Encar, OLX/Subito/Sauto mit Seitenlimit, Copart/Apibara/AutoApi/eBay) die **Altersregel**: ein aktives Inserat,
 das `SYNC_STALE_DAYS` (Standard 7) lang in keinem Lauf mehr geliefert wurde, wird deaktiviert; ein Inserat aus einer
-gesperrten Teilabfrage überlebt die Sperre, solange sie kürzer dauert. Weiter gelieferte, unveränderte Inserate bekommen
+gesperrten Teilabfrage überlebt die Sperre, solange sie kürzer dauert. Konnte ein Lauf weniger als 90 % seiner
+Teilabfragen laden (`ProviderResult.coverage`, Encar), setzt der Sync die Altersregel für diesen Lauf aus – Lauf 123
+am 07.10.2026 lieferte wegen Encar-Sperren nur 30.000 von 147.000 Inseraten, und weil nach zwei Wochen Schreibsperre
+jede Abrufzeit älter als 7 Tage war, deaktivierte die Regel die übrigen 116.000 (der nächste volle Lauf reaktiviert
+sie über den Upsert). Weiter gelieferte, unveränderte Inserate bekommen
 alle 3 Tage die Abrufzeit nachgeführt (höchstens 50.000 je Provider und Lauf, die ältesten zuerst), sonst würden sie
 selbst zur Altlast – der Upsert schreibt nur bei neuem Preis oder Kilometerstand. Nach jedem Provider-Lauf werden
 außerdem **Dubletten** innerhalb der Quelle deaktiviert: gleiches Fahrzeug (Marke, Modell, Baujahr, km, Preis) unter

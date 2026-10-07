@@ -344,8 +344,10 @@ export class EncarProvider implements MarketProvider {
     await batch.flush();
     warnings.push(`Partitionen ${parts.length} (${failed} fehlgeschlagen), erwartet ${expected}, geladen ${items.size}, neue Ausstattungen gelernt ${learned.length} (offen ${Math.max(0, missing.size - learned.length)}), ohne Übersetzung zurückgestellt ${untranslated}`);
 
-    // Nur ein vollständiger Lauf deaktiviert Fahrzeuge, die nicht mehr gelistet sind
-    // Nur ein Lauf ohne fehlende Teilbereiche darf verkaufte Inserate deaktivieren
-    return { listings, complete: failed === 0 && partState.skipped === 0, warnings };
+    // Nur ein Lauf ohne fehlende Teilbereiche darf verkaufte Inserate sofort deaktivieren. `coverage` = Anteil der
+    // geladenen Teilabfragen: darunter liegende Läufe (Encar sperrt Austritts-IPs, 07.10.2026: nur 30.000 von 147.000
+    // Inseraten) setzen im Sync die Altersregel aus; ein Testlauf mit ENCAR_LIMIT_PARTITION lädt nie den Bestand
+    const coverage = config.encar.limitPartition > 0 ? 0 : (parts.length - failed) / (parts.length + partState.skipped);
+    return { listings, complete: failed === 0 && partState.skipped === 0, coverage, warnings };
   }
 }
