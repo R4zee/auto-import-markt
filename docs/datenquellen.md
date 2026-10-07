@@ -120,8 +120,11 @@ Anzeigen. Kostenlos anbindbar sind – wie bei Encar – die **JSON-Endpunkte, d
 
 Prüfen: `npm run probe -w backend -- olx|subito|sauto` (Rohantwort und Zuordnung, ohne Schreiben). Alle drei Adapter
 laufen ohne curl-Umweg (`nodeOnly`), weil OLX curl mit 403 abweist; `HTTP_CLIENT=curl` gilt weiterhin nur für Encar.
-Alle drei liefern nur die zuletzt eingestellten Seiten je Lauf (`complete=false`) – verkaufte Fahrzeuge werden
-also nicht deaktiviert; dafür später eine Nachprüfung je Inserat (wie bei Encar) ergänzen.
+Alle drei liefern nur die zuletzt eingestellten Seiten je Lauf (`complete=false`). Verkaufte Fahrzeuge verschwinden
+seit 07.10.2026 über die Altersregel: ein aktives Inserat, das `SYNC_STALE_DAYS` (Standard 7) lang in keinem Lauf mehr
+geliefert wurde, wird deaktiviert; weiter gelieferte, unveränderte Inserate bekommen dafür alle 3 Tage die Abrufzeit
+nachgeführt (`services/sync.ts`, Diagnose `/api/health/stock`). Dasselbe gilt für Encar-Läufe mit gesperrten
+Teilabfragen und für Copart/Apibara/AutoApi/eBay (`complete=false`).
 
 **Geprüft, nicht anbindbar ohne HTML-Scraping oder Bezahldienst** (Stand 14.09.2026):
 

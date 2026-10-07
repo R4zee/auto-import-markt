@@ -1,9 +1,10 @@
+import { config } from '../config.js';
 import { one, query, run, searchTextSql } from '../db.js';
 import { canonicalMake } from '../domain/makes.js';
 import type { Listing } from '../domain/types.js';
 import { activeProviders, isKnownSource } from '../providers/index.js';
 import type { MarketProvider } from '../providers/types.js';
-import { listingsRepo, partnersRepo } from '../repositories/listings.js';
+import { listingsRepo, partnersRepo, type ActiveStub } from '../repositories/listings.js';
 import { SEED_PARTNERS } from '../seed/partners.js';
 import { refreshFacets } from './facets.js';
 import { fxSync, getFx } from './fx.js';
@@ -17,6 +18,29 @@ export interface SyncReport {
   /** Nicht-fatale Hinweise, z. B. gedrosselte Teilquellen */
   warnings?: string[];
   durationMs: number;
+}
+
+/** Abrufzeit unveränderter Inserate nachführen, wenn sie älter als so viele Tage ist (unter SYNC_STALE_DAYS bleiben) */
+export const TOUCH_AFTER_DAYS = 3;
+/** Höchstens so viele Abrufzeiten je Provider und Lauf (nach der Schreibsperre stünden sonst ~310.000 an) */
+export const TOUCH_MAX = 50_000;
+
+/** Aktive Inserate der Quelle, die in diesem Lauf fehlen und deren Abrufzeit vor `cutoff` liegt */
+export function staleIds(existing: Map<string, ActiveStub>, seen: Set<string>, cutoff: string): string[] {
+  const out: string[] = [];
+  for (const [id, e] of existing) if (!seen.has(id) && e.fetchedAt < cutoff) out.push(id);
+  return out;
+}
+
+/** Gelieferte, unveränderte Inserate mit Abrufzeit vor `cutoff` – die ältesten zuerst, höchstens TOUCH_MAX */
+export function touchIds(delivered: Listing[], existing: Map<string, ActiveStub>, isChanged: (l: Listing) => boolean, cutoff: string): string[] {
+  const due: Array<{ id: string; at: string }> = [];
+  for (const l of delivered) {
+    const e = existing.get(l.id);
+    if (e && e.fetchedAt < cutoff && !isChanged(l)) due.push({ id: l.id, at: e.fetchedAt });
+  }
+  if (due.length > TOUCH_MAX) due.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+  return due.slice(0, TOUCH_MAX).map((d) => d.id);
 }
 
 export async function syncProvider(p: MarketProvider): Promise<SyncReport> {
@@ -51,8 +75,22 @@ export async function syncProvider(p: MarketProvider): Promise<SyncReport> {
     const duplicates = result.listings.filter((l) => l.steering === 'LHD').length - lhd.length;
     const changed = lhd.filter((l) => !written.has(l.id) && isChanged(l));
     upserted += await listingsRepo.upsertMany(changed);
-    const deactivated = result.complete ? await listingsRepo.deactivateMissing(p.id, lhd.map((l) => l.id), true) : 0;
     const warnings = [...(result.warnings ?? [])];
+    let deactivated = 0;
+    if (result.complete) {
+      deactivated = await listingsRepo.deactivateMissing(p.id, lhd.map((l) => l.id), true);
+    } else if (lhd.length && config.sync.staleDays > 0) {
+      // Kein Vollabgleich (gesperrte Encar-Teilabfragen, Seitenlimit bei OLX/Subito/Copart): nicht gelieferte Inserate
+      // erst deaktivieren, wenn sie SYNC_STALE_DAYS lang in keinem Lauf mehr kamen – bis 07.10.2026 blieb bei diesen
+      // Quellen jedes verkaufte Fahrzeug aktiv. Ein Inserat aus einer gesperrten Teilabfrage überlebt so die Sperre.
+      const stale = staleIds(existing, new Set(lhd.map((l) => l.id)), new Date(started.getTime() - config.sync.staleDays * 86400000).toISOString());
+      deactivated = await listingsRepo.deactivateIds(stale);
+      if (deactivated) warnings.push(`${deactivated} seit über ${config.sync.staleDays} Tagen nicht mehr geliefert – deaktiviert`);
+    }
+    // Weiterhin gelieferte, unveränderte Inserate altern sonst (der Upsert schreibt sie nicht): Abrufzeit alle
+    // TOUCH_AFTER_DAYS nachführen, höchstens TOUCH_MAX je Lauf (älteste zuerst) – begrenzt das Schreibvolumen je Lauf
+    const touched = await listingsRepo.touchFetchedAt(touchIds(lhd, existing, isChanged, new Date(started.getTime() - TOUCH_AFTER_DAYS * 86400000).toISOString()), started.toISOString());
+    if (touched) warnings.push(`${touched} Abrufzeit nachgeführt`);
     if (duplicates > 0) warnings.push(`${duplicates} Duplikate zusammengeführt`);
     if (lhd.length !== upserted) warnings.push(`${lhd.length - upserted} unverändert übersprungen`);
     if (written.size) warnings.push(`${written.size} bereits während des Ladens geschrieben`);

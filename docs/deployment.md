@@ -281,6 +281,16 @@ Kombinationen je Lauf) und deaktiviert alles, was nicht mehr gelistet ist. Ein L
 Minuten und übersteigt damit Vercels Function-Limit; er läuft deshalb als **GitHub-Actions-Job**
 (`.github/workflows/sync.yml`, alle 6 Stunden, kostenlos im Rahmen der 2.000 Minuten/Monat).
 
+Sofort deaktiviert wird nur nach einem vollständigen Lauf (`complete=true`). Fast jeder Encar-Lauf hat aber 1–2 von
+Encar gesperrte Teilabfragen (HTTP 403/404) und zählt als unvollständig – bis 07.10.2026 wurde bei Encar deshalb
+praktisch nie etwas deaktiviert, verkaufte Fahrzeuge blieben Wochen im Bestand. Seitdem gilt für unvollständige
+Läufe (Encar, OLX/Subito/Sauto mit Seitenlimit, Copart/Apibara/AutoApi/eBay) die **Altersregel**: ein aktives Inserat,
+das `SYNC_STALE_DAYS` (Standard 7) lang in keinem Lauf mehr geliefert wurde, wird deaktiviert; ein Inserat aus einer
+gesperrten Teilabfrage überlebt die Sperre, solange sie kürzer dauert. Weiter gelieferte, unveränderte Inserate bekommen
+alle 3 Tage die Abrufzeit nachgeführt (höchstens 50.000 je Provider und Lauf, die ältesten zuerst), sonst würden sie
+selbst zur Altlast – der Upsert schreibt nur bei neuem Preis oder Kilometerstand. Alter und Dubletten je Quelle zeigt
+`/api/health/stock` (nur lesend, Probe `url https://auto-import-markt.vercel.app/api/health/stock timeout=280000`).
+
 **Schritt 1 – Secrets im GitHub-Repository**
 1. <https://github.com/R4zee/auto-import-markt> → **Settings** (Tab oben) → linke Leiste
    **Secrets and variables** → **Actions**.

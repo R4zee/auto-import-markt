@@ -155,6 +155,14 @@ export const config = {
     authToken: (env.TURSO_AUTH_TOKEN || env.DATABASE_AUTH_TOKEN || '').replace(/\s+/g, '') || undefined,
   },
   syncIntervalMin: num(env.SYNC_INTERVAL_MIN, 0),
+  sync: {
+    /**
+     * Quellen ohne Vollabgleich (Encar mit gesperrten Teilabfragen, OLX/Subito/Copart mit Seitenlimit): ein aktives
+     * Inserat, das so viele Tage lang in keinem Lauf mehr geliefert wurde, wird deaktiviert (07.10.2026 – der Bestand
+     * war voll mit verkauften Fahrzeugen, weil diese Quellen nie deaktivierten). 0 = aus.
+     */
+    staleDays: num(env.SYNC_STALE_DAYS, 7),
+  },
   /** CDN-Cache-Dauer für öffentliche Lese-Antworten in Sekunden (0 = aus). Standard 10 Minuten. */
   apiCacheSeconds: num(env.API_CACHE_SECONDS, 600),
   enableMockProvider: bool(env.ENABLE_MOCK_PROVIDER, true),

@@ -109,6 +109,75 @@ describe('Sync: Teilquellen, Duplikate und unveränderte Inserate', async () => 
     assert.ok(rows[1].search_text.startsWith('volkswagen c 200'), rows[1].search_text);
     assert.deepEqual(await canonicalizeStoredMakes(), { listings: 0, makes: 0 }, 'zweiter Lauf ändert nichts');
   });
+
+  const daysAgo = (d: number) => new Date(Date.now() - d * 86400000).toISOString();
+
+  it('ohne Vollabgleich: seit über SYNC_STALE_DAYS nicht gelieferte Inserate werden deaktiviert, jüngere bleiben', async () => {
+    // Bestand: olx-pl:4 (zuletzt vor 10 Tagen abgerufen) und olx-ro:5 (vor 2 Tagen); der Lauf liefert nur olx-pl:8 neu
+    await run('UPDATE listings SET fetched_at = ? WHERE id = ?', [daysAgo(10), listingId('olx-pl', '4')]);
+    await run('UPDATE listings SET fetched_at = ? WHERE id = ?', [daysAgo(2), listingId('olx-ro', '5')]);
+    p.result = { complete: false, listings: [listing('olx-pl', '8')] };
+    const r = await syncProvider(p);
+    assert.equal(r.upserted, 1);
+    assert.equal(r.deactivated, 1, 'nur olx-pl:4 ist älter als 7 Tage');
+    assert.ok(r.warnings?.some((w) => w.startsWith('1 seit über 7 Tagen nicht mehr geliefert')), JSON.stringify(r.warnings));
+    assert.deepEqual(await listingsRepo.countBySource(), { 'olx-pl': 1, 'olx-ro': 1 });
+    const gone = await query<{ id: string; active: number }>('SELECT id, active FROM listings WHERE id = ?', [listingId('olx-pl', '4')]);
+    assert.equal(Number(gone[0].active), 0);
+  });
+
+  it('ohne Vollabgleich: ein leerer Lauf deaktiviert nichts', async () => {
+    await run('UPDATE listings SET fetched_at = ? WHERE id = ?', [daysAgo(30), listingId('olx-ro', '5')]);
+    p.result = { complete: false, listings: [] };
+    const r = await syncProvider(p);
+    assert.equal(r.deactivated, 0);
+    assert.deepEqual(await listingsRepo.countBySource(), { 'olx-pl': 1, 'olx-ro': 1 });
+  });
+
+  it('weiter gelieferte, unveränderte Inserate bekommen die Abrufzeit nachgeführt (älter als TOUCH_AFTER_DAYS)', async () => {
+    const { TOUCH_AFTER_DAYS } = await import('../src/services/sync.js');
+    await run('UPDATE listings SET fetched_at = ? WHERE id = ?', [daysAgo(TOUCH_AFTER_DAYS + 2), listingId('olx-pl', '8')]);
+    await run('UPDATE listings SET fetched_at = ? WHERE id = ?', [daysAgo(1), listingId('olx-ro', '5')]);
+    const before = Date.now();
+    // olx-ro:5 wurde als Mercedes C 200 angelegt (Preis/km unverändert) – Marke spielt für „unverändert“ keine Rolle
+    p.result = { complete: false, listings: [listing('olx-pl', '8'), listing('olx-ro', '5', { make: 'Mercedes', model: 'C 200' })] };
+    const r = await syncProvider(p);
+    assert.equal(r.upserted, 0, 'nichts geändert → kein Upsert');
+    assert.equal(r.deactivated, 0);
+    assert.ok(r.warnings?.includes('1 Abrufzeit nachgeführt'), JSON.stringify(r.warnings));
+    const rows = await query<{ id: string; fetched_at: string }>('SELECT id, fetched_at FROM listings WHERE active = 1 ORDER BY id');
+    const pl8 = rows.find((x) => x.id === listingId('olx-pl', '8'))!;
+    const ro5 = rows.find((x) => x.id === listingId('olx-ro', '5'))!;
+    assert.ok(Date.parse(pl8.fetched_at) >= before - 1000, `olx-pl:8 nachgeführt: ${pl8.fetched_at}`);
+    assert.ok(Date.parse(ro5.fetched_at) < before - 12 * 3600000, `olx-ro:5 (1 Tag) bleibt: ${ro5.fetched_at}`);
+    // der Lauf gilt nun als frisch – ein zweiter Lauf führt nichts nach
+    const again = await syncProvider(p);
+    assert.ok(!again.warnings?.some((w) => w.endsWith('Abrufzeit nachgeführt')), JSON.stringify(again.warnings));
+  });
+
+  it('touchIds: nur unveränderte, alte Inserate; über TOUCH_MAX hinaus die ältesten zuerst', async () => {
+    const { touchIds, TOUCH_MAX, staleIds } = await import('../src/services/sync.js');
+    const existing = new Map<string, { price: number; km: number; fetchedAt: string }>();
+    const delivered: Listing[] = [];
+    for (let i = 0; i < TOUCH_MAX + 5; i++) {
+      const id = listingId('x', String(i));
+      // Nr. 0 jüngst, dann absteigend älter: Nr. i wurde vor i+10 Tagen abgerufen
+      existing.set(id, { price: 1, km: 1, fetchedAt: daysAgo(i + 10) });
+      delivered.push(listing('x', String(i), { price: i === 1 ? 2 : 1, km: 1 }));
+    }
+    existing.set(listingId('x', '0'), { price: 1, km: 1, fetchedAt: daysAgo(0) }); // frisch → nicht fällig
+    const isChanged = (l: Listing) => existing.get(l.id)?.price !== l.price;
+    const ids = touchIds(delivered, existing, isChanged, daysAgo(3));
+    assert.equal(ids.length, TOUCH_MAX);
+    assert.ok(!ids.includes(listingId('x', '0')), 'frisch');
+    assert.ok(!ids.includes(listingId('x', '1')), 'geändert → Upsert schreibt fetched_at ohnehin');
+    assert.equal(ids[0], listingId('x', String(TOUCH_MAX + 4)), 'ältestes zuerst');
+    // staleIds: fehlende, alte Inserate
+    const seen = new Set(delivered.slice(0, 3).map((l) => l.id));
+    const stale = staleIds(existing, seen, daysAgo(7));
+    assert.equal(stale.length, TOUCH_MAX + 5 - 3);
+    assert.ok(!stale.includes(listingId('x', '2')) && stale.includes(listingId('x', '3')));
+  });
 });
 
 describe('Kursnachzug nur bei spürbarer Kursänderung (Turso-Schreibkontingent)', async () => {
