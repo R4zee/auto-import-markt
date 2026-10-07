@@ -295,7 +295,10 @@ alle 3 Tage die Abrufzeit nachgeführt (höchstens 50.000 je Provider und Lauf, 
 selbst zur Altlast – der Upsert schreibt nur bei neuem Preis oder Kilometerstand. Nach jedem Provider-Lauf werden
 außerdem **Dubletten** innerhalb der Quelle deaktiviert: gleiches Fahrzeug (Marke, Modell, Baujahr, km, Preis) unter
 mehreren IDs – neu eingestellte Anzeigen, deren alte ID stehen blieb (Encar hatte 48.000 solcher Gruppen) –, es bleibt
-das zuletzt abgerufene Inserat. Alter und Dubletten je Quelle zeigt `/api/health/stock` (nur lesend, Probe
+das zuletzt abgerufene Inserat. Die ältere ID geht aber nur, wenn die Quelle sie im selben Lauf nicht mehr geliefert hat:
+liefert sie beide, sind es zwei baugleiche Fahrzeuge (Flotten-/Mietwagen mit gleichem Kilometerstand und Preis) – die
+Läufe 125–127 am 07.10.2026 deaktivierten je ~23.000 Encar-Inserate, die der nächste Lauf wieder reaktivierte. Bei
+Abdeckung unter 90 % setzt auch diese Regel aus. Alter und Dubletten je Quelle zeigt `/api/health/stock` (nur lesend, Probe
 `url https://auto-import-markt.vercel.app/api/health/stock timeout=280000 chars=60000`). Die Tage sind über die
 GitHub-Variable `SYNC_STALE_DAYS` einstellbar (leer = 7, 0 = Altersregel aus).
 

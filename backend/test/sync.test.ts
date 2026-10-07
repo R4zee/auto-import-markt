@@ -166,24 +166,30 @@ describe('Sync: Teilquellen, Duplikate und unveränderte Inserate', async () => 
     assert.ok(!again.warnings?.some((w) => w.endsWith('Abrufzeit nachgeführt')), JSON.stringify(again.warnings));
   });
 
-  it('Dubletten innerhalb einer Quelle (gleiches Fahrzeug unter neuer ID): nur das jüngste Inserat bleibt aktiv', async () => {
-    // zwei neue IDs mit identischem Fahrzeug (gleiche Abrufzeit → die später eingefügte Zeile bleibt), dazu ein
-    // drittes mit anderem Preis, das nicht als Dublette gilt
-    p.result = { complete: false, listings: [listing('olx-pl', '20', { km: 123_456, price: 77_000 }), listing('olx-pl', '21', { km: 123_456, price: 77_000 }), listing('olx-pl', '22', { km: 123_456, price: 76_000 })] };
+  it('Dubletten innerhalb einer Quelle: die ältere ID geht nur, wenn die Quelle sie nicht mehr liefert', async () => {
+    // zwei IDs mit identischem Fahrzeug (20 vor zwei Tagen, 21 vor einem Tag abgerufen) und ein drittes mit anderem
+    // Preis. Beide geliefert → zwei baugleiche Fahrzeuge, nichts wird deaktiviert (Lauf 125–127: 23.000 Encar-Inserate
+    // fälschlich deaktiviert und im nächsten Lauf reaktiviert)
+    const same = { km: 123_456, price: 77_000 };
+    p.result = { complete: false, listings: [listing('olx-pl', '20', { ...same, fetchedAt: daysAgo(2) }), listing('olx-pl', '21', { ...same, fetchedAt: daysAgo(1) }), listing('olx-pl', '22', { km: 123_456, price: 76_000 })] };
     const r = await syncProvider(p);
     assert.equal(r.upserted, 3);
-    assert.equal(r.deactivated, 1, JSON.stringify(r.warnings));
-    assert.ok(r.warnings?.includes('1 Dubletten (gleiches Fahrzeug unter neuer ID) deaktiviert'), JSON.stringify(r.warnings));
-    const rows = await query<{ id: string; active: number }>("SELECT id, active FROM listings WHERE km = 123456 ORDER BY id");
-    assert.deepEqual(rows.map((x) => [x.id, Number(x.active)]), [[listingId('olx-pl', '20'), 0], [listingId('olx-pl', '21'), 1], [listingId('olx-pl', '22'), 1]]);
-    // Die deaktivierte ID 20 kommt mit jüngerer Abrufzeit zurück (Upsert reaktiviert sie), 21 unverändert (Abrufzeit wird
-    // auf den Laufbeginn nachgeführt, liegt also vor der von 20) → 20 bleibt, 21 geht; 22 (Stand 15.09.) fehlt → Altersregel
-    p.result = { complete: false, listings: [listing('olx-pl', '20', { km: 123_456, price: 77_000, fetchedAt: new Date(Date.now() + 3600000).toISOString() }), listing('olx-pl', '21', { km: 123_456, price: 77_000 })] };
+    assert.equal(r.deactivated, 0, JSON.stringify(r.warnings));
+    assert.ok(!r.warnings?.some((w) => w.includes('Dubletten')), JSON.stringify(r.warnings));
+    // Nächster Lauf ohne die ältere ID 20 (neu eingestellte Anzeige 21 ersetzt sie): 20 ist jünger als 7 Tage, fällt also
+    // nicht unter die Altersregel, geht aber als Dublette
+    p.result = { complete: false, listings: [listing('olx-pl', '21', { ...same, fetchedAt: daysAgo(1) }), listing('olx-pl', '22', { km: 123_456, price: 76_000 })] };
     const again = await syncProvider(p);
-    assert.equal(again.deactivated, 2, JSON.stringify(again.warnings));
-    assert.ok(again.warnings?.includes('1 Dubletten (gleiches Fahrzeug unter neuer ID) deaktiviert'), JSON.stringify(again.warnings));
+    assert.equal(again.deactivated, 1, JSON.stringify(again.warnings));
+    assert.ok(again.warnings?.includes('1 Dubletten (gleiches Fahrzeug unter neuer ID, alte ID nicht mehr geliefert) deaktiviert'), JSON.stringify(again.warnings));
     const after = await query<{ id: string; active: number }>("SELECT id, active FROM listings WHERE km = 123456 ORDER BY id");
-    assert.deepEqual(after.map((x) => [x.id, Number(x.active)]), [[listingId('olx-pl', '20'), 1], [listingId('olx-pl', '21'), 0], [listingId('olx-pl', '22'), 0]]);
+    assert.deepEqual(after.map((x) => [x.id, Number(x.active)]), [[listingId('olx-pl', '20'), 0], [listingId('olx-pl', '21'), 1], [listingId('olx-pl', '22'), 1]]);
+    // Bei geringer Abdeckung sagt „nicht geliefert“ nichts aus: 21 fehlt, bleibt aber aktiv
+    p.result = { complete: false, coverage: 0.5, listings: [listing('olx-pl', '20', { ...same, fetchedAt: new Date().toISOString() }), listing('olx-pl', '22', { km: 123_456, price: 76_000 })] };
+    const low = await syncProvider(p);
+    assert.equal(low.deactivated, 0, JSON.stringify(low.warnings));
+    const rows = await query<{ id: string; active: number }>("SELECT id, active FROM listings WHERE km = 123456 AND price = 77000 ORDER BY id");
+    assert.deepEqual(rows.map((x) => [x.id, Number(x.active)]), [[listingId('olx-pl', '20'), 1], [listingId('olx-pl', '21'), 1]]);
   });
 
   it('inaktive Inserate werden nach SYNC_PURGE_DAYS gelöscht; Altbestand ohne Zeitpunkt zählt ab dem Stichtag', async () => {
@@ -196,17 +202,17 @@ describe('Sync: Teilquellen, Duplikate und unveränderte Inserate', async () => 
     assert.equal(await inactive(), before);
     assert.ok((await query<{ value: string }>("SELECT value FROM meta WHERE key = 'purge_epoch'"))[0]?.value);
     // vor 10 Tagen deaktiviert → weg
-    await run('UPDATE listings SET deactivated_at = ? WHERE id = ?', [daysAgo(10), listingId('olx-pl', '21')]);
+    await run('UPDATE listings SET deactivated_at = ? WHERE id = ?', [daysAgo(10), listingId('olx-pl', '4')]);
     assert.equal(await purgeInactive(), 1);
-    assert.equal((await query('SELECT id FROM listings WHERE id = ?', [listingId('olx-pl', '21')])).length, 0);
+    assert.equal((await query('SELECT id FROM listings WHERE id = ?', [listingId('olx-pl', '4')])).length, 0);
     // Altbestand ohne Zeitpunkt: erst löschen, wenn der Stichtag älter als die Frist ist
-    await run('UPDATE listings SET deactivated_at = NULL WHERE id = ?', [listingId('olx-pl', '22')]);
+    await run('UPDATE listings SET deactivated_at = NULL WHERE id = ?', [listingId('olx-pl', '1')]);
     assert.equal(await purgeInactive(), 0);
     await run("UPDATE meta SET value = ? WHERE key = 'purge_epoch'", [daysAgo(10)]);
     assert.equal(await purgeInactive(), 1);
-    assert.equal((await query('SELECT id FROM listings WHERE id = ?', [listingId('olx-pl', '22')])).length, 0);
+    assert.equal((await query('SELECT id FROM listings WHERE id = ?', [listingId('olx-pl', '1')])).length, 0);
     // aktive Inserate bleiben unberührt
-    assert.deepEqual(await listingsRepo.countBySource(), { 'olx-pl': 2, 'olx-ro': 1 });
+    assert.deepEqual(await listingsRepo.countBySource(), { 'olx-pl': 4, 'olx-ro': 1 });
   });
 
   it('touchIds: nur unveränderte, alte Inserate; über TOUCH_MAX hinaus die ältesten zuerst', async () => {
