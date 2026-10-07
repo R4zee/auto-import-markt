@@ -292,7 +292,16 @@ selbst zur Altlast – der Upsert schreibt nur bei neuem Preis oder Kilometersta
 außerdem **Dubletten** innerhalb der Quelle deaktiviert: gleiches Fahrzeug (Marke, Modell, Baujahr, km, Preis) unter
 mehreren IDs – neu eingestellte Anzeigen, deren alte ID stehen blieb (Encar hatte 48.000 solcher Gruppen) –, es bleibt
 das zuletzt abgerufene Inserat. Alter und Dubletten je Quelle zeigt `/api/health/stock` (nur lesend, Probe
-`url https://auto-import-markt.vercel.app/api/health/stock timeout=280000 chars=60000`).
+`url https://auto-import-markt.vercel.app/api/health/stock timeout=280000 chars=60000`). Die Tage sind über die
+GitHub-Variable `SYNC_STALE_DAYS` einstellbar (leer = 7, 0 = Altersregel aus).
+
+Befund 07.10.2026 (vor dem ersten Lauf mit der Altersregel): 313.000 aktive Inserate, alle zuletzt am 25.09. oder früher
+abgerufen; OLX und Subito hatten noch nie etwas deaktiviert (aktiv = gesamt), Encar 146.000 aktiv bei 48.000
+Dubletten-Gruppen, Subito 3.300, Dubizzle 1.100. Quellenübergreifend gleiche (Marke, Modell, Baujahr, km) sind fast
+ausschließlich Neuwagen mit 1–10 km bei verschiedenen Händlern – keine Dubletten, deshalb keine Regel über Quellen
+hinweg. Der erste Lauf nach der Schreibsperre deaktiviert voraussichtlich weit über 100.000 Zeilen (verkaufte Fahrzeuge,
+alte IDs, Inserate außerhalb des Seitenfensters von OLX/Subito) – Plattenplatz des libsql-Volumes danach prüfen
+(`fly ssh console -C "df -h /var/lib/sqld"`).
 
 **Schritt 1 – Secrets im GitHub-Repository**
 1. <https://github.com/R4zee/auto-import-markt> → **Settings** (Tab oben) → linke Leiste
