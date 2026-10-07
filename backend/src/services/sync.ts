@@ -101,10 +101,14 @@ export async function syncProvider(p: MarketProvider): Promise<SyncReport> {
     // TOUCH_AFTER_DAYS nachführen, höchstens TOUCH_MAX je Lauf (älteste zuerst) – begrenzt das Schreibvolumen je Lauf
     const touched = await listingsRepo.touchFetchedAt(touchIds(lhd, existing, isChanged, new Date(started.getTime() - TOUCH_AFTER_DAYS * 86400000).toISOString()), started.toISOString());
     if (touched) warnings.push(`${touched} Abrufzeit nachgeführt`);
-    // Dasselbe Fahrzeug unter neuer ID (gleiches Marke/Modell/Baujahr/km/Preis): nur das jüngste Inserat bleibt aktiv
-    if (lhd.length) {
-      const dupes = await listingsRepo.deactivateDuplicates(p.id, true);
-      if (dupes) { deactivated += dupes; warnings.push(`${dupes} Dubletten (gleiches Fahrzeug unter neuer ID) deaktiviert`); }
+    // Dasselbe Fahrzeug unter neuer ID (gleiches Marke/Modell/Baujahr/km/Preis): die ältere ID geht, aber nur, wenn
+    // die Quelle sie in diesem Lauf nicht mehr geliefert hat – liefert sie beide, sind es zwei baugleiche Fahrzeuge
+    // (Lauf 125–127: je ~23.000 Encar-Inserate deaktiviert und im nächsten Lauf wieder reaktiviert). Bei geringer
+    // Abdeckung sagt „nicht geliefert“ nichts aus (gesperrte Teilabfragen) → wie die Altersregel aussetzen.
+    if (lhd.length && (result.coverage ?? 1) >= STALE_MIN_COVERAGE) {
+      const seen = new Set(lhd.map((l) => l.id));
+      const dupes = await listingsRepo.deactivateIds((await listingsRepo.duplicateCandidateIds(p.id, true)).filter((id) => !seen.has(id)), started.toISOString());
+      if (dupes) { deactivated += dupes; warnings.push(`${dupes} Dubletten (gleiches Fahrzeug unter neuer ID, alte ID nicht mehr geliefert) deaktiviert`); }
     }
     if (duplicates > 0) warnings.push(`${duplicates} Duplikate zusammengeführt`);
     if (lhd.length !== upserted) warnings.push(`${lhd.length - upserted} unverändert übersprungen`);

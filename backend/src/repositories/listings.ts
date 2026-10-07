@@ -297,25 +297,26 @@ export const listingsRepo = {
   },
 
   /**
-   * Dubletten innerhalb einer Quelle deaktivieren: gleiches (Marke, Modell, Baujahr, km, Preis) unter mehreren IDs –
-   * neu eingestellte Anzeigen desselben Fahrzeugs, deren alte ID nie deaktiviert wurde (Encar: 48.000 Gruppen,
-   * Subito 3.300, Dubizzle 1.100 am 07.10.2026). Je Gruppe bleibt das zuletzt abgerufene Inserat, bei Gleichstand die
-   * zuletzt eingefügte Zeile. Der Vergleichspartner wird über den abdeckenden Suchindex (active, make, model, year, km …)
-   * gesucht – je Inserat ein Indexzugriff statt eines Laufs über die ganze Quelle; die IN-Unterabfrage ist unabhängig
-   * von der Zeile und wird vor dem Schreiben einmal ausgewertet (Entscheidung auf dem Stand vor dem UPDATE).
+   * Dubletten-Kandidaten innerhalb einer Quelle: aktive Inserate, zu denen es ein jüngeres aktives Inserat mit gleichem
+   * (Marke, Modell, Baujahr, km, Preis) gibt – bei Gleichstand der Abrufzeit zählt die später eingefügte Zeile als
+   * jünger. Liefert die IDs der älteren Inserate. Ob eines davon wirklich eine Dublette ist (neu eingestellte Anzeige
+   * desselben Fahrzeugs, alte ID von der Quelle nicht mehr geliefert) oder ein baugleiches zweites Fahrzeug, entscheidet
+   * der Sync anhand der in diesem Lauf gelieferten IDs: Lauf 125–127 (07.10.2026) deaktivierten je ~23.000 Encar- und
+   * ~1.600 Dubizzle-Inserate, die der nächste Lauf wieder lieferte und reaktivierte – Flottenfahrzeuge mit gleichem
+   * Kilometerstand und Preis, keine Dubletten. Der Vergleichspartner wird über den abdeckenden Suchindex
+   * (active, make, model, year, km …) gesucht – je Inserat ein Indexzugriff statt eines Laufs über die ganze Quelle.
    */
-  async deactivateDuplicates(source: string, includeSubSources = false, at = new Date().toISOString()): Promise<number> {
-    let n = 0;
+  async duplicateCandidateIds(source: string, includeSubSources = false): Promise<string[]> {
+    const out: string[] = [];
     for (const s of await sourcesOf(source, includeSubSources)) {
-      const r = await run(`UPDATE listings SET active = 0, deactivated_at = ? WHERE rowid IN (
-        SELECT a.rowid FROM listings a INDEXED BY idx_listings_source WHERE a.source = ? AND +a.active = 1 AND EXISTS (
+      const rows = await query<{ id: string }>(`SELECT a.id FROM listings a INDEXED BY idx_listings_source WHERE a.source = ? AND +a.active = 1 AND EXISTS (
           SELECT 1 FROM listings b INDEXED BY idx_listings_search_v3
           WHERE b.active = 1 AND b.make = a.make AND b.model = a.model AND b.year = a.year AND b.km = a.km
             AND b.source = a.source AND b.price = a.price AND b.rowid <> a.rowid
-            AND (b.fetched_at > a.fetched_at OR (b.fetched_at = a.fetched_at AND b.rowid > a.rowid))))`, [at, s]);
-      n += r.rowsAffected;
+            AND (b.fetched_at > a.fetched_at OR (b.fetched_at = a.fetched_at AND b.rowid > a.rowid)))`, [s]);
+      for (const r of rows) out.push(r.id);
     }
-    return n;
+    return out;
   },
 
   /**
