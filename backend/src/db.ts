@@ -330,6 +330,9 @@ async function migrate(): Promise<void> {
   for (const d of ['de', 'at', 'nl', 'pl']) await ensureColumn(c, 'listings', `ref_diff_${d}`, 'REAL');
   // Fahrzeugbrief-Art nordamerikanischer Auktionen (clean/salvage/rebuilt/other) für den Filter „US-Titel“
   await ensureColumn(c, 'listings', 'title_kind', 'TEXT');
+  // Zeitpunkt der Deaktivierung: inaktive Zeilen werden nach SYNC_PURGE_DAYS gelöscht (Plattenplatz des libsql-Volumes,
+  // 07.10.2026: 5,4 von 9,8 GB belegt). Bestände von vor dieser Spalte gelten als zum Stichtag `purge_epoch` (meta) deaktiviert.
+  await ensureColumn(c, 'listings', 'deactivated_at', 'TEXT');
   // Einmaliges Nachfüllen für Bestände von vor dieser Spalte – mit Merker in `meta`, damit nicht jeder Kaltstart
   // die Tabelle nach NULL-Werten durchsucht (auf Turso zählt jede gelesene Zeile)
   const backfilled = await c.execute("SELECT value FROM meta WHERE key = 'search_text_backfilled'");

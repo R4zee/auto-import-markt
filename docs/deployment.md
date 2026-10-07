@@ -299,6 +299,14 @@ das zuletzt abgerufene Inserat. Alter und Dubletten je Quelle zeigt `/api/health
 `url https://auto-import-markt.vercel.app/api/health/stock timeout=280000 chars=60000`). Die Tage sind über die
 GitHub-Variable `SYNC_STALE_DAYS` einstellbar (leer = 7, 0 = Altersregel aus).
 
+**Löschen statt nur deaktivieren** (07.10.2026): Deaktivierte Zeilen belegen weiter Platz – das libsql-Volume war mit
+350.000 inaktiven von 430.000 Zeilen zu 58 % belegt. Jeder Sync-Lauf löscht deshalb inaktive Inserate, die seit
+`SYNC_PURGE_DAYS` (leer = 7, 0 = aus) deaktiviert sind (`deactivated_at`; Altbestand ohne Zeitpunkt zählt ab dem
+Stichtag `purge_epoch` in `meta`, also ab dem ersten Lauf mit dieser Regel). Die Frist lässt Encar-Inserate aus
+gesperrten Teilabfragen zurückkommen, bevor sie gelöscht werden; ein gelöschtes Inserat legt der Upsert bei Bedarf neu
+an (Anfragen behalten ihre Kalkulation als Kopie). Freigegebene Seiten nutzt SQLite für neue Zeilen – die Datei wächst
+nicht weiter, schrumpft aber erst durch ein `VACUUM`, das etwa so viel freien Platz braucht wie die Datei groß ist.
+
 Befund 07.10.2026 (vor dem ersten Lauf mit der Altersregel): 313.000 aktive Inserate, alle zuletzt am 25.09. oder früher
 abgerufen; OLX und Subito hatten noch nie etwas deaktiviert (aktiv = gesamt), Encar 146.000 aktiv bei 48.000
 Dubletten-Gruppen, Subito 3.300, Dubizzle 1.100. Quellenübergreifend gleiche (Marke, Modell, Baujahr, km) sind fast
@@ -606,7 +614,9 @@ für Snapshot und Replikationslog. Mit dem 5-GB-Volume kam `No space left on dev
 Datenbankschicht wiederholt solche Aussetzer inzwischen dreimal). Abhilfe: `fly volumes extend <vol-id> -s 10`, dann
 `fly machine restart <machine-id>` (das Dateisystem wächst beim Start); prüfen mit
 `fly ssh console -C "df -h /var/lib/sqld"`. Bei Wachstum: `du -sh /var/lib/sqld/iku.db/*` zeigt, ob Datenbank, Log
-oder Snapshots den Platz belegen.
+oder Snapshots den Platz belegen. Stand 07.10.2026 nach dem ersten Bereinigungslauf: 5,4 von 9,8 GB belegt (58 %).
+Deshalb löscht jeder Sync-Lauf inaktive Inserate nach `SYNC_PURGE_DAYS` (Teil I) – die Datei wächst dann nicht weiter;
+schrumpfen würde sie nur durch `VACUUM` (braucht freien Platz in Dateigröße) oder eine frische Kopie per `db:copy`.
 
 Hinweise: sqld schreibt in ein lokales SQLite-File auf dem Volume – Sicherung per `fly volumes snapshots` (Fly legt
 täglich Snapshots an) bzw. Kopie des Docker-Volumes. Ein einzelner Schreiber wie bei Turso; die Drosselung aus Teil K
