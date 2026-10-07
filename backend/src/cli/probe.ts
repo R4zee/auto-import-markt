@@ -542,15 +542,20 @@ async function probeJapCarz(sort = 'upcoming_auctions', page = 1) {
 }
 
 /**
- * Beliebige Adresse anfragen: `probe url https://… Header:Wert … [timeout=120000]` – das Zeitlimit (ms, Standard 30 s)
- * für langsame Diagnose-Endpunkte wie /api/health/reference, die unter Schreiblast über 30 s brauchen
+ * Beliebige Adresse anfragen: `probe url https://… Header:Wert … [timeout=120000] [chars=60000]` – das Zeitlimit (ms,
+ * Standard 30 s) für langsame Diagnose-Endpunkte wie /api/health/reference, die unter Schreiblast über 30 s brauchen;
+ * chars begrenzt die Ausgabe der Antwort (Standard 4.000 Zeichen)
  */
 async function probeUrl(url: string, headerArgs: string[]) {
   const headers: Record<string, string> = { 'User-Agent': config.europe.userAgent, Accept: 'application/json, text/html;q=0.9, */*;q=0.8' };
   let timeoutMs = 30000;
+  // chars=N: Ausgabelänge der Antwort (Standard 4.000 Zeichen bzw. PROBE_JSON_CHARS) – für lange Diagnosen wie /api/health/stock
+  let max = Number(process.env.PROBE_JSON_CHARS ?? 4000);
   for (const h of headerArgs) {
     const t = h.match(/^timeout=(\d+)$/i);
     if (t) { timeoutMs = Number(t[1]); continue; }
+    const c = h.match(/^chars=(\d+)$/i);
+    if (c) { max = Number(c[1]); continue; }
     const i = h.indexOf(':');
     if (i > 0) headers[h.slice(0, i).trim()] = h.slice(i + 1).trim();
   }
@@ -566,7 +571,6 @@ async function probeUrl(url: string, headerArgs: string[]) {
   }
   const body = await res.text();
   console.log(`  HTTP ${res.status} · ${Date.now() - t0} ms · ${type} · ${(body.length / 1024).toFixed(1)} KB`);
-  const max = Number(process.env.PROBE_JSON_CHARS ?? 4000);
   try {
     const json = JSON.parse(body) as Record<string, unknown>;
     console.log('  JSON-Schlüssel:', Object.keys(json).join(', '));

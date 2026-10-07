@@ -223,6 +223,9 @@ async function sourcesOf(source: string, includeSubSources: boolean): Promise<st
   return rows.map((r) => r.source);
 }
 
+/** Kurzform eines aktiven Inserats für den Bestandsabgleich im Sync */
+export interface ActiveStub { price: number; km: number; fetchedAt: string }
+
 export const listingsRepo = {
   async upsertMany(listings: Listing[]): Promise<number> {
     if (!listings.length) return 0;
@@ -244,10 +247,51 @@ export const listingsRepo = {
       const rows = await queryPaged<{ id: string }>('listings', 'id', 'source = ? AND +active = 1', [s]);
       for (const r of rows) if (!keep.has(r.id)) stale.push(r.id);
     }
-    for (let i = 0; i < stale.length; i += 500) {
-      await db().batch(stale.slice(i, i + 500).map((id) => ({ sql: 'UPDATE listings SET active = 0 WHERE id = ?', args: [id] })), 'write');
+    return this.deactivateIds(stale);
+  },
+
+  /** Inserate per ID deaktivieren (Blöcke von 200 je Anweisung). Liefert die Zahl der übergebenen IDs. */
+  async deactivateIds(ids: string[]): Promise<number> {
+    for (let i = 0; i < ids.length; i += 200) {
+      const chunk = ids.slice(i, i + 200);
+      await run(`UPDATE listings SET active = 0 WHERE id IN (${chunk.map(() => '?').join(',')})`, chunk);
     }
-    return stale.length;
+    return ids.length;
+  },
+
+  /**
+   * Abrufzeit unveränderter, aber weiterhin gelieferter Inserate nachführen. Der Upsert schreibt ein Inserat nur bei
+   * neuem Preis/km – `fetched_at` bliebe sonst beim ersten Abruf stehen und das Inserat gälte nach SYNC_STALE_DAYS als
+   * Altlast. Nur die Spalte, kein Index (fetched_at steht in keinem Listings-Index), Blöcke von 200 je Anweisung.
+   */
+  async touchFetchedAt(ids: string[], at: string): Promise<number> {
+    for (let i = 0; i < ids.length; i += 200) {
+      const chunk = ids.slice(i, i + 200);
+      await run(`UPDATE listings SET fetched_at = ? WHERE id IN (${chunk.map(() => '?').join(',')})`, [at, ...chunk]);
+    }
+    return ids.length;
+  },
+
+  /**
+   * Dubletten innerhalb einer Quelle deaktivieren: gleiches (Marke, Modell, Baujahr, km, Preis) unter mehreren IDs –
+   * neu eingestellte Anzeigen desselben Fahrzeugs, deren alte ID nie deaktiviert wurde (Encar: 48.000 Gruppen,
+   * Subito 3.300, Dubizzle 1.100 am 07.10.2026). Je Gruppe bleibt das zuletzt abgerufene Inserat, bei Gleichstand die
+   * zuletzt eingefügte Zeile. Der Vergleichspartner wird über den abdeckenden Suchindex (active, make, model, year, km …)
+   * gesucht – je Inserat ein Indexzugriff statt eines Laufs über die ganze Quelle; die IN-Unterabfrage ist unabhängig
+   * von der Zeile und wird vor dem Schreiben einmal ausgewertet (Entscheidung auf dem Stand vor dem UPDATE).
+   */
+  async deactivateDuplicates(source: string, includeSubSources = false): Promise<number> {
+    let n = 0;
+    for (const s of await sourcesOf(source, includeSubSources)) {
+      const r = await run(`UPDATE listings SET active = 0 WHERE rowid IN (
+        SELECT a.rowid FROM listings a INDEXED BY idx_listings_source WHERE a.source = ? AND +a.active = 1 AND EXISTS (
+          SELECT 1 FROM listings b INDEXED BY idx_listings_search_v3
+          WHERE b.active = 1 AND b.make = a.make AND b.model = a.model AND b.year = a.year AND b.km = a.km
+            AND b.source = a.source AND b.price = a.price AND b.rowid <> a.rowid
+            AND (b.fetched_at > a.fetched_at OR (b.fetched_at = a.fetched_at AND b.rowid > a.rowid))))`, [s]);
+      n += r.rowsAffected;
+    }
+    return n;
   },
 
   /**
@@ -259,13 +303,13 @@ export const listingsRepo = {
     return r.rowsAffected;
   },
 
-  /** Nur IDs (und Preis/km) einer Quelle – für Abgleiche ohne den ganzen Datensatz zu laden. */
-  async activeIdsBySource(source: string, includeSubSources = false): Promise<Map<string, { price: number; km: number }>> {
-    const out = new Map<string, { price: number; km: number }>();
+  /** Nur IDs (mit Preis/km und Abrufzeit) einer Quelle – für Abgleiche ohne den ganzen Datensatz zu laden. */
+  async activeIdsBySource(source: string, includeSubSources = false): Promise<Map<string, ActiveStub>> {
+    const out = new Map<string, ActiveStub>();
     for (const s of await sourcesOf(source, includeSubSources)) {
       // blockweise: Encar liefert ~147.000 Zeilen, mehr als das Antwortlimit von sqld (Standard 10 MB)
-      const rows = await queryPaged<{ id: string; price: number; km: number }>('listings', 'id, price, km', 'source = ? AND +active = 1', [s]);
-      for (const r of rows) out.set(r.id, { price: Number(r.price), km: Number(r.km) });
+      const rows = await queryPaged<{ id: string; price: number; km: number; fetched_at: string }>('listings', 'id, price, km, fetched_at', 'source = ? AND +active = 1', [s]);
+      for (const r of rows) out.set(r.id, { price: Number(r.price), km: Number(r.km), fetchedAt: r.fetched_at });
     }
     return out;
   },
